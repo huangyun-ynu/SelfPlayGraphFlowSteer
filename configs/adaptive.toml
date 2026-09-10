@@ -1,0 +1,57 @@
+# Offline mock configuration; no credentials or services required.
+# Paths are relative to the repository root for files directly inside configs/. No external requests in --mock mode.
+[models.proposer]
+base_url = "http://127.0.0.1:8001/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+base_model_path = "models/Qwen3.5-9B"
+checkpoint_path = "state/checkpoints/proposer"
+trainable = true
+
+[models.solver]
+base_url = "http://127.0.0.1:8002/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+base_model_path = "models/Qwen3.5-9B"
+checkpoint_path = "state/checkpoints/solver"
+trainable = true
+
+[runtime]
+name = "default"
+base_url = "http://127.0.0.1:8003/v1"
+api_key = "EMPTY"
+served_model = "YOUR_WORKER_MODEL"
+timeout_s = 120.0
+max_concurrency = 12
+managed_locally = false
+frozen = true
+network_path = "direct"
+request_profile = "generic"
+
+[runtime_routing]
+worker_routes = ["default"]
+support = "default"
+
+[canvas]
+# Disable predicted-time rejection and early consolidation; actual deadlines remain active.
+remaining_time_admission_enabled = false
+max_agents = 4
+max_rounds = 24
+relay_max_chars = 1000
+
+[graph_features]
+embedding_model_path = "intfloat/e5-base-v2"
+
+[trace]
+path = "state/traces.jsonl"
+
+[verifier]
+mode = "numeric"
+
+[healthbench_judge_audit]
+path = "state/private/healthbench_judge"
+
+[resources]
+proposer_gpu_id = 0
+solver_gpu_id = 0
+allocated_gpu_ids = [0]

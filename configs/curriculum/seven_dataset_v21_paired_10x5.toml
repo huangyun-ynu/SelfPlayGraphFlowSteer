@@ -1,0 +1,20 @@
+[curriculum]
+name = "seven_dataset_v21_paired_10x5"
+expected_datasets = 7
+tasks_per_cycle = 35
+num_clusters_per_dataset = 16
+active_clusters_per_dataset = 2
+mini_cluster_size = 8
+candidate_count = 8
+
+# Keep the 2026-08-31 V2 experiment's collection semantics fixed so the
+# Director V2.1 comparison changes the prompt and physical training packing,
+# not the task-group scheduler or sibling grouping.
+task_window = 8
+rollout_workers = 32
+rollouts_per_task = 5
+
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 64
+nominal_epoch_cycles = 64

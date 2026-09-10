@@ -1,0 +1,15 @@
+[curriculum]
+name = "swebench_verified_train_window_4x5_canary"
+expected_datasets = 1
+tasks_per_cycle = 4
+num_clusters_per_dataset = 16
+active_clusters_per_dataset = 4
+mini_cluster_size = 1
+candidate_count = 4
+task_window = 4
+rollout_workers = 4
+rollouts_per_task = 5
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 4
+nominal_epoch_cycles = 1

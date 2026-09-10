@@ -1,0 +1,24 @@
+[curriculum]
+name = "joint_1500"
+expected_datasets = 3
+tasks_per_cycle = 48
+# Existing 512-row pools were already preprocessed with K=16. Keep those
+# artifacts and shrink only the online boundary window so it can move.
+num_clusters_per_dataset = 16
+active_clusters_per_dataset = 4
+mini_cluster_size = 8
+candidate_count = 8
+
+# Keep all four task groups active together.  The resulting 4 x 5 independent
+# requests are continuously batched by the local Director inference service;
+# fixed Worker endpoints retain their own per-route concurrency gates.
+task_window = 4
+rollout_workers = 20
+# Project invariant: keep five sibling graph rollouts per task.
+rollouts_per_task = 5
+
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 64
+# 1536 / 48 = 32 nominal cycles per full-pool epoch.
+nominal_epoch_cycles = 32

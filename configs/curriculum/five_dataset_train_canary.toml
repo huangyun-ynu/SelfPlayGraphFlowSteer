@@ -1,0 +1,22 @@
+[curriculum]
+name = "five_dataset_train_canary"
+expected_datasets = 5
+# Two tasks per dataset in each cycle. With five sibling rollouts this yields
+# 50 primary trajectories/cycle and 100 primary trajectories over two cycles.
+tasks_per_cycle = 10
+num_clusters_per_dataset = 16
+active_clusters_per_dataset = 2
+mini_cluster_size = 8
+candidate_count = 8
+
+# One mixed task from every dataset can coexist in a window. Limit execution
+# concurrency to five so stateful environments and remote routes remain observable
+# without reproducing formal-training pressure.
+task_window = 5
+rollout_workers = 5
+rollouts_per_task = 5
+
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 20
+nominal_epoch_cycles = 16

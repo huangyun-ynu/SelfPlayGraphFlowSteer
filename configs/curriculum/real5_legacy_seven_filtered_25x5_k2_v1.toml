@@ -1,0 +1,21 @@
+[curriculum]
+name = "real5_legacy_seven_filtered_25x5_k2_v1"
+expected_datasets = 5
+# Exact task identities from the 2026-08-31 seven-dataset run, filtered to
+# five datasets: five tasks per dataset per cycle, ten total per dataset.
+tasks_per_cycle = 25
+num_clusters_per_dataset = 10
+active_clusters_per_dataset = 2
+mini_cluster_size = 8
+candidate_count = 8
+
+# K=2 is the formal implementation-validation group size. A same-task group is
+# the atomic scheduling and MACE-freeze unit; five groups may be active.
+task_window = 5
+rollout_workers = 5
+rollouts_per_task = 2
+
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 64
+nominal_epoch_cycles = 2

@@ -1,0 +1,19 @@
+[curriculum]
+name = "seven_dataset_director_prompt_ab_2x5"
+expected_datasets = 7
+tasks_per_cycle = 14
+num_clusters_per_dataset = 16
+active_clusters_per_dataset = 2
+mini_cluster_size = 8
+candidate_count = 8
+
+# Each arm receives half of the validated aggregate 32/8/8 collection budget.
+# Running both arms together therefore preserves the planned global boundary.
+task_window = 4
+rollout_workers = 16
+rollouts_per_task = 5
+
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 64
+nominal_epoch_cycles = 1

@@ -1,0 +1,17 @@
+[curriculum]
+name = "healthbench_professional_train_canary"
+expected_datasets = 1
+tasks_per_cycle = 8
+num_clusters_per_dataset = 16
+active_clusters_per_dataset = 8
+mini_cluster_size = 8
+candidate_count = 8
+
+task_window = 4
+rollout_workers = 4
+rollouts_per_task = 5
+
+boundary_eps = 0.17
+alpha = 0.3
+cooldown_per_dataset = 16
+nominal_epoch_cycles = 16
