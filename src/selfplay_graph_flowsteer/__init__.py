@@ -85,7 +85,11 @@ from .dataset_adapters import (
 )
 from .director import DirectorRun, GraphDirector
 from .distributed import ThreadRolloutPool
-from .evaluation import EvaluationRecord, from_adaptive_result, from_flowsteer_trajectory
+from .evaluation import (
+    EvaluationRecord,
+    from_adaptive_result,
+    from_flowsteer_trajectory,
+)
 from .features import GraphFeatures, graph_kernel, structural_features
 from .graph import FlowSteerStructureEvaluation, GraphValidationError, MultiAgentGraph
 from .graph_learning import (
@@ -160,6 +164,13 @@ from .selfplay import (
     normalize_selfplay_seed,
     scalar_frontier,
 )
+from .skills import (
+    SESASolverSkillDistiller,
+    SkillCard,
+    SolverFailureCase,
+    SolverSkillBank,
+    SolverSkillLifecycle,
+)
 from .swebench import (
     CodeArtifactStore,
     PrivateSWEVerifierManifest,
@@ -185,7 +196,11 @@ from .training import (
     load_training_batch,
     token_advantages,
 )
-from .training_metrics import TrainingMetricsStore, collect_cycle_metrics, summarize_training_batch
+from .training_metrics import (
+    TrainingMetricsStore,
+    collect_cycle_metrics,
+    summarize_training_batch,
+)
 from .webshop import (
     WebShopClickTool,
     WebShopEnvironmentVerifier,
@@ -314,7 +329,12 @@ __all__ = [
     "RelationDecision",
     "RelationType",
     "RelayPacket",
+    "SkillCard",
+    "SESASolverSkillDistiller",
+    "SolverFailureCase",
     "SolverRollout",
+    "SolverSkillBank",
+    "SolverSkillLifecycle",
     "SWEHarnessResult",
     "SSHSWEHarnessBackend",
     "SWEOutcomeVerifier",

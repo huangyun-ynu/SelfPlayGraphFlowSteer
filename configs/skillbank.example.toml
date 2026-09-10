@@ -1,5 +1,5 @@
-# Offline mock configuration; no credentials or services required.
-# Paths are relative to the repository root for files directly inside configs/. No external requests in --mock mode.
+# SkillBank template: configure model/Worker services before real execution.
+# Paths are relative to the repository root. --mock does not call external APIs.
 [models.proposer]
 base_url = "http://127.0.0.1:8001/v1"
 api_key = "EMPTY"
@@ -30,7 +30,7 @@ request_profile = "generic"
 
 [runtime_routing]
 worker_routes = ["default"]
-skill_distiller = "default"
+skill_distiller = "deepseek_skill"
 
 [canvas]
 # Disable predicted-time rejection and early consolidation; actual deadlines remain active.
@@ -40,7 +40,20 @@ max_rounds = 24
 relay_max_chars = 1000
 
 [solver_skillbank]
-enabled = false
+path = "state/director_skillbank.v2.json"
+cases_path = "state/director_skill_cases.json"
+prompt_token_budget = 1024
+max_skills = 800
+dedup_threshold = 0.93
+dedup_review_threshold = 0.90
+retrieve_top_k = 3
+min_retrieved_for_evict = 3
+update_freq = 10
+pending_queue_max = 300
+min_pending = 20
+generate_per_update = 20
+distill_concurrency = 20
+enabled = true
 mode = "director_skill_v2"
 activation_policy = "checked"
 embedding_model_path = "intfloat/e5-base-v2"
@@ -58,3 +71,17 @@ path = "state/private/healthbench_judge"
 proposer_gpu_id = 0
 solver_gpu_id = 0
 allocated_gpu_ids = [0]
+
+[runtimes.deepseek_skill]
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_SKILL_API_KEY"
+served_model = "deepseek-flash"
+request_profile = "generic"
+network_path = "direct"
+max_concurrency = 20
+timeout_s = 180.0
+enable_thinking = true
+reasoning_effort = "high"
+max_tokens = 8192
+managed_locally = false
+frozen = true

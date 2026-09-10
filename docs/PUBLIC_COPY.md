@@ -2,14 +2,11 @@
 
 This directory is an independent source distribution, not a continuation of a private training run. The original project's services, checkpoints, EMA state, trajectories and working tree are not modified by preparing it.
 
-## Removed functionality
+## Included SkillBank functionality
 
-- Skill cards, skill-bank persistence, pending failure queues, retrieval, consolidation and distillation.
-- Skill context injection into Director prompts.
-- Skill-specific runtime configuration, CLI commands, public exports, result fields and metrics.
-- Tests and documentation dedicated to those removed features.
+Director skill cards, versioned persistence, pending evidence queues, E5 retrieval, background distillation, prompt integration, usage accounting and retirement are included. Eight initial cards ship in the package. See `SKILLBANK.md` for configuration and lifecycle details.
 
-Supporting model calls used by answer formatting and judging remain available through the `support` runtime route. Graph E5 embeddings have an independent loader and use `[graph_features].embedding_model_path`; they no longer require a skill-bank object. These are still necessary parts of graph scoring and verification.
+The support inference role uses `runtime_routing.skill_distiller`; E5 uses `solver_skillbank.embedding_model_path`. The default mock configuration disables the bank; a separate SkillBank template enables it. No private skill databases or experiment cases are included.
 
 ## Distribution boundaries
 
@@ -22,7 +19,7 @@ Supporting model calls used by answer formatting and judging remain available th
 
 ## Validation boundaries
 
-Validation covers source compilation, undefined-name checks, mock collection/execution and portable tests. It does not run paid APIs, download benchmark datasets, perform real model updates or validate multi-GPU performance. The removal changes the policy's available skill context; no unchanged benchmark accuracy is claimed.
+Validation covers source compilation, undefined-name checks, mock collection/execution and portable tests. It does not run paid APIs, download benchmark datasets, perform real model updates or validate multi-GPU performance. Enabling SkillBank changes the policy's available context; offline checks do not establish benchmark accuracy.
 
 Advanced asynchronous and timeline-update modes retain their existing implementation and opt-in flags. Real deployment still requires choosing and validating an appropriate training configuration.
 

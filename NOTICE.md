@@ -3,9 +3,9 @@
 This project builds on the following designs and implementation patterns:
 
 - **FlowSteer:** progressive canvas editing, one Director action per turn, factual graph feedback, action-masked token probability training and task-group reward normalization.
-- **SESA:** separate Proposer/Solver policies, proposal/collection ordering and independent snapshots. The skill persistence, retrieval, consolidation and distillation subsystem has been removed from this distribution.
+- **SESA:** separate Proposer/Solver policies, proposal/collection ordering and independent snapshots. Director skill persistence, retrieval, consolidation and distillation are included.
 - **MANTA (MIT):** structured agent artifacts, bounded relay packets, information visibility and bounded peer revision. See `third_party/notices/MANTA-LICENSE`.
-- **SkillFlow:** Qwen3.5 compatibility patterns, chat-template tokenization, reasoning-content handling and architecture-aware model loading. This attribution is unrelated to the removed SkillBank feature.
+- **SkillFlow:** Qwen3.5 compatibility patterns, chat-template tokenization, reasoning-content handling and architecture-aware model loading.
 - **MACE:** relational features, LinUCB equations and reward blending implemented from the published method.
 - **ADS (Apache-2.0):** mini-cluster curriculum state, boundary movement, clustering and difficulty preprocessing adapted to JSONL pools. See `third_party/notices/ADS-LICENSE` and `ADS-NOTICE`.
 - **TSDS (MIT):** KNN-KDE probability assignment, adapted to an exact NumPy nearest-neighbor implementation. See `third_party/notices/TSDS-LICENSE`.

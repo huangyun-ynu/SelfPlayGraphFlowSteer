@@ -60,7 +60,9 @@ class PolicyTrainingConfig:
     max_grad_norm: float = 1.0
     weight_decay: float = 0.01
     warmup_steps: int = 10
+    warmup_start_factor: float = 0.0
     total_optimizer_steps: int = 300
+    learning_rate_schedule: str = "cosine"
     max_sequence_length: int = 4096
     dtype: str = "bfloat16"
     device: str = "cuda"
@@ -96,6 +98,8 @@ class PolicyTrainingConfig:
     short_call_batching: bool = False
 
     def validate(self) -> None:
+        if self.learning_rate_schedule not in {"cosine", "constant"}:
+            raise ValueError("learning_rate_schedule must be cosine or constant")
         if self.data_parallel_gpu_ids and (
             len(self.data_parallel_gpu_ids) != 2
             or len(set(self.data_parallel_gpu_ids)) != 2
@@ -125,6 +129,8 @@ class PolicyTrainingConfig:
             )
         if self.weight_decay < 0 or self.warmup_steps < 0:
             raise ValueError("weight_decay and warmup_steps must be non-negative")
+        if not math.isfinite(self.warmup_start_factor) or not 0 <= self.warmup_start_factor <= 1:
+            raise ValueError("warmup_start_factor must be finite and in [0, 1]")
         if self.total_optimizer_steps <= 0 or self.max_sequence_length < 2:
             raise ValueError("total_optimizer_steps must be positive and sequence length >= 2")
         if self.activation_cpu_offload_min_tokens < 0:
@@ -551,7 +557,7 @@ class TransformersGRPOTrainer:
         self.seed = int(seed)
         try:
             import torch
-            from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
+            from transformers import AutoTokenizer
         except ImportError as exc:
             raise RuntimeError("install the 'train' extra for parameter training") from exc
         self.torch = torch
@@ -608,11 +614,7 @@ class TransformersGRPOTrainer:
             lr=config.learning_rate,
             weight_decay=config.weight_decay,
         )
-        self.scheduler = get_cosine_schedule_with_warmup(
-            self.optimizer,
-            num_warmup_steps=config.warmup_steps,
-            num_training_steps=config.total_optimizer_steps,
-        )
+        self.scheduler = _build_learning_rate_scheduler(self.optimizer, config)
         self.optimizer_step_count = 0
         self._restore_optimizer(latest or source)
         self._active_cuda_rng_state = (
@@ -1817,10 +1819,18 @@ class TransformersGRPOTrainer:
         if not state_path.exists():
             return
         saved_total_optimizer_steps = None
+        saved_schedule = "cosine"
+        saved_warmup_start_factor = 0.0
         saved_config_path = source / "training_config.json"
         if saved_config_path.exists():
             saved_config = json.loads(saved_config_path.read_text(encoding="utf-8"))
             saved_total_optimizer_steps = int(saved_config["total_optimizer_steps"])
+            saved_schedule = saved_config.get("learning_rate_schedule", "cosine")
+            saved_warmup_start_factor = float(saved_config.get("warmup_start_factor", 0.0))
+        if saved_schedule != self.config.learning_rate_schedule:
+            raise ValueError("checkpoint learning-rate schedule differs from requested schedule")
+        if saved_warmup_start_factor != self.config.warmup_start_factor:
+            raise ValueError("checkpoint warmup start factor differs from requested schedule")
         state = self.torch.load(state_path, map_location="cpu", weights_only=False)
         self.optimizer.load_state_dict(state["optimizer"])
         if state.get("scheduler") is not None:
@@ -1858,6 +1868,35 @@ class TransformersGRPOTrainer:
         gc.collect()
         if self.torch.cuda.is_available():
             self.torch.cuda.empty_cache()
+
+
+def _build_learning_rate_scheduler(optimizer: Any, config: PolicyTrainingConfig) -> Any:
+    from transformers import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
+
+    if config.warmup_steps > 0 and config.warmup_start_factor > 0:
+        from torch.optim.lr_scheduler import LambdaLR
+
+        def factor(step: int) -> float:
+            if step < config.warmup_steps:
+                return (
+                    config.warmup_start_factor
+                    + (1.0 - config.warmup_start_factor) * step / config.warmup_steps
+                )
+            if config.learning_rate_schedule == "constant":
+                return 1.0
+            progress = (step - config.warmup_steps) / max(
+                1, config.total_optimizer_steps - config.warmup_steps
+            )
+            return max(0.0, 0.5 * (1.0 + math.cos(math.pi * progress)))
+
+        return LambdaLR(optimizer, factor)
+    if config.learning_rate_schedule == "constant":
+        return get_constant_schedule_with_warmup(optimizer, num_warmup_steps=config.warmup_steps)
+    return get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=config.warmup_steps,
+        num_training_steps=config.total_optimizer_steps,
+    )
 
 
 def _scheduler_lrs_at_step(scheduler: Any, step: int) -> list[float]:

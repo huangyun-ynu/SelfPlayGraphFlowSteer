@@ -51,3 +51,6 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
+
+[tool.setuptools.package-data]
+selfplay_graph_flowsteer = ["director_seed_v2.json"]

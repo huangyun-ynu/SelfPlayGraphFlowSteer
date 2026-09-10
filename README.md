@@ -2,7 +2,7 @@
 
 Separate Proposer and Solver policies for multi-agent graph self-play. The Proposer selects tasks; the Solver's Director builds and executes a graph of workers. Verified rollouts feed Frontier scoring and policy updates.
 
-This distribution removes the SkillBank subsystem. It retains graph execution, ADS/TSDS task selection, dataset adapters, relation counterfactuals, Frontier rewards, partial-group training, and the training orchestration code. No credentials, private experiment results, datasets, model weights, or machine-specific launch scripts are included.
+This distribution includes Director SkillBank generation, retrieval, usage accounting and retirement. It retains graph execution, ADS/TSDS task selection, dataset adapters, relation counterfactuals, Frontier rewards, partial-group training, and the training orchestration code. No credentials, private experiment results, datasets, model weights, or machine-specific launch scripts are included.
 
 ## Offline quick start
 
@@ -60,3 +60,7 @@ Proposer's dataset EMA baseline is enabled by default with decay `0.9`. Trusted 
 ## Provenance and licensing
 
 See [NOTICE.md](NOTICE.md) for implementation provenance. Available MIT/Apache license texts are retained for the corresponding upstream components. The local FlowSteer, SESA and SkillFlow snapshots did not include a discoverable license file; this copy does not invent a license grant for their adapted code. Confirm the relevant upstream redistribution terms before publishing that code under an open-source license.
+
+## Director SkillBank
+
+See [SkillBank setup and lifecycle](docs/SKILLBANK.md). The offline mock configuration keeps SkillBank disabled; `configs/skillbank.example.toml` enables the current implementation with eight seed skills and an environment-variable API credential.

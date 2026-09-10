@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import threading
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -70,25 +69,16 @@ class GraphFeatures:
 
 
 class E5DelegationEncoder:
-    """Frozen CPU E5 encoder for graph delegation features."""
-
-    _models = {}
-    _model_lock = threading.Lock()
+    """Frozen CPU E5 encoder isolated from SkillBank cache semantics."""
 
     def __init__(self, model_path: str | Path) -> None:
-        import torch
-        from transformers import AutoModel, AutoTokenizer
+        from .skills import E5SkillEmbedder
 
-        self.torch = torch
-        source = str(model_path)
-        with self._model_lock:
-            if source not in self._models:
-                self._models[source] = (
-                    AutoTokenizer.from_pretrained(source),
-                    AutoModel.from_pretrained(source).eval().cpu(),
-                )
-            self.tokenizer, self.model = self._models[source]
-        self.encoder_id = source
+        shared = E5SkillEmbedder(model_path)
+        self.torch = shared.torch
+        self.tokenizer = shared.tokenizer
+        self.model = shared.model.eval().cpu()
+        self.encoder_id = str(model_path)
 
     def encode(self, texts: list[str]) -> list[tuple[float, ...]]:
         vectors: list[tuple[float, ...]] = []

@@ -1,11 +1,13 @@
 """Read-only training-dynamics diagnostics inspired by FlowSteer and SESA.
 
-These are observations, never reward terms, acceptance gates or policy inputs.
+These are observations, never reward terms, acceptance gates or skill activation.
 """
 
 from __future__ import annotations
+
 import math
 from collections import Counter, defaultdict
+
 from .outcome_metrics import describe, number
 
 
@@ -27,7 +29,7 @@ def rollout_diagnostics(record):
         for b in budgets
         if number(b.get("prompt_tokens")) is not None
         and number(b.get("context_limit"))
-        and (b["context_limit"] > 0)
+        and b["context_limit"] > 0
     ]
     calls = record.get("policy_calls") or []
     lengths = [len(call["token_ids"]) for call in calls if "token_ids" in call]
@@ -37,12 +39,18 @@ def rollout_diagnostics(record):
         "rejected_turns": number(meta.get("rejected_turns")),
         "finished": meta.get("finished") if isinstance(meta.get("finished"), bool) else None,
         "generation_finish_reason_count": len(finish),
-        "generation_length_stop_count": sum((value == "length" for value in finish)),
+        "generation_length_stop_count": sum(value == "length" for value in finish),
         "context_observed_call_count": len(utilization),
         "max_prompt_context_fraction": max(utilization) if utilization else None,
         "policy_call_count": len(calls) if "policy_calls" in record else None,
         "policy_call_sequence_tokens": sum(lengths) if lengths else None,
         "policy_call_target_tokens": sum(masked) if masked else None,
+        "skills_enabled": meta.get("skills_enabled")
+        if isinstance(meta.get("skills_enabled"), bool)
+        else None,
+        "skills_used_count": len(meta["skills_used"])
+        if isinstance(meta.get("skills_used"), list)
+        else None,
     }
 
 
@@ -51,15 +59,15 @@ def primary_dynamics(rows, k):
     groups = defaultdict(list)
     for row in rows:
         groups[row["task_id"]].append(row)
-    complete = [g for g in groups.values() if len(g) == k and all((r["reward_known"] for r in g))]
-    binary = [g for g in complete if all((r["task_outcome_passed"] is not None for r in g))]
+    complete = [g for g in groups.values() if len(g) == k and all(r["reward_known"] for r in g)]
+    binary = [g for g in complete if all(r["task_outcome_passed"] is not None for r in g)]
     spreads = [
-        max((r["training_reward"] for r in g)) - min((r["training_reward"] for r in g))
+        max(r["training_reward"] for r in g) - min(r["training_reward"] for r in g)
         for g in complete
     ]
-    zero = sum((value <= 1e-12 for value in spreads))
-    all_wrong = sum((all((r["task_outcome_passed"] is False for r in g)) for g in binary))
-    all_right = sum((all((r["task_outcome_passed"] is True for r in g)) for g in binary))
+    zero = sum(value <= 1e-12 for value in spreads)
+    all_wrong = sum(all(r["task_outcome_passed"] is False for r in g) for g in binary)
+    all_right = sum(all(r["task_outcome_passed"] is True for r in g) for g in binary)
     conditions = {
         "success": [r for r in rows if r["task_outcome_passed"] is True],
         "failure": [r for r in rows if r["task_outcome_passed"] is False],
@@ -102,10 +110,10 @@ def primary_dynamics(rows, k):
         "all_success_groups": all_right,
         "mixed_binary_groups": len(binary) - all_wrong - all_right,
         "mixed_binary_group_rate": ratio(len(binary) - all_wrong - all_right, len(binary)),
-        "split_counts": dict(Counter((str(r.get("split") or "unknown") for r in rows))),
+        "split_counts": dict(Counter(str(r.get("split") or "unknown") for r in rows)),
         "orchestration": {
             **{
-                field: describe((r.get("diagnostics", {}).get(field) for r in rows))
+                field: describe(r.get("diagnostics", {}).get(field) for r in rows)
                 for field in (
                     "interactive_turns",
                     "rejected_turns",
@@ -114,56 +122,54 @@ def primary_dynamics(rows, k):
                     "policy_call_count",
                     "policy_call_sequence_tokens",
                     "policy_call_target_tokens",
+                    "skills_enabled",
+                    "skills_used_count",
                 )
             },
             "rejected_turn_rate": ratio(
                 sum(
-                    (
-                        r["diagnostics"]["rejected_turns"]
-                        for r in rows
-                        if r.get("diagnostics", {}).get("rejected_turns") is not None
-                        and r["diagnostics"].get("interactive_turns") is not None
-                    )
+                    r["diagnostics"]["rejected_turns"]
+                    for r in rows
+                    if r.get("diagnostics", {}).get("rejected_turns") is not None
+                    and r["diagnostics"].get("interactive_turns") is not None
                 ),
                 sum(
-                    (
-                        r["diagnostics"]["interactive_turns"]
-                        for r in rows
-                        if r.get("diagnostics", {}).get("rejected_turns") is not None
-                        and r["diagnostics"].get("interactive_turns") is not None
-                    )
+                    r["diagnostics"]["interactive_turns"]
+                    for r in rows
+                    if r.get("diagnostics", {}).get("rejected_turns") is not None
+                    and r["diagnostics"].get("interactive_turns") is not None
                 ),
             ),
             "finish_reason_observed_calls": sum(
-                (r.get("diagnostics", {}).get("generation_finish_reason_count", 0) for r in rows)
+                r.get("diagnostics", {}).get("generation_finish_reason_count", 0) for r in rows
             ),
             "length_stop_calls": sum(
-                (r.get("diagnostics", {}).get("generation_length_stop_count", 0) for r in rows)
+                r.get("diagnostics", {}).get("generation_length_stop_count", 0) for r in rows
             ),
         },
         "cost_by_outcome": {
             name: {
                 "slot_count": len(group),
-                **{field: describe((r.get(field) for r in group)) for field in cost_fields},
+                **{field: describe(r.get(field) for r in group) for field in cost_fields},
                 "interactive_turns": describe(
-                    (r.get("diagnostics", {}).get("interactive_turns") for r in group)
+                    r.get("diagnostics", {}).get("interactive_turns") for r in group
                 ),
             }
-            for (name, group) in conditions.items()
+            for name, group in conditions.items()
         },
         "complexity_buckets": {
             name: {
                 "slot_count": len(group),
-                "scored_count": sum((r["reward_known"] for r in group)),
-                "binary_scored_count": sum((r["task_outcome_passed"] is not None for r in group)),
-                "success_count": sum((r["task_outcome_passed"] is True for r in group)),
+                "scored_count": sum(r["reward_known"] for r in group),
+                "binary_scored_count": sum(r["task_outcome_passed"] is not None for r in group),
+                "success_count": sum(r["task_outcome_passed"] is True for r in group),
                 "success_rate": ratio(
-                    sum((r["task_outcome_passed"] is True for r in group)),
-                    sum((r["task_outcome_passed"] is not None for r in group)),
+                    sum(r["task_outcome_passed"] is True for r in group),
+                    sum(r["task_outcome_passed"] is not None for r in group),
                 ),
-                "reward": describe((r["training_reward"] for r in group if r["reward_known"])),
+                "reward": describe(r["training_reward"] for r in group if r["reward_known"]),
             }
-            for (name, group) in sorted(buckets.items())
+            for name, group in sorted(buckets.items())
         },
     }
 
@@ -188,20 +194,20 @@ def policy_signal(batch, credits, relation_weight=1.0):
         if not sample.policy_calls:
             values = [
                 adv
-                for (adv, mask) in zip(
+                for adv, mask in zip(
                     token_advantages(sample, credits, relation_weight=relation_weight)[1:],
                     sample.action_mask[1:],
                     strict=True,
                 )
                 if mask
             ]
-        active = any((math.isfinite(v) and abs(v) > 1e-12 for v in values))
+        active = any(math.isfinite(v) and abs(v) > 1e-12 for v in values)
         active_samples += int(active)
         relation_rescued += int(abs(sample.advantage) <= 1e-12 and active)
         total += len(values)
-        positive += sum((math.isfinite(v) and v > 1e-12 for v in values))
-        negative += sum((math.isfinite(v) and v < -1e-12 for v in values))
-        nonfinite += sum((not math.isfinite(v) for v in values))
+        positive += sum(math.isfinite(v) and v > 1e-12 for v in values)
+        negative += sum(math.isfinite(v) and v < -1e-12 for v in values)
+        nonfinite += sum(not math.isfinite(v) for v in values)
     return {
         "sample_count": len(batch.samples),
         "target_tokens": total,
@@ -219,11 +225,12 @@ def policy_signal(batch, credits, relation_weight=1.0):
 def update_diagnostics(
     record, batches, credits, *, epochs, mini_batch_size, relation_weight=1.0, frontiers=()
 ):
-    (credits, frontiers) = (tuple(credits), tuple(frontiers))
+    credits, frontiers = tuple(credits), tuple(frontiers)
     evaluation = bool(record.get("experiment", {}).get("evaluation_only"))
     output = {
         "evaluation_only": evaluation,
         "mock_trainer": bool(record.get("experiment", {}).get("mock_trainer")),
+        "skills_enabled": record.get("experiment", {}).get("skills_enabled"),
         "roles": {},
     }
     for role, batch in batches.items():
@@ -250,34 +257,32 @@ def update_diagnostics(
     valid = [
         (c.q_absent, c.q_present, c.probability_present)
         for c in credits
-        if all((number(v) is not None for v in (c.q_absent, c.q_present, c.probability_present)))
+        if all(number(v) is not None for v in (c.q_absent, c.q_present, c.probability_present))
     ]
     output["relation_effect"] = {
         "completed_probe_count": len(credits),
         "finite_probe_count": len(valid),
-        "signed_on_minus_off": describe((on - off for (off, on, _) in valid)),
-        "absolute_effect": describe((abs(on - off) for (off, on, _) in valid)),
-        "zero_effect_count": sum((abs(on - off) <= 1e-12 for (off, on, _) in valid)),
-        "zero_effect_rate": ratio(
-            sum((abs(on - off) <= 1e-12 for (off, on, _) in valid)), len(valid)
-        ),
-        "distance_from_half": describe((abs(p - 0.5) for (_, _, p) in valid)),
+        "signed_on_minus_off": describe(on - off for off, on, _ in valid),
+        "absolute_effect": describe(abs(on - off) for off, on, _ in valid),
+        "zero_effect_count": sum(abs(on - off) <= 1e-12 for off, on, _ in valid),
+        "zero_effect_rate": ratio(sum(abs(on - off) <= 1e-12 for off, on, _ in valid), len(valid)),
+        "distance_from_half": describe(abs(p - 0.5) for _, _, p in valid),
     }
     pairs = [pair for f in frontiers for pair in f.pair_stability]
     observed_pairs = [p for p in pairs if isinstance(p.get("stability_gate_passed"), bool)]
     output["frontier_stability"] = {
         "task_count": len(frontiers),
-        "reverified_task_count": sum((f.reverify_status == "completed" for f in frontiers)),
+        "reverified_task_count": sum(f.reverify_status == "completed" for f in frontiers),
         "observed_pair_count": len(observed_pairs),
-        "passed_pair_count": sum((p["stability_gate_passed"] for p in observed_pairs)),
+        "passed_pair_count": sum(p["stability_gate_passed"] for p in observed_pairs),
         "passed_pair_rate": ratio(
-            sum((p["stability_gate_passed"] for p in observed_pairs)), len(observed_pairs)
+            sum(p["stability_gate_passed"] for p in observed_pairs), len(observed_pairs)
         ),
         "softened_tie_pair_count": sum(p.get("tie_softened") is True for p in observed_pairs),
         "softened_tie_pair_rate": ratio(
             sum(p.get("tie_softened") is True for p in observed_pairs), len(observed_pairs)
         ),
-        "provisional_score": describe((f.provisional_graph_local for f in frontiers)),
-        "stable_score": describe((f.stable_graph_local for f in frontiers)),
+        "provisional_score": describe(f.provisional_graph_local for f in frontiers),
+        "stable_score": describe(f.stable_graph_local for f in frontiers),
     }
     return output

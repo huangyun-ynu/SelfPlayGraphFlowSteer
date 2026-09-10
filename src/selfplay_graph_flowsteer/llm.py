@@ -1292,7 +1292,7 @@ class OpenAICompatibleBackend:
                     else {}
                 ),
             }
-        elif self.config.route_name in {"deepseek", "deepseek_nexus"}:
+        elif self.config.route_name in {"deepseek", "deepseek_nexus", "deepseek_skill"}:
             # DeepSeek V4 defaults to thinking on. Send the resolved role setting
             # on every request, including endpoint-pool aliases, so a later
             # multi-turn request never inherits provider-side thinking state.

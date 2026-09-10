@@ -615,7 +615,7 @@ frozen = true
 
 [runtime_routing]
 worker_routes = ["minimax", "grok"]
-support = "minimax"
+skill_distiller = "minimax"
 """
     config_path.write_text(text, encoding="utf-8")
     monkeypatch.setenv("NEXUS_API_KEY", "test-key")
@@ -625,7 +625,7 @@ support = "minimax"
 
     assert set(config.runtime_pool()) == {"minimax", "grok"}
     assert config.worker_runtime_routes == ("minimax", "grok")
-    assert config.support_runtime == "minimax"
+    assert config.skill_distiller_runtime == "minimax"
     assert config.additional_runtimes["grok"].model_path is None
     assert config.additional_runtimes["grok"].max_concurrency == REMOTE_RUNTIME_MAX_CONCURRENCY
     assert manifest["runtime_routing"]["worker_routes"] == ["minimax", "grok"]
@@ -715,5 +715,5 @@ def test_solver_backend_cannot_be_reused_as_fixed_runtime(tmp_path) -> None:
             config,
             director_backend=shared,
             worker_backend=shared,
-            support_backend=shared,
+            distiller_backend=shared,
         )

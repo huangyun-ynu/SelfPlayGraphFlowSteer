@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import copy
 import hashlib
 import json
@@ -12,6 +13,7 @@ from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+
 from .application import (
     AdaptiveApplicationResult,
     AdaptiveSolverApplication,
@@ -72,6 +74,9 @@ PRIMARY_JOB_ORDER_LONG_TAIL_FIRST = "long_tail_first"
 PRIMARY_JOB_ORDER_CHOICES = frozenset(
     {PRIMARY_JOB_ORDER_ROUND_ROBIN, PRIMARY_JOB_ORDER_LONG_TAIL_FIRST}
 )
+# Versioned, reward-independent estimates from the 2026-09-09 14x5 formal
+# collection.  They affect queue order only; deadlines, seeds, prompts and the
+# number of rollouts remain unchanged.
 PRIMARY_DATASET_DURATION_ESTIMATES_S = {
     "alfworld": 485.0,
     "swe_bench": 321.0,
@@ -86,27 +91,34 @@ _BINARY_OUTCOME_DATASETS = frozenset({"aime", "nq_open", "hotpotqa", "alfworld",
 
 
 def _primary_job_dataset(job: tuple[ProposedTask, int]) -> str:
-    (proposal, _rollout_index) = job
+    proposal, _rollout_index = job
     return canonical_dataset_name(proposal.task.metadata.get("dataset", proposal.task.task_type))
 
 
 def _primary_job_rollout_id(job: tuple[ProposedTask, int]) -> str:
-    (proposal, rollout_index) = job
+    proposal, rollout_index = job
     return _rollout_id(str(proposal.task.task_id), rollout_index)
 
 
 def _primary_job_duration_estimate_s(job: tuple[ProposedTask, int]) -> float:
+    # Unknown datasets receive the middle-of-pack AIME estimate instead of
+    # being silently promoted above, or starved behind, every known dataset.
     return PRIMARY_DATASET_DURATION_ESTIMATES_S.get(_primary_job_dataset(job), 182.0)
 
 
 def _order_primary_jobs(
-    jobs: Iterable[tuple[ProposedTask, int]], order: str
+    jobs: Iterable[tuple[ProposedTask, int]],
+    order: str,
 ) -> list[tuple[ProposedTask, int]]:
     indexed = list(enumerate(jobs))
     if order == PRIMARY_JOB_ORDER_ROUND_ROBIN:
-        return [job for (_index, job) in indexed]
+        return [job for _index, job in indexed]
     if order != PRIMARY_JOB_ORDER_LONG_TAIL_FIRST:
         raise ValueError(f"unknown primary job order: {order}")
+
+    # Preserve one fair initial admission per task.  The remaining jobs use
+    # longest-estimated-processing-time-first list scheduling, with their old
+    # queue position as a deterministic tie breaker.
     initial: list[tuple[int, tuple[ProposedTask, int]]] = []
     remaining: list[tuple[int, tuple[ProposedTask, int]]] = []
     admitted_tasks: set[str] = set()
@@ -117,8 +129,13 @@ def _order_primary_jobs(
             initial.append((original_index, job))
         else:
             remaining.append((original_index, job))
-    remaining.sort(key=lambda item: (-_primary_job_duration_estimate_s(item[1]), item[0]))
-    return [job for (_index, job) in (*initial, *remaining)]
+    remaining.sort(
+        key=lambda item: (
+            -_primary_job_duration_estimate_s(item[1]),
+            item[0],
+        )
+    )
+    return [job for _index, job in (*initial, *remaining)]
 
 
 def _freeze_primary_job_schedule(
@@ -129,6 +146,7 @@ def _freeze_primary_job_schedule(
     requested_order: str,
 ) -> tuple[list[tuple[ProposedTask, int]], dict[str, Any]]:
     """Persist and replay the exact job order for one physical task window."""
+
     path = output_dir / "rollout_job_schedule.json"
     job_list = list(jobs)
     jobs_by_id = {_primary_job_rollout_id(job): job for job in job_list}
@@ -158,7 +176,8 @@ def _freeze_primary_job_schedule(
             raise ValueError("frozen primary rollout schedule contains duplicate IDs")
         if set(ordered_ids) != set(jobs_by_id):
             raise ValueError("frozen primary rollout schedule does not match planned jobs")
-        return ([jobs_by_id[rollout_id] for rollout_id in ordered_ids], window)
+        return [jobs_by_id[rollout_id] for rollout_id in ordered_ids], window
+
     ordered = _order_primary_jobs(jobs_by_id.values(), requested_order)
     ordered_ids = [_primary_job_rollout_id(job) for job in ordered]
     entries = [
@@ -170,7 +189,7 @@ def _freeze_primary_job_schedule(
             "dataset": _primary_job_dataset(job),
             "estimated_duration_s": _primary_job_duration_estimate_s(job),
         }
-        for (rank, (rollout_id, job)) in enumerate(zip(ordered_ids, ordered, strict=True))
+        for rank, (rollout_id, job) in enumerate(zip(ordered_ids, ordered, strict=True))
     ]
     window = {
         "window_start": window_start,
@@ -183,7 +202,7 @@ def _freeze_primary_job_schedule(
     }
     payload.setdefault("windows", []).append(window)
     _write_json(path, payload)
-    return (ordered, window)
+    return ordered, window
 
 
 def _executor_compatibility_signature(manifest: dict[str, Any]) -> str:
@@ -195,6 +214,7 @@ def _executor_compatibility_signature(manifest: dict[str, Any]) -> str:
     reverified separately. Keeping either field in the primary graph bundle
     makes an exact infrastructure repair look like a policy migration.
     """
+
     semantic = copy.deepcopy(manifest)
     runtime_environment = semantic.get("runtime_environment")
     if isinstance(runtime_environment, dict):
@@ -223,28 +243,35 @@ def _rollout_executor_compatibility_signature(rollout: SolverRollout) -> str:
 
 
 def _stable_execution_seed(base_seed: int, task_id: str, *, phase: str) -> int:
-    digest = hashlib.sha256(f"{int(base_seed)}\x00{task_id}\x00{phase}".encode()).digest()
-    return int.from_bytes(digest[:8], "big") & 2147483647
+    digest = hashlib.sha256(f"{int(base_seed)}\0{task_id}\0{phase}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") & 0x7FFFFFFF
 
 
 def _rollout_sampling_seed(
-    base_seed: int, task_id: str, rollout_index: int, replacement_attempt: int
+    base_seed: int,
+    task_id: str,
+    rollout_index: int,
+    replacement_attempt: int,
 ) -> int:
     """Keep primary seeds stable while giving a recovery a new policy sample."""
+
     if replacement_attempt == 0:
         return int(base_seed) + int(rollout_index)
     return _stable_execution_seed(
         base_seed,
-        f"{task_id}\x00{int(rollout_index)}\x00{int(replacement_attempt)}",
+        f"{task_id}\0{int(rollout_index)}\0{int(replacement_attempt)}",
         phase="policy_recovery",
     )
 
 
 def _outcome_task_reward(
-    dataset: str, verification: Any, *, prediction: str
+    dataset: str,
+    verification: Any,
+    *,
+    prediction: str,
 ) -> tuple[float, dict[str, Any]]:
     if verification is None:
-        return (0.0, {"source": "empty_or_missing_verification"})
+        return 0.0, {"source": "empty_or_missing_verification"}
     dataset_key = canonical_dataset_name(dataset)
     if dataset_key == "healthbench_professional":
         try:
@@ -259,7 +286,7 @@ def _outcome_task_reward(
             raise ValueError("unexpected HealthBench training reward adapter version")
         if not 0.0 <= reward <= 1.0:
             raise ValueError("HealthBench training reward must be in [0, 1]")
-        return (reward, {"source": "healthbench_training_adapter", **breakdown})
+        return reward, {"source": "healthbench_training_adapter", **breakdown}
     reward = float(verification.score)
     if not 0.0 <= reward <= 1.0:
         raise ValueError(f"trusted task outcome for {dataset_key or dataset!r} must be in [0, 1]")
@@ -267,7 +294,7 @@ def _outcome_task_reward(
         raise ValueError(
             f"trusted task outcome for binary dataset {dataset_key!r} must be exactly 0 or 1"
         )
-    return (reward, {"source": "trusted_verifier_outcome", "evaluation_score": reward})
+    return reward, {"source": "trusted_verifier_outcome", "evaluation_score": reward}
 
 
 _SCOPED_ROUTE_CIRCUIT_DATASETS = frozenset(
@@ -276,11 +303,15 @@ _SCOPED_ROUTE_CIRCUIT_DATASETS = frozenset(
 _JSONL_APPEND_LOCK = threading.Lock()
 _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES = frozenset(
     {
+        # Runtime-owned action validation errors: the backend completed the
+        # request, but the Worker did not follow the Action contract.
         "action_arguments_must_be_an_object",
         "invalid_action_arguments",
         "invalid_action_arguments_encoding",
         "action_not_visible",
         "tool_action_failed",
+        # Sandboxed code errors produced by model-authored calls.  These are
+        # intentionally distinct from backend/tool infrastructure incidents.
         "SecurityError",
         "ImportError",
         "SyntaxError",
@@ -297,21 +328,23 @@ class WorkerBackendUnavailableError(RuntimeError):
 
     def __init__(self, failure: dict[str, Any]) -> None:
         self.failure = dict(failure)
-        self.routes = tuple((str(value) for value in failure.get("routes", ())))
-        self.failure_types = tuple((str(value) for value in failure.get("failure_types", ())))
-        self.agents = tuple((str(value) for value in failure.get("agents", ())))
+        self.routes = tuple(str(value) for value in failure.get("routes", ()))
+        self.failure_types = tuple(str(value) for value in failure.get("failure_types", ()))
+        self.agents = tuple(str(value) for value in failure.get("agents", ()))
         self.failure_details = tuple(
-            (dict(value) for value in failure.get("failure_details", ()) if isinstance(value, dict))
+            dict(value) for value in failure.get("failure_details", ()) if isinstance(value, dict)
         )
         self.request_events = tuple(
-            (dict(value) for value in failure.get("request_events", ()) if isinstance(value, dict))
+            dict(value) for value in failure.get("request_events", ()) if isinstance(value, dict)
         )
         legacy = not self.failure_details
         self.retryable = bool(failure.get("retryable", legacy))
         self.counts_toward_route_circuit = bool(failure.get("counts_toward_route_circuit", legacy))
         self.disable_route = bool(failure.get("disable_route", False))
         super().__init__(
-            f"required Worker backend failed; routes={','.join(self.routes) or 'unknown'}; failure_types={','.join(self.failure_types) or 'unknown'}"
+            "required Worker backend failed; "
+            f"routes={','.join(self.routes) or 'unknown'}; "
+            f"failure_types={','.join(self.failure_types) or 'unknown'}"
         )
 
     def route_policy(self, route: str) -> tuple[bool, bool]:
@@ -321,10 +354,10 @@ class WorkerBackendUnavailableError(RuntimeError):
             if str(detail.get("route", "") or route) == route
         ]
         if not matching:
-            return (self.counts_toward_route_circuit, self.disable_route)
+            return self.counts_toward_route_circuit, self.disable_route
         return (
-            any((bool(detail.get("counts_toward_route_circuit")) for detail in matching)),
-            any((bool(detail.get("disable_route")) for detail in matching)),
+            any(bool(detail.get("counts_toward_route_circuit")) for detail in matching),
+            any(bool(detail.get("disable_route")) for detail in matching),
         )
 
 
@@ -354,13 +387,13 @@ class BackendRetryExhaustedError(RuntimeError):
 
     def __init__(self, failure: dict[str, Any]) -> None:
         self.failure = dict(failure)
-        self.routes = tuple((str(value) for value in failure.get("routes", ())))
-        self.failure_types = tuple((str(value) for value in failure.get("failure_types", ())))
+        self.routes = tuple(str(value) for value in failure.get("routes", ()))
+        self.failure_types = tuple(str(value) for value in failure.get("failure_types", ()))
         self.failure_details = tuple(
-            (dict(value) for value in failure.get("failure_details", ()) if isinstance(value, dict))
+            dict(value) for value in failure.get("failure_details", ()) if isinstance(value, dict)
         )
         self.request_events = tuple(
-            (dict(value) for value in failure.get("request_events", ()) if isinstance(value, dict))
+            dict(value) for value in failure.get("request_events", ()) if isinstance(value, dict)
         )
         legacy = not self.failure_details
         self.retryable = bool(failure.get("retryable", legacy))
@@ -375,14 +408,15 @@ class BackendRetryExhaustedError(RuntimeError):
             if str(detail.get("route", "") or route) == route
         ]
         if not matching:
-            return (self.counts_toward_route_circuit, self.disable_route)
+            return self.counts_toward_route_circuit, self.disable_route
         return (
-            any((bool(detail.get("counts_toward_route_circuit")) for detail in matching)),
-            any((bool(detail.get("disable_route")) for detail in matching)),
+            any(bool(detail.get("counts_toward_route_circuit")) for detail in matching),
+            any(bool(detail.get("disable_route")) for detail in matching),
         )
 
 
 def _is_healthbench_judge_backend_failure(failure: dict[str, Any]) -> bool:
+    # The official grader preserves this prefix when wrapping a backend error.
     return bool(failure.get("backend_failure")) and str(failure.get("message", "")).startswith(
         "HealthBench Judge failed closed at rubric "
     )
@@ -404,9 +438,13 @@ class RecoveryDecision:
 
 
 def _recovery_decision(
-    dataset: str, *, error: Exception | None = None, rollout: SolverRollout | None = None
+    dataset: str,
+    *,
+    error: Exception | None = None,
+    rollout: SolverRollout | None = None,
 ) -> RecoveryDecision:
     """Classify invalid results without retrying ordinary task-level negatives."""
+
     dataset_key = canonical_dataset_name(dataset)
     if error is not None:
         if isinstance(error, EnvironmentResultIncompleteError):
@@ -424,7 +462,10 @@ def _recovery_decision(
                 infrastructure_incident=True,
             )
         if isinstance(error, WorkerWallClockLimitExceeded):
-            return RecoveryDecision(RecoveryScope.FULL_PRIMARY, "rollout_wall_clock_limit")
+            return RecoveryDecision(
+                RecoveryScope.FULL_PRIMARY,
+                "rollout_wall_clock_limit",
+            )
         return RecoveryDecision(RecoveryScope.NONE, "non_recoverable_exception")
     if rollout is None:
         return RecoveryDecision(RecoveryScope.NONE, "missing_outcome")
@@ -435,8 +476,8 @@ def _recovery_decision(
     if (
         dataset_key == "swe_bench"
         and isinstance(swe_failure, dict)
-        and (swe_failure.get("detail") in {"ssh_exit_255", "ssh_request_timeout"})
-        and (not metadata.get("infrastructure_failure"))
+        and swe_failure.get("detail") in {"ssh_exit_255", "ssh_request_timeout"}
+        and not metadata.get("infrastructure_failure")
     ):
         return RecoveryDecision(
             RecoveryScope.NONE,
@@ -447,7 +488,9 @@ def _recovery_decision(
         metadata.get("swe_infrastructure_failure")
     ):
         return RecoveryDecision(
-            RecoveryScope.NONE, "runtime_environment_or_tool_failure", infrastructure_incident=True
+            RecoveryScope.NONE,
+            "runtime_environment_or_tool_failure",
+            infrastructure_incident=True,
         )
     if dataset_key == "swe_bench":
         return RecoveryDecision(RecoveryScope.FULL_PRIMARY, "swe_terminal_contract")
@@ -456,7 +499,8 @@ def _recovery_decision(
         or failure_mode == "worker_artifact_integrity_failure"
     ):
         return RecoveryDecision(
-            RecoveryScope.FRESH_STATEFUL_SESSION, "stateful_environment_or_action_integrity_failure"
+            RecoveryScope.FRESH_STATEFUL_SESSION,
+            "stateful_environment_or_action_integrity_failure",
         )
     if (
         reasons
@@ -473,14 +517,20 @@ def _recovery_decision(
         "worker_artifact_integrity_failure" in reasons
         or failure_mode == "worker_artifact_integrity_failure"
     ):
+        # AdaptiveWorkflowSolver first preserves the graph and retries only the
+        # selected output Agent. A still-invalid result receives the runner's
+        # single bounded same-slot fallback so a terminal tool error cannot
+        # silently strand the fixed training slot.
         return RecoveryDecision(
-            RecoveryScope.FULL_PRIMARY, "aime_selected_output_recovery_exhausted"
+            RecoveryScope.FULL_PRIMARY,
+            "aime_selected_output_recovery_exhausted",
         )
     return RecoveryDecision(RecoveryScope.NONE, "dataset_terminal_contract_failed")
 
 
 def _rollout_is_training_eligible(rollout: SolverRollout) -> bool:
     """Treat explicit current-protocol exclusions as unsafe; preserve legacy rows."""
+
     metadata = rollout.trajectory.metadata
     if "training_eligible" not in metadata:
         return True
@@ -495,15 +545,13 @@ def _uncertain_failure_zero(rollout: SolverRollout, reason: str) -> SolverRollou
     """
     metadata = rollout.trajectory.metadata
     if metadata.get("reward_known") is True or any(
-        (
-            metadata.get(key)
-            for key in (
-                "worker_backend_failure",
-                "infrastructure_failure",
-                "swe_infrastructure_failure",
-                "swe_synthetic_evaluation",
-                "swe_non_train_split",
-            )
+        metadata.get(key)
+        for key in (
+            "worker_backend_failure",
+            "infrastructure_failure",
+            "swe_infrastructure_failure",
+            "swe_synthetic_evaluation",
+            "swe_non_train_split",
         )
     ):
         return rollout
@@ -535,7 +583,10 @@ def _rollout_has_trusted_score(rollout: SolverRollout) -> bool:
     return (
         metadata.get("reward_known") is True
         and metadata.get("reward_admission_reason")
-        in {"trusted_task_result", "explicit_policy_terminal"}
+        in {
+            "trusted_task_result",
+            "explicit_policy_terminal",
+        }
         and math.isfinite(rollout.trajectory.reward)
     )
 
@@ -577,6 +628,7 @@ def _runtime_owned_model_policy_failure(
     complete runtime-owned reward signal and enough trusted evidence to assign
     the failure to model policy rather than to the execution environment.
     """
+
     if (
         verification is None
         or worker_backend_failure
@@ -593,22 +645,30 @@ def _runtime_owned_model_policy_failure(
     )
     dataset_key = canonical_dataset_name(dataset)
     artifacts = worker_artifact_integrity if isinstance(worker_artifact_integrity, dict) else {}
-    if dataset_key == "aime" and (not failure):
+    # An incomplete Director graph has no selected output agent, so the normal
+    # selected-output aggregation cannot attach an integrity failure.  For a
+    # stateless AIME run with exactly one Worker that itself reports a terminal
+    # protocol failure, the attribution is nevertheless unambiguous: the
+    # model exhausted its final-output contract, not the backend or tool
+    # environment.  Recover that evidence without guessing across multiple
+    # Workers.
+    if dataset_key == "aime" and not failure:
         terminal_candidates = [
             (str(agent_id), artifact)
-            for (agent_id, artifact) in artifacts.items()
+            for agent_id, artifact in artifacts.items()
             if isinstance(artifact, dict)
             and "terminal_protocol_failure"
             in {str(value) for value in artifact.get("integrity_risks", ())}
         ]
         if len(terminal_candidates) == 1:
-            (agent_id, artifact) = terminal_candidates[0]
+            agent_id, artifact = terminal_candidates[0]
             failure = {
                 "output_agent": agent_id,
                 "risks": list(artifact.get("integrity_risks", ())),
                 "inferred_unselected_output_agent": True,
             }
     risks = {str(value) for value in failure.get("risks", ())}
+
     stateful_environment = (
         stateful_environment_result if isinstance(stateful_environment_result, dict) else {}
     )
@@ -616,15 +676,18 @@ def _runtime_owned_model_policy_failure(
         alfworld_output_progress if isinstance(alfworld_output_progress, dict) else {}
     )
     webshop_progress = webshop_output_progress if isinstance(webshop_output_progress, dict) else {}
+    # A real staged purchase is a completed Worker contribution. If the
+    # Director stops before committing it, learn from the observed zero rather
+    # than discarding the valid policy calls or replaying the shopping task.
     staged_agents = []
     if (
         dataset_key == "webshop"
         and exclusions
-        and (exclusions <= {"not_finished", "execution_incomplete"})
-        and (not worker_artifact_integrity_failure)
-        and (getattr(verification, "verifier", "") == "webshop_environment")
-        and (float(getattr(verification, "score", -1.0)) == 0.0)
-        and (getattr(verification, "passed", True) is False)
+        and exclusions <= {"not_finished", "execution_incomplete"}
+        and not worker_artifact_integrity_failure
+        and getattr(verification, "verifier", "") == "webshop_environment"
+        and float(getattr(verification, "score", -1.0)) == 0.0
+        and getattr(verification, "passed", True) is False
     ):
         for agent_id, artifact in artifacts.items():
             if not isinstance(artifact, dict):
@@ -634,12 +697,12 @@ def _runtime_owned_model_policy_failure(
             if (
                 progress.get("trusted") is True
                 and progress.get("state") == "purchase_staged"
-                and (progress.get("commit_ready") is True)
-                and (progress.get("commit_protocol_status") == "awaiting_canvas_output_selection")
-                and (evidence.get("trusted") is True)
-                and (int(evidence.get("successful_count", 0)) > 0)
-                and (int(evidence.get("failed_count", 0)) == 0)
-                and (not evidence.get("failure_codes"))
+                and progress.get("commit_ready") is True
+                and progress.get("commit_protocol_status") == "awaiting_canvas_output_selection"
+                and evidence.get("trusted") is True
+                and int(evidence.get("successful_count", 0)) > 0
+                and int(evidence.get("failed_count", 0)) == 0
+                and not evidence.get("failure_codes")
             ):
                 staged_agents.append(str(agent_id))
         if staged_agents:
@@ -653,16 +716,36 @@ def _runtime_owned_model_policy_failure(
                 "source": "runtime_staged_purchase_evidence",
                 "original_training_exclusion_reasons": sorted(exclusions),
             }
-    allowed_stateful_exclusions = {"not_finished", "invalid_final_graph", "execution_incomplete"}
+    allowed_stateful_exclusions = {
+        "not_finished",
+        "invalid_final_graph",
+        "execution_incomplete",
+    }
     allowed_exhausted_missing_output_exclusions = {
         *allowed_stateful_exclusions,
+        # After the one same-slot recovery is exhausted, a Director that spent
+        # the hard Worker-token budget without selecting an environment owner
+        # is an observed zero-reward orchestration outcome, not an
+        # infrastructure incident.  This is admitted only by the explicit
+        # recovery-exhausted latch below; ordinary over-budget attempts remain
+        # excluded and retried.
         "execution_budget_exceeded",
     }
     allowed_webshop_closure_exclusions = {
         *allowed_stateful_exclusions,
         "webshop_output_closure_incomplete",
+        # An official step-limit response is represented by the Worker as a
+        # terminal tool failure.  It remains a model-policy outcome when the
+        # trusted WebShop result itself says ``termination_reason=step_limit``.
         "worker_artifact_integrity_failure",
     }
+    # A trusted semantic-stall fuse can fire during the bounded SET_OUTPUT
+    # continuation.  Canvas then also records the generic closure-incomplete
+    # code because no purchase was committed.  Both codes describe the same
+    # model-policy terminal outcome; the latter must not turn the former into
+    # an attribution-uncertain retry.  Keep this allow-list narrower than the
+    # generic closure branch so backend, sidecar, and integrity failures still
+    # fail closed.
     allowed_webshop_semantic_stall_exclusions = {
         *allowed_stateful_exclusions,
         "webshop_output_closure_incomplete",
@@ -671,20 +754,18 @@ def _runtime_owned_model_policy_failure(
     if (
         dataset_key == "alfworld"
         and exclusions <= allowed_stateful_exclusions
-        and (not worker_artifact_integrity_failure)
-        and (alfworld_progress.get("trusted") is True)
-        and (alfworld_progress.get("state") == "typed_policy_failure")
+        and not worker_artifact_integrity_failure
+        and alfworld_progress.get("trusted") is True
+        and alfworld_progress.get("state") == "typed_policy_failure"
         and isinstance(policy_failure, dict)
-        and (policy_failure.get("status") == "typed_policy_failure")
-        and (policy_failure.get("attribution") == "model_policy")
-        and (policy_failure.get("code") == "alfworld_semantic_no_progress")
-        and (
-            int(policy_failure.get("semantic_no_progress_streak", 0) or 0)
-            >= int(policy_failure.get("fuse_threshold", 4) or 4)
-        )
-        and (int(policy_failure.get("repeated_transition_count", 0) or 0) > 0)
-        and (not bool(stateful_environment.get("done", False)))
-        and (not bool(stateful_environment.get("budget_truncated", False)))
+        and policy_failure.get("status") == "typed_policy_failure"
+        and policy_failure.get("attribution") == "model_policy"
+        and policy_failure.get("code") == "alfworld_semantic_no_progress"
+        and int(policy_failure.get("semantic_no_progress_streak", 0) or 0)
+        >= int(policy_failure.get("fuse_threshold", 4) or 4)
+        and int(policy_failure.get("repeated_transition_count", 0) or 0) > 0
+        and not bool(stateful_environment.get("done", False))
+        and not bool(stateful_environment.get("budget_truncated", False))
     ):
         return {
             "status": "typed_policy_failure",
@@ -708,9 +789,9 @@ def _runtime_owned_model_policy_failure(
     if (
         dataset_key == "webshop"
         and exclusions <= allowed_webshop_semantic_stall_exclusions
-        and (not worker_artifact_integrity_failure)
-        and (not bool(stateful_environment.get("done", False)))
-        and (not bool(stateful_environment.get("budget_truncated", False)))
+        and not worker_artifact_integrity_failure
+        and not bool(stateful_environment.get("done", False))
+        and not bool(stateful_environment.get("budget_truncated", False))
     ):
         stalled_candidates: list[tuple[str, dict[str, Any]]] = []
         for agent_id, artifact in artifacts.items():
@@ -723,17 +804,15 @@ def _runtime_owned_model_policy_failure(
             if (
                 progress.get("state") == "typed_policy_failure"
                 and isinstance(candidate, dict)
-                and (candidate.get("status") == "typed_policy_failure")
-                and (candidate.get("attribution") == "model_policy")
-                and (candidate.get("code") == "webshop_semantic_no_progress")
-                and (
-                    int(candidate.get("semantic_no_progress_streak", 0) or 0)
-                    >= int(candidate.get("fuse_threshold", 4) or 4)
-                )
+                and candidate.get("status") == "typed_policy_failure"
+                and candidate.get("attribution") == "model_policy"
+                and candidate.get("code") == "webshop_semantic_no_progress"
+                and int(candidate.get("semantic_no_progress_streak", 0) or 0)
+                >= int(candidate.get("fuse_threshold", 4) or 4)
             ):
                 stalled_candidates.append((str(agent_id), candidate))
         if stalled_candidates:
-            (agent_id, policy_failure) = max(
+            agent_id, policy_failure = max(
                 stalled_candidates,
                 key=lambda item: int(item[1].get("semantic_no_progress_streak", 0) or 0),
             )
@@ -759,6 +838,13 @@ def _runtime_owned_model_policy_failure(
                     policy_failure.get("unique_public_evidence_count", 0) or 0
                 ),
             }
+    # SET_OUTPUT grants the sole environment owner one bounded continuation in
+    # the existing session.  If that continuation returns normally but still
+    # does not purchase, Canvas emits this explicit terminal code.  This is a
+    # complete zero-reward policy trajectory, not a missing sample: admitting
+    # it preserves the fixed-size GRPO sibling group and avoids selectively
+    # retrying only unsuccessful decisions.  Fail closed unless all evidence
+    # below proves that the environment result and attribution are trustworthy.
     closure_integrity_risks = {
         str(value)
         for value in (
@@ -771,7 +857,7 @@ def _runtime_owned_model_policy_failure(
         stateful_environment.get("done", False)
         and str(stateful_environment.get("termination_reason", "")) == "step_limit"
         and closure_integrity_risks
-        and (closure_integrity_risks <= {"terminal_tool_failure"})
+        and closure_integrity_risks <= {"terminal_tool_failure"}
     )
     closure_integrity_is_trusted = bool(
         not worker_artifact_integrity_failure or closure_ended_at_official_step_limit
@@ -779,20 +865,20 @@ def _runtime_owned_model_policy_failure(
     if (
         dataset_key == "webshop"
         and "webshop_output_closure_incomplete" in exclusions
-        and (exclusions <= allowed_webshop_closure_exclusions)
+        and exclusions <= allowed_webshop_closure_exclusions
         and closure_integrity_is_trusted
-        and (getattr(verification, "verifier", "") == "webshop_environment")
-        and (float(getattr(verification, "score", -1.0)) == 0.0)
-        and (getattr(verification, "passed", True) is False)
-        and (webshop_progress.get("trusted") is True)
-        and (webshop_progress.get("state") == "completed")
+        and getattr(verification, "verifier", "") == "webshop_environment"
+        and float(getattr(verification, "score", -1.0)) == 0.0
+        and getattr(verification, "passed", True) is False
+        and webshop_progress.get("trusted") is True
+        and webshop_progress.get("state") == "completed"
         and bool(str(webshop_progress.get("environment_owner", "")).strip())
-        and (webshop_progress.get("environment_access") == "mutable_owner")
-        and ("reward" in stateful_environment)
-        and (float(stateful_environment.get("reward", -1.0)) == 0.0)
-        and (stateful_environment.get("purchased") is False)
-        and (not bool(stateful_environment.get("purchase_committed", False)))
-        and (str(stateful_environment.get("termination_reason", "")) in {"active", "step_limit"})
+        and webshop_progress.get("environment_access") == "mutable_owner"
+        and "reward" in stateful_environment
+        and float(stateful_environment.get("reward", -1.0)) == 0.0
+        and stateful_environment.get("purchased") is False
+        and not bool(stateful_environment.get("purchase_committed", False))
+        and str(stateful_environment.get("termination_reason", "")) in {"active", "step_limit"}
     ):
         return {
             "status": "typed_policy_failure",
@@ -812,36 +898,32 @@ def _runtime_owned_model_policy_failure(
         dataset_key in {"webshop", "alfworld"}
         and admit_stateful_policy_failure_terminal
         and exclusions
-        and (
-            exclusions
-            <= (
-                allowed_exhausted_missing_output_exclusions
-                if dataset_key == "webshop"
-                else allowed_stateful_exclusions
-            )
+        and exclusions
+        <= (
+            allowed_exhausted_missing_output_exclusions
+            if dataset_key == "webshop"
+            else allowed_stateful_exclusions
         )
-        and (not worker_artifact_integrity_failure)
-        and (str(stateful_environment.get("termination_reason", "")) == "missing_output_agent")
-        and (not bool(stateful_environment.get("done", False)))
-        and (not bool(stateful_environment.get("budget_truncated", False)))
-        and (int(stateful_environment.get("steps", 0) or 0) == 0)
+        and not worker_artifact_integrity_failure
+        and str(stateful_environment.get("termination_reason", "")) == "missing_output_agent"
+        and not bool(stateful_environment.get("done", False))
+        and not bool(stateful_environment.get("budget_truncated", False))
+        and int(stateful_environment.get("steps", 0) or 0) == 0
     ):
         if dataset_key == "webshop":
             trusted_progress = {
                 str(agent_id): artifact.get("webshop_progress", {})
-                for (agent_id, artifact) in artifacts.items()
+                for agent_id, artifact in artifacts.items()
                 if isinstance(artifact, dict)
                 and isinstance(artifact.get("webshop_progress"), dict)
-                and (artifact["webshop_progress"].get("trusted") is True)
+                and artifact["webshop_progress"].get("trusted") is True
             }
             if not trusted_progress:
                 return None
             commit_ready_agents = sorted(
-                (
-                    agent_id
-                    for (agent_id, progress) in trusted_progress.items()
-                    if progress.get("commit_ready") is True
-                )
+                agent_id
+                for agent_id, progress in trusted_progress.items()
+                if progress.get("commit_ready") is True
             )
             if commit_ready_agents:
                 return {
@@ -863,7 +945,7 @@ def _runtime_owned_model_policy_failure(
                 "worker_agents": sorted(trusted_progress),
                 "worker_progress_states": {
                     agent_id: str(progress.get("state", ""))
-                    for (agent_id, progress) in trusted_progress.items()
+                    for agent_id, progress in trusted_progress.items()
                 },
                 "original_training_exclusion_reasons": sorted(exclusions),
                 "recovery_exhausted": True,
@@ -876,6 +958,7 @@ def _runtime_owned_model_policy_failure(
             "original_training_exclusion_reasons": sorted(exclusions),
             "recovery_exhausted": True,
         }
+
     if dataset_key == "aime" and exclusions <= {
         "worker_artifact_integrity_failure",
         "execution_incomplete",
@@ -891,16 +974,14 @@ def _runtime_owned_model_policy_failure(
         if (
             int(tool_evidence.get("attempted_count", 0)) > 0
             and failure_codes
-            and (failure_codes <= _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES)
+            and failure_codes <= _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES
             and risks
-            and (
-                risks
-                <= {
-                    "all_tool_actions_failed",
-                    "terminal_tool_failure",
-                    "unsupported_tool_verification_claim",
-                }
-            )
+            and risks
+            <= {
+                "all_tool_actions_failed",
+                "terminal_tool_failure",
+                "unsupported_tool_verification_claim",
+            }
         ):
             return {
                 "status": "typed_policy_failure",
@@ -918,6 +999,7 @@ def _runtime_owned_model_policy_failure(
                 "original_training_exclusion_reasons": sorted(exclusions),
                 "integrity_risks": sorted(risks),
             }
+
     allowed_swe_exclusions = {
         "not_finished",
         "invalid_final_graph",
@@ -929,17 +1011,17 @@ def _runtime_owned_model_policy_failure(
     if (
         dataset_key == "swe_bench"
         and exclusions
-        and (exclusions <= allowed_swe_exclusions)
+        and exclusions <= allowed_swe_exclusions
         and risks
-        and (risks <= {"terminal_protocol_failure"})
-        and (progress.get("trusted") is True)
-        and (progress.get("selected_as_output") is True)
-        and (progress.get("commit_ready") is True)
-        and (progress.get("workspace_changed") is True)
-        and (progress.get("test_after_latest_edit") is True)
-        and (environment.get("official") is True)
-        and (environment.get("synthetic") is False)
-        and (environment.get("environment_completed") is True)
+        and risks <= {"terminal_protocol_failure"}
+        and progress.get("trusted") is True
+        and progress.get("selected_as_output") is True
+        and progress.get("commit_ready") is True
+        and progress.get("workspace_changed") is True
+        and progress.get("test_after_latest_edit") is True
+        and environment.get("official") is True
+        and environment.get("synthetic") is False
+        and environment.get("environment_completed") is True
     ):
         return {
             "status": "typed_policy_failure",
@@ -992,7 +1074,8 @@ class _WindowPipelineState:
 
 class ByteTokenizer:
     approximate_token_count = True
-    "Deterministic tokenizer for smoke tests only."
+
+    """Deterministic tokenizer for smoke tests only."""
 
     def encode(self, text: str, *, add_special_tokens: bool = False) -> list[int]:
         del add_special_tokens
@@ -1003,8 +1086,8 @@ class ByteTokenizer:
         return list(text.encode("utf-8"))
 
     def token_span_for_char_span(self, text: str, span: tuple[int, int]) -> tuple[int, int]:
-        (start, end) = span
-        return (len(text[:start].encode("utf-8")), len(text[:end].encode("utf-8")))
+        start, end = span
+        return len(text[:start].encode("utf-8")), len(text[:end].encode("utf-8"))
 
 
 class HuggingFaceTokenizer:
@@ -1019,24 +1102,28 @@ class HuggingFaceTokenizer:
         return list(self.tokenizer.encode(text, add_special_tokens=add_special_tokens))
 
     def token_span_for_char_span(self, text: str, span: tuple[int, int]) -> tuple[int, int] | None:
-        encoded = self.tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+        encoded = self.tokenizer(
+            text,
+            add_special_tokens=False,
+            return_offsets_mapping=True,
+        )
         offsets = encoded["offset_mapping"]
         if hasattr(offsets, "tolist"):
             offsets = offsets.tolist()
         if offsets and isinstance(offsets[0][0], list):
             offsets = offsets[0]
-        (start, end) = span
+        start, end = span
         selected = [
             index
-            for (index, (left, right)) in enumerate(offsets)
+            for index, (left, right) in enumerate(offsets)
             if int(right) > start and int(left) < end
         ]
         if not selected:
             return None
-        (first, last) = (selected[0], selected[-1])
+        first, last = selected[0], selected[-1]
         if int(offsets[first][0]) != start or int(offsets[last][1]) != end:
             return None
-        return (first, last + 1)
+        return first, last + 1
 
     def encode_chat_trajectory(
         self, messages: list[dict[str, str]]
@@ -1086,12 +1173,14 @@ def adaptive_result_to_rollout(
                 "relation_policy": dict(turn.relation_decision.get("policy", {})),
             },
         )
-        for (index, turn) in enumerate(run.turns)
+        for index, turn in enumerate(run.turns)
     ]
     policy_encoding_error = None
     try:
         policy_calls = tokenize_director_policy_calls(turns, tokenizer, max_tokens=max_tokens)
     except ValueError as exc:
+        # Keep outcome evidence durable without synthesizing missing policy
+        # probabilities or repairing token alignment. This record is audit-only.
         policy_calls = ()
         policy_encoding_error = str(exc)
     flattened_ids: list[int] = []
@@ -1108,7 +1197,7 @@ def adaptive_result_to_rollout(
         flattened_ids.extend(completion_ids)
         flattened_mask.extend([int(turn.trainable)] * len(completion_ids))
         action_spans.append((start, len(flattened_ids)) if completion_ids else None)
-    (token_ids, mask) = (tuple(flattened_ids), tuple(flattened_mask))
+    token_ids, mask = tuple(flattened_ids), tuple(flattened_mask)
     relation_choice_spans: list[tuple[int, int] | None] = list(action_spans)
     for index, turn in enumerate(run.turns):
         if getattr(turn, "turn_kind", "graph_action") != "relation_choice":
@@ -1151,9 +1240,7 @@ def adaptive_result_to_rollout(
         "swe-bench",
         "swebench",
     }
-    swe_non_train_split = bool(
-        is_swe_task and (not swe_task_is_training_split(result.task.metadata))
-    )
+    swe_non_train_split = bool(is_swe_task and not swe_task_is_training_split(result.task.metadata))
     dataset_key = canonical_dataset_name(result.task.metadata.get("dataset", ""))
     stateful_environment_result = (
         result.task.metadata.get("alfworld_environment_result", {})
@@ -1165,10 +1252,10 @@ def adaptive_result_to_rollout(
     environment_commit_execution_complete = bool(
         dataset_key == "webshop"
         and isinstance(stateful_environment_result, dict)
-        and (stateful_environment_result.get("purchase_executed") is True)
-        and (stateful_environment_result.get("purchase_committed") is True)
-        and (stateful_environment_result.get("purchased") is True)
-        and (stateful_environment_result.get("terminal") is True)
+        and stateful_environment_result.get("purchase_executed") is True
+        and stateful_environment_result.get("purchase_committed") is True
+        and stateful_environment_result.get("purchased") is True
+        and stateful_environment_result.get("terminal") is True
     )
     answer_score = float(verification.score) if verification else 0.0
     result_payload = result.to_dict()
@@ -1182,7 +1269,7 @@ def adaptive_result_to_rollout(
         finished=run.finished,
         output=submitted_output,
         answer_score=answer_score,
-        submission_valid=submission.valid if submission else bool(run.output.strip()),
+        submission_valid=(submission.valid if submission else bool(run.output.strip())),
         worker_backend_failure=bool(worker_backend_failure),
         environment_commit_complete=environment_commit_execution_complete,
     )
@@ -1206,6 +1293,9 @@ def adaptive_result_to_rollout(
             "pairs": [],
         }
     )
+    # A final Canvas event can carry the previous ExecutionReport solely to
+    # expose the selected artifact. It is not another Worker execution and must
+    # not inflate Worker/revision metrics.
     execution_payloads = [
         execution
         for event in canvas_events
@@ -1246,58 +1336,53 @@ def adaptive_result_to_rollout(
         and event.payload["responsibility_overlap_check"]
     ]
     duplicate_responsibility_detection_count = sum(
-        (
-            int(
-                any(
-                    (
-                        bool(comparison.get("high_confidence_duplicate"))
-                        for comparison in check.get("comparisons", ())
-                        if isinstance(comparison, dict)
-                    )
-                )
+        int(
+            any(
+                bool(comparison.get("high_confidence_duplicate"))
+                for comparison in check.get("comparisons", ())
+                if isinstance(comparison, dict)
             )
-            for check in responsibility_overlap_checks
         )
+        for check in responsibility_overlap_checks
     )
     duplicate_responsibility_decision_counts = {
         decision: sum(
-            (
-                int(str(check.get("decision", "")) == decision)
-                for check in responsibility_overlap_checks
-            )
+            int(str(check.get("decision", "")) == decision)
+            for check in responsibility_overlap_checks
         )
-        for decision in ("record_only", "rewrite_requested", "accepted_after_warning", "rejected")
+        for decision in (
+            "record_only",
+            "rewrite_requested",
+            "accepted_after_warning",
+            "rejected",
+        )
     }
     executed_agent_count = sum(
-        (len(payload.get("executed_agents", ())) for payload in execution_payloads)
+        len(payload.get("executed_agents", ())) for payload in execution_payloads
     )
     reused_agent_count = sum(
-        (len(payload.get("reused_agents", ())) for payload in execution_payloads)
+        len(payload.get("reused_agents", ())) for payload in execution_payloads
     )
     execution_agent_count = executed_agent_count + reused_agent_count
     worker_model_call_count = sum(
-        (
-            int(payload.get("worker_model_calls_total", len(payload.get("executed_agents", ()))))
-            for payload in execution_payloads
-        )
+        int(payload.get("worker_model_calls_total", len(payload.get("executed_agents", ()))))
+        for payload in execution_payloads
     )
     worker_initial_model_call_count = sum(
-        (
-            int(payload.get("initial_model_calls", len(payload.get("executed_agents", ()))))
-            for payload in execution_payloads
-        )
+        int(payload.get("initial_model_calls", len(payload.get("executed_agents", ()))))
+        for payload in execution_payloads
     )
     worker_revision_model_call_count = sum(
-        (int(payload.get("revision_model_calls", 0)) for payload in execution_payloads)
+        int(payload.get("revision_model_calls", 0)) for payload in execution_payloads
     )
     worker_cache_hit_count = sum(
-        (int(payload.get("cache_hits", 0)) for payload in execution_payloads)
+        int(payload.get("cache_hits", 0)) for payload in execution_payloads
     )
     worker_component_execution_count = sum(
-        (int(payload.get("component_execution_count", 0)) for payload in execution_payloads)
+        int(payload.get("component_execution_count", 0)) for payload in execution_payloads
     )
     worker_scheduled_agent_count = sum(
-        (len(payload.get("scheduled_agents", ())) for payload in execution_payloads)
+        len(payload.get("scheduled_agents", ())) for payload in execution_payloads
     )
     worker_attempt_count = worker_model_call_count + worker_cache_hit_count
     repair_payloads = [
@@ -1316,7 +1401,10 @@ def adaptive_result_to_rollout(
             str(event.payload.get("rejection_code"))
             for event in reversed(canvas_events)
             if event.payload.get("rejection_code")
-            in {"director_no_legal_continuation", "director_no_progress_exhausted"}
+            in {
+                "director_no_legal_continuation",
+                "director_no_progress_exhausted",
+            }
         ),
         None,
     )
@@ -1334,21 +1422,19 @@ def adaptive_result_to_rollout(
         }
     )
     training_exclusion_reasons: list[str] = []
-    if not run.turns or any((not turn.trainable for turn in run.turns)):
+    if not run.turns or any(not turn.trainable for turn in run.turns):
         training_exclusion_reasons.append("director_policy_call_ineligible")
     if policy_encoding_error:
         training_exclusion_reasons.append("director_policy_call_ineligible")
     if any(
-        (
-            turn.token_provenance != "mock_text"
-            and (
-                not turn.prompt_token_ids
-                or not turn.completion_token_ids
-                or len(turn.behavior_log_probs) != len(turn.completion_token_ids)
-                or any((not math.isfinite(value) or value > 0 for value in turn.behavior_log_probs))
-            )
-            for turn in run.turns
+        turn.token_provenance != "mock_text"
+        and (
+            not turn.prompt_token_ids
+            or not turn.completion_token_ids
+            or len(turn.behavior_log_probs) != len(turn.completion_token_ids)
+            or any(not math.isfinite(value) or value > 0 for value in turn.behavior_log_probs)
         )
+        for turn in run.turns
     ):
         training_exclusion_reasons.append("director_policy_call_ineligible")
     if not run.finished:
@@ -1365,7 +1451,7 @@ def adaptive_result_to_rollout(
         is_swe_task
         and isinstance(swe_output_progress, dict)
         and swe_output_progress.get("commit_required")
-        and (not swe_output_progress.get("commit_ready"))
+        and not swe_output_progress.get("commit_ready")
     ):
         training_exclusion_reasons.append("swe_output_commit_incomplete")
     if swe_infrastructure_failure:
@@ -1376,8 +1462,11 @@ def adaptive_result_to_rollout(
         training_exclusion_reasons.append("swe_non_train_split")
     training_exclusion_reasons.extend(terminal_execution_codes)
     if bounded_director_terminal:
+        # Runtime stopping is not by itself proof of a trainable model failure.
         training_exclusion_reasons.append(bounded_director_terminal)
     training_exclusion_reasons = list(dict.fromkeys(training_exclusion_reasons))
+    # Reward attribution and policy-data integrity are independent. A known
+    # failure remains a known zero even when its policy record cannot enter PPO.
     policy_data_exclusions = [
         reason
         for reason in training_exclusion_reasons
@@ -1412,45 +1501,41 @@ def adaptive_result_to_rollout(
         verification and verification.verifier == "runtime_policy_terminal"
     )
     unresolved_tool_failure = any(
-        (
-            bool(
-                set(artifact.get("runtime_tool_evidence", {}).get("failure_codes", ()))
-                - model_tool_errors(dataset_key)
-            )
-            and (not artifact.get("runtime_tool_evidence", {}).get("recovered_failure"))
-            for artifact in worker_artifact_integrity.values()
-            if isinstance(artifact, dict)
+        bool(
+            set(artifact.get("runtime_tool_evidence", {}).get("failure_codes", ()))
+            - model_tool_errors(dataset_key)
         )
+        and not artifact.get("runtime_tool_evidence", {}).get("recovered_failure")
+        for artifact in worker_artifact_integrity.values()
+        if isinstance(artifact, dict)
     )
     if unresolved_tool_failure:
         typed_policy_failure = None
         training_exclusion_reasons.append("tool_failure_attribution_unresolved")
     trusted_result = bool(
         verification is not None
-        and (not runtime_terminal_score)
-        and (not swe_infrastructure_failure)
+        and not runtime_terminal_score
+        and not swe_infrastructure_failure
         and (
             trusted_environment_outcome(dataset_key, environment)
-            or (not worker_backend_failure and (not unresolved_tool_failure))
+            or (not worker_backend_failure and not unresolved_tool_failure)
         )
         and (
             trusted_environment_outcome(dataset_key, environment)
             or (
                 dataset_key in {"aime", "nq_open", "hotpotqa", "healthbench_professional"}
                 and (submission.valid if submission else bool(run.output.strip()))
-                and (not worker_artifact_integrity_failure)
-                and (typed_policy_failure is None)
+                and not worker_artifact_integrity_failure
+                and typed_policy_failure is None
             )
             or (
                 run.finished
                 and protocol_reward.execution_complete
-                and (not worker_artifact_integrity_failure)
-                and (
-                    not (
-                        is_swe_task
-                        and swe_output_progress.get("commit_required")
-                        and (not swe_output_progress.get("commit_ready"))
-                    )
+                and not worker_artifact_integrity_failure
+                and not (
+                    is_swe_task
+                    and swe_output_progress.get("commit_required")
+                    and not swe_output_progress.get("commit_ready")
                 )
             )
         )
@@ -1467,21 +1552,18 @@ def adaptive_result_to_rollout(
     if (
         is_swe_task
         and isinstance(environment, dict)
-        and (environment.get("status") == "typed_policy_failure")
-        and (environment.get("runtime_owned") is True)
-        and (environment.get("attribution") == "model_policy")
-        and (environment.get("environment_completed") is True)
-        and (verification is not None)
-        and (float(verification.score) == 0.0)
-        and (not worker_backend_failure)
-        and (not swe_infrastructure_failure)
-        and (not unresolved_tool_failure)
-        and (not swe_synthetic_evaluation)
-        and (
-            set(training_exclusion_reasons)
-            <= clearable_terminal_reasons
-            | {"director_policy_call_ineligible", "swe_non_train_split"}
-        )
+        and environment.get("status") == "typed_policy_failure"
+        and environment.get("runtime_owned") is True
+        and environment.get("attribution") == "model_policy"
+        and environment.get("environment_completed") is True
+        and verification is not None
+        and float(verification.score) == 0.0
+        and not worker_backend_failure
+        and not swe_infrastructure_failure
+        and not unresolved_tool_failure
+        and not swe_synthetic_evaluation
+        and set(training_exclusion_reasons)
+        <= clearable_terminal_reasons | {"director_policy_call_ineligible", "swe_non_train_split"}
     ):
         typed_policy_failure = {
             "status": "typed_policy_failure",
@@ -1492,12 +1574,9 @@ def adaptive_result_to_rollout(
             "original_training_exclusion_reasons": list(training_exclusion_reasons),
         }
         trusted_result = False
-    if trusted_result and (
-        not (
-            dataset_key == "alfworld"
-            and typed_policy_failure
-            and (float(verification.score) == 0.0)
-        )
+    # A completed official result wins over post-commit text/graph failure.
+    if trusted_result and not (
+        dataset_key == "alfworld" and typed_policy_failure and float(verification.score) == 0.0
     ):
         typed_policy_failure = None
         training_exclusion_reasons = [
@@ -1508,14 +1587,11 @@ def adaptive_result_to_rollout(
     elif (
         isinstance(terminal, dict)
         and terminal.get("source") == "runtime_terminal_ledger_v1"
-        and (not worker_backend_failure)
-        and (not swe_infrastructure_failure)
-        and (not unresolved_tool_failure)
-        and (
-            set(training_exclusion_reasons)
-            <= clearable_terminal_reasons
-            | {"director_policy_call_ineligible", "swe_non_train_split"}
-        )
+        and not worker_backend_failure
+        and not swe_infrastructure_failure
+        and not unresolved_tool_failure
+        and set(training_exclusion_reasons)
+        <= clearable_terminal_reasons | {"director_policy_call_ineligible", "swe_non_train_split"}
         and (runtime_terminal_score or not (submission.valid if submission else run.output.strip()))
     ):
         typed_policy_failure = terminal
@@ -1527,25 +1603,23 @@ def adaptive_result_to_rollout(
     if (
         verification is None
         and typed_policy_failure is None
-        and (
-            dataset_key
-            in {
-                "aime",
-                "nq_open",
-                "hotpotqa",
-                "healthbench_professional",
-                "alfworld",
-                "webshop",
-                "swe_bench",
-            }
-        )
+        and dataset_key
+        in {
+            "aime",
+            "nq_open",
+            "hotpotqa",
+            "healthbench_professional",
+            "alfworld",
+            "webshop",
+            "swe_bench",
+        }
     ):
         training_exclusion_reasons.append("missing_trusted_verification")
     elif (
         verification is not None
-        and (not trusted_result)
-        and (typed_policy_failure is None)
-        and (not training_exclusion_reasons)
+        and not trusted_result
+        and typed_policy_failure is None
+        and not training_exclusion_reasons
     ):
         training_exclusion_reasons.append("outcome_attribution_unresolved")
     training_eligible = not training_exclusion_reasons
@@ -1555,8 +1629,10 @@ def adaptive_result_to_rollout(
             "failure": typed_policy_failure,
         }
     elif trusted_result:
-        (director_reward, task_reward_breakdown) = _outcome_task_reward(
-            str(result.task.metadata.get("dataset", "")), verification, prediction=submitted_output
+        director_reward, task_reward_breakdown = _outcome_task_reward(
+            str(result.task.metadata.get("dataset", "")),
+            verification,
+            prediction=submitted_output,
         )
     else:
         task_reward_breakdown = {
@@ -1572,18 +1648,21 @@ def adaptive_result_to_rollout(
         if (
             not payload.get("accepted")
             or not isinstance(raw_graph, dict)
-            or (not isinstance(audit, dict))
-            or (not isinstance(repair, dict))
+            or not isinstance(audit, dict)
+            or not isinstance(repair, dict)
             or repair.get("required")
-            or (int(audit.get("agent_count", 0)) <= 0)
-            or (int(audit.get("configured_agent_count", 0)) != int(audit.get("agent_count", 0)))
-            or (int(audit.get("weak_component_count", 0)) > 1)
+            or int(audit.get("agent_count", 0)) <= 0
+            or int(audit.get("configured_agent_count", 0)) != int(audit.get("agent_count", 0))
+            or int(audit.get("weak_component_count", 0)) > 1
         ):
             continue
         last_safe_graph = dict(raw_graph)
 
     def final_repair_counter(name: str) -> int:
-        return max((int(payload.get(name, 0) or 0) for payload in repair_payloads), default=0)
+        return max(
+            (int(payload.get(name, 0) or 0) for payload in repair_payloads),
+            default=0,
+        )
 
     return SolverRollout(
         TokenizedDirectorTrajectory(
@@ -1599,16 +1678,20 @@ def adaptive_result_to_rollout(
                 "run_id": result.run_id,
                 "finished": run.finished,
                 "interactive_turns": len(run.turns),
-                "accepted_turns": sum((int(turn.accepted) for turn in run.turns)),
-                "rejected_turns": sum((int(not turn.accepted) for turn in run.turns)),
+                "accepted_turns": sum(int(turn.accepted) for turn in run.turns),
+                "rejected_turns": sum(int(not turn.accepted) for turn in run.turns),
                 "responsibility_violation_count": sum(
-                    (int(turn.rejection_code == "responsibility_violation") for turn in run.turns)
+                    int(turn.rejection_code == "responsibility_violation") for turn in run.turns
                 ),
                 "duplicate_responsibility_rejection_count": sum(
-                    (int(turn.rejection_code == "duplicate_responsibility") for turn in run.turns)
+                    int(turn.rejection_code == "duplicate_responsibility") for turn in run.turns
                 ),
-                "duplicate_responsibility_detection_count": duplicate_responsibility_detection_count,
-                "duplicate_responsibility_decision_counts": duplicate_responsibility_decision_counts,
+                "duplicate_responsibility_detection_count": (
+                    duplicate_responsibility_detection_count
+                ),
+                "duplicate_responsibility_decision_counts": (
+                    duplicate_responsibility_decision_counts
+                ),
                 "duplicate_responsibility_policy": next(
                     (
                         str(check.get("policy"))
@@ -1622,22 +1705,18 @@ def adaptive_result_to_rollout(
                     cross_agent_read_audit["duplicate_read_only_exploration"]
                 ),
                 "delegation_field_repair_count": sum(
-                    (
-                        len(event.payload.get("delegation_field_repairs", ()))
-                        for event in canvas_events
-                    )
+                    len(event.payload.get("delegation_field_repairs", ()))
+                    for event in canvas_events
                 ),
                 "managed_delegation_contract_count": sum(
-                    (
-                        int(
-                            bool(
-                                node.get("metadata", {})
-                                .get("system_managed_contract", {})
-                                .get("version")
-                            )
+                    int(
+                        bool(
+                            node.get("metadata", {})
+                            .get("system_managed_contract", {})
+                            .get("version")
                         )
-                        for node in run.graph.get("nodes", ())
                     )
+                    for node in run.graph.get("nodes", ())
                 ),
                 "director_action_diagnostics": [
                     dict(turn.action_diagnostics) for turn in run.turns
@@ -1646,30 +1725,22 @@ def adaptive_result_to_rollout(
                     "postsolve_deadline_exceeded"
                 ),
                 "director_action_repairs": sum(
-                    (
-                        int(bool(turn.action_diagnostics.get("repair_attempted")))
-                        for turn in run.turns
-                    )
+                    int(bool(turn.action_diagnostics.get("repair_attempted"))) for turn in run.turns
                 ),
                 "director_action_repair_successes": sum(
-                    (
-                        int(bool(turn.action_diagnostics.get("repair_succeeded")))
-                        for turn in run.turns
-                    )
+                    int(bool(turn.action_diagnostics.get("repair_succeeded"))) for turn in run.turns
                 ),
                 "director_discarded_output_chars": sum(
-                    (
-                        int(turn.action_diagnostics.get("discarded_output_chars", 0) or 0)
-                        for turn in run.turns
-                    )
+                    int(turn.action_diagnostics.get("discarded_output_chars", 0) or 0)
+                    for turn in run.turns
                 ),
                 "protocol_recovery_count": sum(
-                    (
-                        int(bool(step.payload.get("protocol_recovery")))
-                        for step in result.solver_result.trace.events
-                        if step.kind == "canvas_step"
-                    )
+                    int(bool(step.payload.get("protocol_recovery")))
+                    for step in result.solver_result.trace.events
+                    if step.kind == "canvas_step"
                 ),
+                "skills_used": list(result.skills_used),
+                "skill_context": dict(result.solver_result.skill_context),
                 "verification": asdict(verification) if verification else None,
                 "answer_score": answer_score,
                 "evaluation_score": answer_score,
@@ -1686,9 +1757,10 @@ def adaptive_result_to_rollout(
                 "protocol_reward": protocol_reward.to_dict(),
                 "protocol_score": protocol_reward.protocol_score,
                 "protocol_qualified": protocol_reward.qualified,
-                "environment_commit_execution_complete": environment_commit_execution_complete,
+                "environment_commit_execution_complete": (environment_commit_execution_complete),
                 "delegation_fidelity": protocol_reward.delegation_fidelity,
                 "delegation_issues": list(protocol_reward.delegation_issues),
+                "skills_enabled": result.solver_result.trace.task.metadata.get("skills_enabled"),
                 "action_protocol": "director_model_v1",
                 "environment_request_events": result.task.metadata.get(
                     "environment_request_events", []
@@ -1706,7 +1778,7 @@ def adaptive_result_to_rollout(
                 ),
                 "solver_answer": run.output,
                 "raw_solver_answer": run.output,
-                "submitted_answer": submission.submitted_answer if submission else run.output,
+                "submitted_answer": (submission.submitted_answer if submission else run.output),
                 "answer_submission": submission.to_dict() if submission else None,
                 "qa_token_f1": result.task.metadata.get("qa_token_f1"),
                 "qa_official_metrics": result.task.metadata.get("qa_official_metrics"),
@@ -1735,7 +1807,7 @@ def adaptive_result_to_rollout(
                 "worker_backend_failure": worker_backend_failure,
                 "worker_artifact_integrity": worker_artifact_integrity,
                 "worker_output_integrity_risks": worker_output_integrity_risks,
-                "worker_artifact_integrity_failure": worker_artifact_integrity_failure,
+                "worker_artifact_integrity_failure": (worker_artifact_integrity_failure),
                 "swe_output_progress": swe_output_progress,
                 "alfworld_output_progress": alfworld_output_progress,
                 "webshop_output_progress": webshop_output_progress,
@@ -1745,42 +1817,61 @@ def adaptive_result_to_rollout(
                 "training_eligible": training_eligible,
                 "reward_known": trusted_result or typed_policy_failure is not None,
                 "task_outcome_passed": bool(trusted_result and verification.passed),
-                "reward_admission_reason": "trusted_task_result"
-                if trusted_result
-                else "explicit_policy_terminal"
-                if typed_policy_failure is not None
-                else "infrastructure_or_unresolved_attribution",
+                "reward_admission_reason": (
+                    "trusted_task_result"
+                    if trusted_result
+                    else "explicit_policy_terminal"
+                    if typed_policy_failure is not None
+                    else "infrastructure_or_unresolved_attribution"
+                ),
                 "policy_data_exclusion_reasons": policy_data_exclusions,
                 "policy_encoding_error": policy_encoding_error,
                 "runtime_terminal_policy_failure": terminal,
                 "bounded_director_terminal": bounded_director_terminal,
                 "training_exclusion_reasons": training_exclusion_reasons,
                 "typed_policy_failure": typed_policy_failure,
-                "terminal_status": "typed_policy_failure"
-                if typed_policy_failure is not None
-                else "completed"
-                if training_eligible
-                else "excluded",
-                "terminal_graph_status": "typed_policy_failure"
-                if typed_policy_failure is not None
-                else "unfinished_with_trusted_result"
-                if trusted_result and (not run.finished)
-                else "valid_finished"
-                if training_eligible
-                else "unsafe_partial",
+                "terminal_status": (
+                    "typed_policy_failure"
+                    if typed_policy_failure is not None
+                    else ("completed" if training_eligible else "excluded")
+                ),
+                "terminal_graph_status": (
+                    "typed_policy_failure"
+                    if typed_policy_failure is not None
+                    else (
+                        "unfinished_with_trusted_result"
+                        if trusted_result and not run.finished
+                        else "valid_finished"
+                        if training_eligible
+                        else "unsafe_partial"
+                    )
+                ),
                 "final_graph_validation_errors": final_graph_errors,
                 "last_safe_graph": last_safe_graph,
-                "failure_mode": "worker_backend_failure"
-                if worker_backend_failure
-                else "typed_policy_failure"
-                if typed_policy_failure is not None
-                else "worker_artifact_integrity_failure"
-                if worker_artifact_integrity_failure
-                else None
-                if director_reward > 0.0
-                else "director_protocol_failure"
-                if not protocol_reward.qualified
-                else "task_verification_failure",
+                # This field is consumed only for zero-reward skill cases, but it is
+                # also part of the persisted rollout metadata used for audits.  Do
+                # not label successful trajectories as failures.
+                "failure_mode": (
+                    "worker_backend_failure"
+                    if worker_backend_failure
+                    else (
+                        "typed_policy_failure"
+                        if typed_policy_failure is not None
+                        else (
+                            "worker_artifact_integrity_failure"
+                            if worker_artifact_integrity_failure
+                            else (
+                                None
+                                if director_reward > 0.0
+                                else (
+                                    "director_protocol_failure"
+                                    if not protocol_reward.qualified
+                                    else "task_verification_failure"
+                                )
+                            )
+                        )
+                    )
+                ),
                 "duration_s": duration_s,
                 "token_in": int(result_payload.get("token_in", 0)),
                 "token_out": int(result_payload.get("token_out", 0)),
@@ -1790,19 +1881,17 @@ def adaptive_result_to_rollout(
                         for event in result.solver_result.trace.events
                         if event.kind == "canvas_step"
                         and event.payload.get("final_execution")
-                        and (event.payload.get("director_turn_index") is not None)
+                        and event.payload.get("director_turn_index") is not None
                     ),
                     None,
                 ),
                 "incremental_execution_count": sum(
-                    (
-                        int(
-                            event.payload.get("execution") is not None
-                            and (not bool(event.payload.get("final_execution")))
-                        )
-                        for event in result.solver_result.trace.events
-                        if event.kind == "canvas_step"
+                    int(
+                        event.payload.get("execution") is not None
+                        and not bool(event.payload.get("final_execution"))
                     )
+                    for event in result.solver_result.trace.events
+                    if event.kind == "canvas_step"
                 ),
                 "worker_executed_agent_count": executed_agent_count,
                 "worker_reused_agent_count": reused_agent_count,
@@ -1812,16 +1901,14 @@ def adaptive_result_to_rollout(
                 "worker_revision_model_call_count": worker_revision_model_call_count,
                 "worker_cache_hit_count": worker_cache_hit_count,
                 "worker_initial_cache_hit_count": sum(
-                    (int(payload.get("initial_cache_hits", 0)) for payload in execution_payloads)
+                    int(payload.get("initial_cache_hits", 0)) for payload in execution_payloads
                 ),
                 "worker_revision_cache_hit_count": sum(
-                    (int(payload.get("revision_cache_hits", 0)) for payload in execution_payloads)
+                    int(payload.get("revision_cache_hits", 0)) for payload in execution_payloads
                 ),
                 "worker_mandatory_revision_call_count": sum(
-                    (
-                        int(payload.get("mandatory_revision_calls", 0))
-                        for payload in execution_payloads
-                    )
+                    int(payload.get("mandatory_revision_calls", 0))
+                    for payload in execution_payloads
                 ),
                 "worker_incomplete_bidirectional_components": [
                     dict(item)
@@ -1832,73 +1919,54 @@ def adaptive_result_to_rollout(
                 "worker_component_execution_count": worker_component_execution_count,
                 "worker_bidirectional_revision_gate_count": len(bidirectional_revision_decisions),
                 "worker_bidirectional_revision_required_count": sum(
-                    (
-                        int(bool(decision.get("revision_required")))
-                        for decision in bidirectional_revision_decisions
-                    )
+                    int(bool(decision.get("revision_required")))
+                    for decision in bidirectional_revision_decisions
                 ),
                 "worker_bidirectional_revision_skipped_agent_count": sum(
-                    (
-                        len(payload.get("revision_skipped_agents", ()))
-                        for payload in execution_payloads
-                    )
+                    len(payload.get("revision_skipped_agents", ()))
+                    for payload in execution_payloads
                 ),
                 "worker_bidirectional_revision_wave_count": sum(
-                    (int(payload.get("revision_wave_count", 0)) for payload in execution_payloads)
+                    int(payload.get("revision_wave_count", 0)) for payload in execution_payloads
                 ),
                 "worker_bidirectional_revision_reason_counts": {
                     reason: sum(
-                        (
-                            int(reason in decision.get("reason_codes", ()))
-                            for decision in bidirectional_revision_decisions
-                        )
+                        int(reason in decision.get("reason_codes", ()))
+                        for decision in bidirectional_revision_decisions
                     )
                     for reason in bidirectional_revision_reason_codes
                 },
-                "worker_bidirectional_revision_decisions": bidirectional_revision_decisions,
-                "worker_attempt_cache_hit_rate": worker_cache_hit_count / worker_attempt_count
-                if worker_attempt_count
-                else 0.0,
+                "worker_bidirectional_revision_decisions": (bidirectional_revision_decisions),
+                "worker_attempt_cache_hit_rate": (
+                    worker_cache_hit_count / worker_attempt_count if worker_attempt_count else 0.0
+                ),
                 "prompt_revision_count": len(prompt_revision_payloads),
                 "prompt_revision_basis_counts": {
                     basis: sum(
-                        (
-                            int(str(payload.get("basis", "")) == basis)
-                            for payload in prompt_revision_payloads
-                        )
+                        int(str(payload.get("basis", "")) == basis)
+                        for payload in prompt_revision_payloads
                     )
                     for basis in prompt_revision_bases
                 },
                 "prompt_revision_target_model_call_count": sum(
-                    (
-                        int(payload.get("target_model_calls", 0))
-                        for payload in prompt_revision_payloads
-                    )
+                    int(payload.get("target_model_calls", 0))
+                    for payload in prompt_revision_payloads
                 ),
                 "prompt_revision_worker_model_call_count": sum(
-                    (
-                        int(payload.get("worker_model_calls_total", 0))
-                        for payload in prompt_revision_payloads
-                    )
+                    int(payload.get("worker_model_calls_total", 0))
+                    for payload in prompt_revision_payloads
                 ),
                 "prompt_revision_evidence_rejection_count": sum(
-                    (
-                        int(
-                            event.payload.get("rejection_code")
-                            == "prompt_revision_evidence_required"
-                        )
-                        for event in canvas_events
-                    )
+                    int(event.payload.get("rejection_code") == "prompt_revision_evidence_required")
+                    for event in canvas_events
                 ),
                 "prompt_revision_events": prompt_revision_payloads,
-                "worker_cache_reuse_rate": reused_agent_count / execution_agent_count
-                if execution_agent_count
-                else 0.0,
+                "worker_cache_reuse_rate": (
+                    reused_agent_count / execution_agent_count if execution_agent_count else 0.0
+                ),
                 "feedback_truncation_count": sum(
-                    (
-                        int("[feedback truncated]" in str(event.payload.get("feedback", "")))
-                        for event in canvas_events
-                    )
+                    int("[feedback truncated]" in str(event.payload.get("feedback", "")))
+                    for event in canvas_events
                 ),
                 "structural_repair_entry_count": final_repair_counter("entries_total"),
                 "structural_repair_resolution_count": final_repair_counter("resolutions_total"),
@@ -1924,17 +1992,12 @@ def adaptive_result_to_rollout(
                     "duplicate_agent_rejections_total"
                 ),
                 "disconnected_multi_agent_step_count": sum(
-                    (
-                        int(bool(payload.get("disconnected_multi_agent")))
-                        for payload in audit_payloads
-                    )
+                    int(bool(payload.get("disconnected_multi_agent"))) for payload in audit_payloads
                 ),
                 "token_admission_rejection_count": sum(
-                    (
-                        int(bool(event.payload.get("token_admission", {}).get("blocked")))
-                        for event in canvas_events
-                        if isinstance(event.payload.get("token_admission"), dict)
-                    )
+                    int(bool(event.payload.get("token_admission", {}).get("blocked")))
+                    for event in canvas_events
+                    if isinstance(event.payload.get("token_admission"), dict)
                 ),
                 "token_admission_events": [
                     dict(event.payload["token_admission"])
@@ -1943,11 +2006,9 @@ def adaptive_result_to_rollout(
                     and event.payload["token_admission"].get("blocked")
                 ],
                 "final_execution_count": sum(
-                    (
-                        int(bool(event.payload.get("final_execution")))
-                        for event in result.solver_result.trace.events
-                        if event.kind == "canvas_step"
-                    )
+                    int(bool(event.payload.get("final_execution")))
+                    for event in result.solver_result.trace.events
+                    if event.kind == "canvas_step"
                 ),
             },
             policy_calls=policy_calls,
@@ -1969,6 +2030,8 @@ class SelfPlayRunConfig:
     task_scheduling_policy: str = "logical_windows"
     max_active_task_groups: int = 8
     graph_diversity_bonus: float = 0.0
+    # ``off`` permits simple tasks to converge to a legal single-Agent graph.
+    # ``stratified`` retains the historical topology-diversity collapse gate.
     structural_exploration_policy: str = "off"
     collapse_single_agent_threshold: float = 0.8
     collapse_unique_graph_threshold: float = 0.4
@@ -1976,6 +2039,8 @@ class SelfPlayRunConfig:
     collapse_disconnected_multi_agent_threshold: float = 0.0
     collapse_patience_windows: int = 2
     initial_collapse_alert_streak: int = 0
+    # Every primary trajectory owns the same complete wall-clock budget. Dataset
+    # type and optional counterfactual work must not shorten or extend it.
     rollout_wall_time_s: float = 900.0
     stateful_rollout_wall_time_s: float = 900.0
     swe_rollout_wall_time_s: float = 900.0
@@ -1987,20 +2052,46 @@ class SelfPlayRunConfig:
     aime_request_wall_time_s: float = 240.0
     grok_aime_request_wall_time_s: float = 300.0
     replacement_rollouts_per_task: int = 2
+    # Only attribution-uncertain semantic/protocol failures may use one exact
+    # same-slot recovery.  Backend, tool, and environment incidents abort the
+    # active collection without consuming this budget; the repaired run starts a
+    # fresh collection epoch from the latest committed training checkpoint.
     swe_non_trainable_recovery_attempts: int = 1
     non_swe_recovery_attempts: int = 1
+    # Compatibility-only opt-in; normal runs keep local repair, not full replay.
     allow_legacy_whole_rollout_recovery: bool = False
+    # Production preserves fail-closed infrastructure handling.  A bounded
+    # diagnostic run may quarantine failed slots instead of aborting collection.
+    # The numeric whole-rollout retry limit applies only to explicit legacy replay.
     backend_failure_retry_attempts: int = 0
     backend_failure_route_threshold: int = 3
     backend_failure_total_threshold: int = 3
+    # Evaluation collections may preserve a failed slot and continue collecting
+    # independent slots. Production training remains fail-closed by default.
     continue_after_backend_failure_circuit: bool = False
     scoped_route_circuit_enabled: bool = True
     scoped_route_unhealthy_threshold: int = 2
     scoped_route_slow_request_s: float = 180.0
+    # Exact missing-ID collection is intentionally disabled in production.  Keeping
+    # this internal-only switch makes historical recovery behavior testable without
+    # exposing a CLI/config path that can accidentally restart costly rollouts.
     allow_exact_rollout_resume: bool = False
+    # A narrowly scoped exception permits an interrupted collection to retain
+    # already-durable primary rows after a *verified classifier repair*.  The
+    # repair must attest that the abort was caused by an attribution-uncertain
+    # terminal classification, not an infrastructure incident.
     allow_attribution_classifier_repair_resume: bool = False
+    # Infrastructure recovery is a separate, explicit authorization.  The CLI
+    # validates a repair attestation before setting this flag; without it an
+    # interrupted real collection remains fail-closed.
     allow_infrastructure_repair_resume: bool = False
+    # When an attribution-uncertain slot exhausts bounded recovery, an explicit
+    # attestation may discard and recollect *every* sibling in that task group.
+    # Keeping successful siblings would condition the batch on terminal validity.
     allow_uncertain_group_recollection_resume: bool = False
+    # Exact full-group recollection must not replay the same deterministic policy
+    # samples that already failed.  The offset advances only policy sampling;
+    # task identity, Executor seed, MACE snapshots, and route pool stay frozen.
     policy_sampling_attempt_offsets: dict[str, int] = field(default_factory=dict)
     route_health_path: Path | None = None
     route_health_cooldown_s: float = 3600.0
@@ -2012,19 +2103,34 @@ class SelfPlayRunConfig:
     proposer_baseline_decay: float = 0.9
     proposer_baseline_path: Path | None = None
     proposer_baseline_cycle: int = 0
+    # A training run may require every planned task group to be complete.  When
+    # enabled, independent successes remain auditable but no partial cycle batch
+    # is assembled and therefore no optimizer update can start.
     require_all_planned_task_groups_for_training: bool = False
+    # Paired/mock evaluation must retain an exhausted uncertain slot as an
+    # observed failure and continue collecting the other treatment outcomes.
+    # Production training remains fail-closed by default.
     continue_on_uncertain_attribution_exhausted: bool = False
+    # Explicit outcome convention; does not relax policy-data or full-group gates.
     uncertain_attribution_zero_reward: bool = False
     pipeline_counterfactuals: bool = False
     counterfactual_workers: int = 2
+    # One independently bounded wall-clock envelope is shared by the off/on
+    # pair.  It never borrows from, or shortens, the primary rollout deadline.
     counterfactual_pair_wall_time_s: float = 900.0
     task_execution_window: int | None = None
     mace_peer_state_path: Path | None = None
     mace_model_state_path: Path | None = None
     frontier_reverify_fraction: float = 0.25
+    # Start each dataset's Frontier work as soon as every primary in that
+    # dataset is durable.  A cycle-wide executor bounds concurrent datasets;
+    # primary requests retain priority through the request-priority context.
     pipeline_frontier_by_dataset: bool = False
     canary_exclude_migrated_frontier: bool = False
     evaluation_only: bool = False
+    # Start one pending rollout per task, then submit the remaining jobs by a
+    # versioned historical duration estimate.  This is ordinary list scheduling,
+    # not reward- or outcome-conditioned sample selection.
     primary_job_order: str = PRIMARY_JOB_ORDER_ROUND_ROBIN
 
 
@@ -2058,8 +2164,9 @@ class SelfPlayRolloutRunner:
         self.rollout_pool = rollout_pool or ThreadRolloutPool(self.config.workers)
         self.graph_feature_extractor = graph_feature_extractor
         self.primary_probability_observer = primary_probability_observer
+
         if self.config.rollouts_per_task < 1 or (
-            self.config.rollouts_per_task < 2 and (not self.config.evaluation_only)
+            self.config.rollouts_per_task < 2 and not self.config.evaluation_only
         ):
             raise ValueError("rollouts_per_task must be at least two")
         if self.config.proposals_per_seed <= 0:
@@ -2070,7 +2177,10 @@ class SelfPlayRolloutRunner:
             raise ValueError("task_execution_window must be positive")
         if not 0.0 <= self.config.frontier_reverify_fraction <= 1.0:
             raise ValueError("frontier_reverify_fraction must be in [0, 1]")
-        if self.config.task_scheduling_policy not in {"logical_windows", "frozen_manifest_dynamic"}:
+        if self.config.task_scheduling_policy not in {
+            "logical_windows",
+            "frozen_manifest_dynamic",
+        }:
             raise ValueError(
                 "task_scheduling_policy must be 'logical_windows' or 'frozen_manifest_dynamic'"
             )
@@ -2078,8 +2188,9 @@ class SelfPlayRolloutRunner:
             raise ValueError("max_active_task_groups must be positive")
         if self.config.primary_job_order not in PRIMARY_JOB_ORDER_CHOICES:
             raise ValueError("primary_job_order must be 'round_robin' or 'long_tail_first'")
-        if self.config.task_scheduling_policy == "frozen_manifest_dynamic" and (
-            not self.config.require_all_proposals
+        if (
+            self.config.task_scheduling_policy == "frozen_manifest_dynamic"
+            and not self.config.require_all_proposals
         ):
             raise ValueError(
                 "frozen_manifest_dynamic scheduling requires require_all_proposals=true"
@@ -2154,10 +2265,8 @@ class SelfPlayRolloutRunner:
         if self.config.minimum_complete_task_groups <= 0:
             raise ValueError("minimum_complete_task_groups must be positive")
         if any(
-            (
-                not str(task_id) or not isinstance(offset, int) or offset < 0
-                for (task_id, offset) in self.config.policy_sampling_attempt_offsets.items()
-            )
+            not str(task_id) or not isinstance(offset, int) or offset < 0
+            for task_id, offset in self.config.policy_sampling_attempt_offsets.items()
         ):
             raise ValueError(
                 "policy_sampling_attempt_offsets must map task IDs to non-negative integers"
@@ -2167,16 +2276,19 @@ class SelfPlayRolloutRunner:
 
     def run(self, seeds: Iterable[SeedInput], *, resume: bool = False) -> DryRunSelfPlayResult:
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        if resume:
+            _recover_completed_primary_spool(self.output_dir)
         persist_context_policy(self.output_dir, resume=resume)
         mode_path = self.output_dir / "proposer_learning.json"
         requested = (
             self.config.proposer_learning_mode
             if self.config.rollout_group_policy == "eligible_subset"
-            and (not self.config.evaluation_only)
+            and not self.config.evaluation_only
             else "legacy"
         )
         if requested not in {"legacy", INDEPENDENT_SCHEMA}:
             raise ValueError("unknown Proposer learning mode")
+        # Never reinterpret actions/batches already sampled under the old mode.
         mode = (
             json.loads(mode_path.read_text())["mode"]
             if resume and mode_path.exists()
@@ -2189,16 +2301,15 @@ class SelfPlayRolloutRunner:
         self._proposer_baseline = None
         self._baseline_store = None
         if self._independent_frontier:
-            baseline_path = (
-                self.config.proposer_baseline_path
-                or (
+            baseline_path = self.config.proposer_baseline_path or (
+                (
                     self.output_dir.parent
                     if self.output_dir.name.startswith("cycle-")
                     else self.output_dir
                 )
                 / "proposer_baseline_state.json"
             )
-            (self._proposer_baseline, self._baseline_store) = freeze_proposer_baseline(
+            self._proposer_baseline, self._baseline_store = freeze_proposer_baseline(
                 self.output_dir / "proposer_baseline_snapshot.json",
                 state_path=baseline_path,
                 cycle=self.config.proposer_baseline_cycle,
@@ -2212,10 +2323,12 @@ class SelfPlayRolloutRunner:
         subset_resume = None
         if resume:
             expected_task_ids = {
-                f"task-{index}"
-                if self.config.proposals_per_seed == 1
-                else f"task-{index}-p{proposer_index}"
-                for (index, _seed) in enumerate(seed_values, start=1)
+                (
+                    f"task-{index}"
+                    if self.config.proposals_per_seed == 1
+                    else f"task-{index}-p{proposer_index}"
+                )
+                for index, _seed in enumerate(seed_values, start=1)
                 for proposer_index in range(self.config.proposals_per_seed)
             }
             expected_rollout_ids = {
@@ -2235,52 +2348,39 @@ class SelfPlayRolloutRunner:
                 completed_primary_collection_resume = bool(
                     expected_rollout_ids
                     and len(persisted_ids) == len(expected_rollout_ids)
-                    and (len(set(persisted_ids)) == len(persisted_ids))
-                    and (set(persisted_ids) == expected_rollout_ids)
+                    and len(set(persisted_ids)) == len(persisted_ids)
+                    and set(persisted_ids) == expected_rollout_ids
                     and all(
-                        (
-                            row.get("metadata", {}).get("training_eligible") is True
-                            and row.get("metadata", {}).get("terminal_graph_status")
-                            != "unsafe_partial"
-                            for row in persisted_rows
-                        )
+                        row.get("metadata", {}).get("training_eligible") is True
+                        and row.get("metadata", {}).get("terminal_graph_status") != "unsafe_partial"
+                        for row in persisted_rows
                     )
-                    and (batch_gate.get("status") == "ready")
-                    and (batch_gate.get("all_planned_task_groups_complete") is True)
-                    and (
-                        int(batch_gate.get("planned_task_group_count", -1))
-                        == len(expected_task_ids)
-                    )
-                    and (
-                        int(batch_gate.get("complete_task_group_count", -1))
-                        == len(expected_task_ids)
-                    )
-                    and (not batch_gate.get("incomplete_task_ids"))
-                    and (not batch_gate.get("quarantined_task_ids"))
-                    and (int(batch_gate.get("training_excluded_rollout_count", -1)) == 0)
-                    and (
-                        int(batch_gate.get("rollouts_per_task", -1))
-                        == self.config.rollouts_per_task
-                    )
-                    and (int(progress.get("completed_tasks", -1)) == len(expected_task_ids))
-                    and (int(progress.get("rollouts", -1)) == len(expected_rollout_ids))
-                    and (
-                        int(progress.get("training_eligible_rollouts", -1))
-                        == len(expected_rollout_ids)
-                    )
-                    and (int(progress.get("training_excluded_rollouts", -1)) == 0)
+                    and batch_gate.get("status") == "ready"
+                    and batch_gate.get("all_planned_task_groups_complete") is True
+                    and int(batch_gate.get("planned_task_group_count", -1))
+                    == len(expected_task_ids)
+                    and int(batch_gate.get("complete_task_group_count", -1))
+                    == len(expected_task_ids)
+                    and not batch_gate.get("incomplete_task_ids")
+                    and not batch_gate.get("quarantined_task_ids")
+                    and int(batch_gate.get("training_excluded_rollout_count", -1)) == 0
+                    and int(batch_gate.get("rollouts_per_task", -1))
+                    == self.config.rollouts_per_task
+                    and int(progress.get("completed_tasks", -1)) == len(expected_task_ids)
+                    and int(progress.get("rollouts", -1)) == len(expected_rollout_ids)
+                    and int(progress.get("training_eligible_rollouts", -1))
+                    == len(expected_rollout_ids)
+                    and int(progress.get("training_excluded_rollouts", -1)) == 0
                 )
                 completed_collection_resume = bool(
                     completed_primary_collection_resume
                     and all(
-                        (
-                            (self.output_dir / name).is_file()
-                            for name in (
-                                "frontier_scores.json",
-                                "proposer_batch.json",
-                                "solver_batch.json",
-                                "snapshots.json",
-                            )
+                        (self.output_dir / name).is_file()
+                        for name in (
+                            "frontier_scores.json",
+                            "proposer_batch.json",
+                            "solver_batch.json",
+                            "snapshots.json",
                         )
                     )
                 )
@@ -2302,10 +2402,8 @@ class SelfPlayRolloutRunner:
                     saved_selection.get("schema_version") not in SELECTION_SCHEMAS
                     or {g["task_id"] for g in saved_selection["groups"]} != expected_task_ids
                     or any(
-                        (
-                            g["planned_rollout_count"] != self.config.rollouts_per_task
-                            for g in saved_selection["groups"]
-                        )
+                        g["planned_rollout_count"] != self.config.rollouts_per_task
+                        for g in saved_selection["groups"]
                     )
                 ):
                     raise CollectionInfrastructureIncidentError(
@@ -2319,7 +2417,7 @@ class SelfPlayRolloutRunner:
                         raise CollectionInfrastructureIncidentError(
                             "frozen training artifact changed: " + name
                         )
-                (loaded_proposals, loaded_rollouts) = self._load()
+                loaded_proposals, loaded_rollouts = self._load()
                 rebuilt = build_training_selection(
                     loaded_proposals,
                     {r.trajectory.rollout_id: r for r in loaded_rollouts},
@@ -2404,8 +2502,9 @@ class SelfPlayRolloutRunner:
                 )
             elif not self.config.allow_attribution_classifier_repair_resume:
                 raise CollectionInfrastructureIncidentError(
-                    "exact rollout resume is forbidden after a collection incident; start a fresh collection epoch from the last committed checkpoint; incident="
-                    + str(abort.get("incident_class", "unknown"))
+                    "exact rollout resume is forbidden after a collection incident; "
+                    "start a fresh collection epoch from the last committed checkpoint; "
+                    "incident=" + str(abort.get("incident_class", "unknown"))
                 )
             if (
                 completed_collection_resume
@@ -2417,69 +2516,76 @@ class SelfPlayRolloutRunner:
                 pass
             elif incident_class != "attribution_uncertain_recovery_exhausted":
                 raise CollectionInfrastructureIncidentError(
-                    "attribution-classifier repair resume is limited to attribution_uncertain_recovery_exhausted incidents; incident="
+                    "attribution-classifier repair resume is limited to "
+                    "attribution_uncertain_recovery_exhausted incidents; incident="
                     + str(abort.get("incident_class", "unknown"))
                 )
             repair_path = self.output_dir / "collection_repair_attestation.json"
             if (
                 not completed_collection_resume
-                and (not completed_primary_collection_resume)
-                and (not diagnostic_skip_resume)
-                and (not infrastructure_repair_resume)
-                and (not uncertain_group_recollection_resume)
-                and (not repair_path.exists())
+                and not completed_primary_collection_resume
+                and not diagnostic_skip_resume
+                and not infrastructure_repair_resume
+                and not uncertain_group_recollection_resume
+                and not repair_path.exists()
             ):
                 raise CollectionInfrastructureIncidentError(
-                    "attribution-classifier repair resume requires collection_repair_attestation.json"
+                    "attribution-classifier repair resume requires "
+                    "collection_repair_attestation.json"
                 )
             if (
                 not completed_collection_resume
-                and (not completed_primary_collection_resume)
-                and (not diagnostic_skip_resume)
-                and (not infrastructure_repair_resume)
-                and (not uncertain_group_recollection_resume)
+                and not completed_primary_collection_resume
+                and not diagnostic_skip_resume
+                and not infrastructure_repair_resume
+                and not uncertain_group_recollection_resume
             ):
                 repair = json.loads(repair_path.read_text(encoding="utf-8"))
                 if (
                     repair.get("status") != "approved"
                     or repair.get("incident_class") != "attribution_uncertain_recovery_exhausted"
-                    or (not repair.get("reclassified_rollout_ids"))
+                    or not repair.get("reclassified_rollout_ids")
                 ):
                     raise CollectionInfrastructureIncidentError(
                         "invalid attribution-classifier repair attestation"
                     )
         if completed_collection_resume:
+            # Collection, re-verification, graph features and both policy
+            # batches are already durable.  Re-executing Frontier verification
+            # here would waste Executor calls and could change the Proposer
+            # target after one role has already committed.  Load the exact
+            # post-collection transaction instead.
             from .training import load_training_batch
 
-            (proposals, _rollouts) = self._load()
-            all_resumed_tasks = tuple((p.task for p in proposals))
+            proposals, _rollouts = self._load()
+            all_resumed_tasks = tuple(p.task for p in proposals)
             proposer_batch = load_training_batch(self.output_dir / "proposer_batch.json")
             solver_batch = load_training_batch(self.output_dir / "solver_batch.json")
             frontier_rows = json.loads(
                 (self.output_dir / "frontier_scores.json").read_text(encoding="utf-8")
             )
             frontier_scores = tuple(
-                (
-                    FrontierScore(
-                        task_id=str(row["task_id"]),
-                        validity=float(row["validity"]),
-                        scalar=float(row["scalar"]),
-                        graph_local=float(row["graph_local"]),
-                        rewards=tuple((float(value) for value in row["rewards"])),
-                        provisional_graph_local=float(row["provisional_graph_local"])
+                FrontierScore(
+                    task_id=str(row["task_id"]),
+                    validity=float(row["validity"]),
+                    scalar=float(row["scalar"]),
+                    graph_local=float(row["graph_local"]),
+                    rewards=tuple(float(value) for value in row["rewards"]),
+                    provisional_graph_local=(
+                        float(row["provisional_graph_local"])
                         if row.get("provisional_graph_local") is not None
-                        else None,
-                        stable_graph_local=float(row["stable_graph_local"])
+                        else None
+                    ),
+                    stable_graph_local=(
+                        float(row["stable_graph_local"])
                         if row.get("stable_graph_local") is not None
-                        else None,
-                        reverify_status=str(row.get("reverify_status", "not_triggered")),
-                        pair_stability=tuple(
-                            (dict(value) for value in row.get("pair_stability", ()))
-                        ),
-                        metadata=dict(row.get("metadata", {})),
-                    )
-                    for row in frontier_rows
+                        else None
+                    ),
+                    reverify_status=str(row.get("reverify_status", "not_triggered")),
+                    pair_stability=tuple(dict(value) for value in row.get("pair_stability", ())),
+                    metadata=dict(row.get("metadata", {})),
                 )
+                for row in frontier_rows
             )
             if subset_resume is not None:
                 if [s.rollout_id for s in solver_batch.samples] != subset_resume[
@@ -2498,13 +2604,11 @@ class SelfPlayRolloutRunner:
                 or {sample.task_id for sample in proposer_batch.samples}
                 != (set(subset_resume["proposer_task_ids"]) if subset_resume else expected_task_ids)
                 or {sample.rollout_id for sample in solver_batch.samples} != expected_rollout_ids
-                or (
-                    {score.task_id for score in frontier_scores}
-                    != (
-                        {g["task_id"] for g in subset_resume["groups"]}
-                        if subset_resume and subset_resume["schema_version"] == INDEPENDENT_SCHEMA
-                        else expected_task_ids
-                    )
+                or {score.task_id for score in frontier_scores}
+                != (
+                    {g["task_id"] for g in subset_resume["groups"]}
+                    if subset_resume and subset_resume["schema_version"] == INDEPENDENT_SCHEMA
+                    else expected_task_ids
                 )
             ):
                 raise CollectionInfrastructureIncidentError(
@@ -2551,19 +2655,22 @@ class SelfPlayRolloutRunner:
                 snapshots=json.loads(
                     (self.output_dir / "snapshots.json").read_text(encoding="utf-8")
                 ),
-                proposal_extraction=json.loads(extraction_path.read_text(encoding="utf-8"))
-                if extraction_path.is_file()
-                else {},
+                proposal_extraction=(
+                    json.loads(extraction_path.read_text(encoding="utf-8"))
+                    if extraction_path.is_file()
+                    else {}
+                ),
             )
         route_health_store = (
             RouteHealthStore(
-                self.config.route_health_path, cooldown_s=self.config.route_health_cooldown_s
+                self.config.route_health_path,
+                cooldown_s=self.config.route_health_cooldown_s,
             )
             if self.config.route_health_path is not None
             else None
         )
         if route_health_store is not None and self.config.worker_runtime_routes:
-            (available_routes, blocked_routes) = route_health_store.available_routes(
+            available_routes, blocked_routes = route_health_store.available_routes(
                 self.config.worker_runtime_routes
             )
             if blocked_routes:
@@ -2578,19 +2685,21 @@ class SelfPlayRolloutRunner:
                 )
             if not available_routes:
                 blocked_summary = ", ".join(
-                    (
-                        f"{route}({state['block_reason']})"
-                        for (route, state) in sorted(blocked_routes.items())
-                    )
+                    f"{route}({state['block_reason']})"
+                    for route, state in sorted(blocked_routes.items())
                 )
                 raise PersistentRouteCircuitOpenError(
                     "all configured Worker routes are blocked by persisted health state: "
                     + blocked_summary
                 )
-        (proposals, rollouts) = self._load() if resume else ([], [])
+        proposals, rollouts = self._load() if resume else ([], [])
         if resume:
             rehydrate = getattr(self.proposer, "rehydrate_resumed_proposal", None)
             if callable(rehydrate):
+                # Public task records intentionally omit verifier-only payloads
+                # (notably HealthBench rubrics).  A fixed-pool proposer may
+                # safely restore those values from its in-memory source task;
+                # never write the restored proposal back to the public JSONL.
                 proposals = [rehydrate(proposal) for proposal in proposals]
         terminal_failed_ids = (
             {
@@ -2598,11 +2707,16 @@ class SelfPlayRolloutRunner:
                 for row in _read_jsonl(self.output_dir / "rollout_errors.jsonl")
                 if row.get("error_type") != "CancelledError"
             }
-            if resume
-            and self.config.rollout_group_policy == "eligible_subset"
-            and (not self.config.allow_exact_rollout_resume)
+            if (
+                resume
+                and self.config.rollout_group_policy == "eligible_subset"
+                and not self.config.allow_exact_rollout_resume
+            )
             else set()
         )
+        # Explicit exact-resume also reopens failed slots in eligible-subset
+        # groups, which may never have produced a quarantine record.
+        # Existing successful rollout IDs remain excluded by rollouts_by_id.
         attempts = _read_jsonl(self.output_dir / "proposal_attempts.jsonl") if resume else []
         observations = (
             _read_jsonl(self.output_dir / "curriculum_observations.jsonl") if resume else []
@@ -2618,15 +2732,13 @@ class SelfPlayRolloutRunner:
                 quarantine_status_by_task[task_id] = item
         quarantined_task_ids = {
             task_id
-            for (task_id, item) in quarantine_status_by_task.items()
+            for task_id, item in quarantine_status_by_task.items()
             if item.get("status") == "quarantined"
-            and (
-                not (
-                    self.config.rollout_group_policy == "eligible_subset"
-                    and item.get("reason")
-                    in {"non_trainable_rollout_group", "incomplete_rollout_group"}
-                    and (not self.config.allow_exact_rollout_resume)
-                )
+            and not (
+                self.config.rollout_group_policy == "eligible_subset"
+                and item.get("reason")
+                in {"non_trainable_rollout_group", "incomplete_rollout_group"}
+                and not self.config.allow_exact_rollout_resume
             )
         }
         inherited_collapse_streak = (
@@ -2634,14 +2746,15 @@ class SelfPlayRolloutRunner:
         )
         if inherited_collapse_streak >= self.config.collapse_patience_windows:
             raise RuntimeError(
-                f"structural collapse stop inherited from the previous cycle for {inherited_collapse_streak} consecutive windows"
+                "structural collapse stop inherited from the previous cycle for "
+                f"{inherited_collapse_streak} consecutive windows"
             )
         last_collapse = collapse_windows[-1] if collapse_windows else None
         last_reasons = set(last_collapse.get("alert_reasons", ())) if last_collapse else set()
         legacy_only_stop_disabled = bool(
             last_collapse
             and self.config.structural_exploration_policy == "off"
-            and (last_reasons == {"legacy_low_diversity"})
+            and last_reasons == {"legacy_low_diversity"}
         )
         if legacy_only_stop_disabled:
             _append_jsonl(
@@ -2659,21 +2772,24 @@ class SelfPlayRolloutRunner:
             )
         if (
             last_collapse
-            and (not legacy_only_stop_disabled)
-            and (
-                int(last_collapse.get("consecutive_alert_windows", 0))
-                >= self.config.collapse_patience_windows
-            )
+            and not legacy_only_stop_disabled
+            and int(last_collapse.get("consecutive_alert_windows", 0))
+            >= self.config.collapse_patience_windows
         ):
             raise RuntimeError(
-                f"structural collapse stop remains active on resume: single-Agent rate {float(last_collapse.get('single_agent_rate', 0.0)):.3f}, within-task unique graph ratio {float(last_collapse.get('within_task_unique_graph_ratio', 0.0)):.3f} for {int(last_collapse.get('consecutive_alert_windows', 0))} consecutive windows"
+                "structural collapse stop remains active on resume: single-Agent rate "
+                f"{float(last_collapse.get('single_agent_rate', 0.0)):.3f}, "
+                "within-task unique graph ratio "
+                f"{float(last_collapse.get('within_task_unique_graph_ratio', 0.0)):.3f} "
+                f"for {int(last_collapse.get('consecutive_alert_windows', 0))} "
+                "consecutive windows"
             )
         observed_task_ids = {str(item["task_id"]) for item in observations}
         state_path = self.output_dir / "curriculum_state.json"
         load_state = getattr(self.proposer, "load_state_dict", None)
         if resume and state_path.exists() and callable(load_state):
             load_state(json.loads(state_path.read_text(encoding="utf-8")))
-        if resume and proposals and (not attempts):
+        if resume and proposals and not attempts:
             attempts = [
                 {
                     "task_id": proposal.task.task_id,
@@ -2690,16 +2806,18 @@ class SelfPlayRolloutRunner:
                 index,
                 seed_text,
                 proposer_index,
-                f"task-{index}"
-                if self.config.proposals_per_seed == 1
-                else f"task-{index}-p{proposer_index}",
+                (
+                    f"task-{index}"
+                    if self.config.proposals_per_seed == 1
+                    else f"task-{index}-p{proposer_index}"
+                ),
             )
-            for (index, seed_text) in enumerate(seed_values, start=1)
+            for index, seed_text in enumerate(seed_values, start=1)
             for proposer_index in range(self.config.proposals_per_seed)
         ]
         if resume and self.config.allow_exact_rollout_resume:
             recoverable_reasons = {"backend_circuit_open", "incomplete_rollout_group"}
-            planned_task_ids = {task_id for (*_prefix, task_id) in task_specs}
+            planned_task_ids = {task_id for *_prefix, task_id in task_specs}
             for task_id in sorted(quarantined_task_ids & planned_task_ids):
                 quarantine = quarantine_status_by_task[task_id]
                 expected_ids = {
@@ -2717,19 +2835,27 @@ class SelfPlayRolloutRunner:
                 reopen_event = {
                     "task_id": task_id,
                     "status": "reopened_for_exact_resume",
-                    "reason": "evaluation_missing_slot_recovery"
-                    if evaluation_missing_slot_reopen
-                    else "transient_backend_recovery",
+                    "reason": (
+                        "evaluation_missing_slot_recovery"
+                        if evaluation_missing_slot_reopen
+                        else "transient_backend_recovery"
+                    ),
                     "missing_rollout_ids": missing_ids,
                     "prior_quarantine_reason": quarantine.get("reason"),
                 }
                 quarantined_groups.append(reopen_event)
                 quarantine_status_by_task[task_id] = reopen_event
                 quarantined_task_ids.remove(task_id)
+                # The explicit repair gate authorizes these exact missing IDs
+                # to run again. A prior typed backend error must not silently
+                # suppress them after their group has been reopened.
                 terminal_failed_ids.difference_update(missing_ids)
-                _append_jsonl(self.output_dir / "quarantined_groups.jsonl", reopen_event)
-        if resume and (not self.config.allow_exact_rollout_resume):
-            planned_task_ids = {task_id for (*_prefix, task_id) in task_specs}
+                _append_jsonl(
+                    self.output_dir / "quarantined_groups.jsonl",
+                    reopen_event,
+                )
+        if resume and not self.config.allow_exact_rollout_resume:
+            planned_task_ids = {task_id for *_prefix, task_id in task_specs}
             expected_persisted_ids = {
                 _rollout_id(task_id, rollout_index)
                 for task_id in existing_proposals
@@ -2741,10 +2867,13 @@ class SelfPlayRolloutRunner:
             )
             if missing_persisted_ids:
                 raise RuntimeError(
-                    "exact rollout resume is disabled; preserved incomplete collection without recollecting missing rollout ids: "
-                    + ", ".join(missing_persisted_ids)
+                    "exact rollout resume is disabled; preserved incomplete collection "
+                    "without recollecting missing rollout ids: " + ", ".join(missing_persisted_ids)
                 )
         failed_task_ids: list[str] = []
+        # A single cycle-wide queue receives every optional relation probe as
+        # soon as its primary row is durable.  It is deliberately independent
+        # of the primary rollout pool and its deadlines.
         dynamic_counterfactual_executor = (
             ThreadPoolExecutor(
                 max_workers=self.config.counterfactual_workers,
@@ -2760,7 +2889,9 @@ class SelfPlayRolloutRunner:
         counterfactual_credit_count = 0
 
         def submit_dynamic_counterfactual(
-            primary: _PrimaryCollection, *, window_index: int
+            primary: _PrimaryCollection,
+            *,
+            window_index: int,
         ) -> None:
             assert dynamic_counterfactual_executor is not None
             rollout_id = primary.rollout.trajectory.rollout_id
@@ -2792,10 +2923,13 @@ class SelfPlayRolloutRunner:
                     with request_priority("counterfactual"):
                         outcome = self._collect_counterfactual(primary)
                     result = (primary, outcome, None)
-                except Exception as exc:
+                except Exception as exc:  # optional credit never invalidates a primary
                     result = (primary, None, exc)
                 with counterfactual_commit_lock:
                     if counterfactual_cancellation.is_set():
+                        # The batch boundary owns the cancellation record.  A
+                        # result finishing afterwards is discarded and can
+                        # never race into the frozen training credit file.
                         counterfactual_status[rollout_id] = "discarded_after_update_boundary"
                         primary.close()
                         return
@@ -2821,7 +2955,11 @@ class SelfPlayRolloutRunner:
             future = dynamic_counterfactual_executor.submit(collect_and_persist)
             dynamic_counterfactual_futures.append((future, primary))
 
-        def finish_dynamic_counterfactuals(*, reason: str, wait_for_completion: bool) -> None:
+        def finish_dynamic_counterfactuals(
+            *,
+            reason: str,
+            wait_for_completion: bool,
+        ) -> None:
             nonlocal dynamic_counterfactual_executor
             if dynamic_counterfactual_executor is None:
                 return
@@ -2829,12 +2967,20 @@ class SelfPlayRolloutRunner:
             with counterfactual_commit_lock:
                 status_at_boundary = dict(counterfactual_status)
             unfinished_at_boundary = sum(
-                (status not in {"completed", "failed"} for status in status_at_boundary.values())
+                status not in {"completed", "failed"} for status in status_at_boundary.values()
             )
             wait_started = time.monotonic()
             if wait_for_completion:
-                dynamic_counterfactual_executor.shutdown(wait=True, cancel_futures=False)
+                # Every probe has its own bounded pair deadline.  At the normal
+                # training boundary, let those already-submitted probes finish
+                # and persist their credit before freezing the batch.
+                dynamic_counterfactual_executor.shutdown(
+                    wait=True,
+                    cancel_futures=False,
+                )
             else:
+                # Abnormal collection termination must not leave optional work
+                # attached to a failed cycle.
                 with counterfactual_commit_lock:
                     counterfactual_cancellation.set()
                     for future, primary in dynamic_counterfactual_futures:
@@ -2858,14 +3004,16 @@ class SelfPlayRolloutRunner:
                         }
                         cancelled.append(event)
                         _append_jsonl(
-                            self.output_dir / "relation_counterfactual_cancellations.jsonl", event
+                            self.output_dir / "relation_counterfactual_cancellations.jsonl",
+                            event,
                         )
-                dynamic_counterfactual_executor.shutdown(wait=False, cancel_futures=True)
-            with counterfactual_commit_lock:
-                completed = sum(
-                    (status == "completed" for status in counterfactual_status.values())
+                dynamic_counterfactual_executor.shutdown(
+                    wait=False,
+                    cancel_futures=True,
                 )
-                failed = sum((status == "failed" for status in counterfactual_status.values()))
+            with counterfactual_commit_lock:
+                completed = sum(status == "completed" for status in counterfactual_status.values())
+                failed = sum(status == "failed" for status in counterfactual_status.values())
             _write_json(
                 self.output_dir / "counterfactual_update_boundary.json",
                 {
@@ -2873,7 +3021,7 @@ class SelfPlayRolloutRunner:
                     "reason": reason,
                     "submitted": len(dynamic_counterfactual_futures),
                     "completed_before_boundary": sum(
-                        (status == "completed" for status in status_at_boundary.values())
+                        status == "completed" for status in status_at_boundary.values()
                     ),
                     "unfinished_at_boundary": unfinished_at_boundary,
                     "completed_after_wait": completed,
@@ -2882,9 +3030,11 @@ class SelfPlayRolloutRunner:
                     "cancelled_or_discarded": len(cancelled),
                     "admitted_credit_count": counterfactual_credit_count,
                     "waited_for_incomplete": bool(wait_for_completion and unfinished_at_boundary),
-                    "completion_policy": "wait_for_bounded_completion"
-                    if wait_for_completion
-                    else "cancel_after_collection_abort",
+                    "completion_policy": (
+                        "wait_for_bounded_completion"
+                        if wait_for_completion
+                        else "cancel_after_collection_abort"
+                    ),
                     "boundary_wait_s": time.monotonic() - wait_started,
                     "primary_budget_shared": False,
                     "pair_wall_budget_s": self.config.counterfactual_pair_wall_time_s,
@@ -2912,12 +3062,16 @@ class SelfPlayRolloutRunner:
         if self.config.task_execution_window is not None:
             physical_window_size = self.config.task_execution_window
         elif self.config.task_scheduling_policy == "frozen_manifest_dynamic":
+            # Preserve the dynamic scheduler's ability to refill active groups
+            # when no MACE publication barrier was requested.  A configured
+            # MACE window remains an explicit physical barrier above.
             physical_window_size = max(1, len(task_specs))
         else:
             physical_window_size = self.config.task_window
         if self.config.pipeline_frontier_by_dataset and physical_window_size < len(task_specs):
             raise ValueError(
-                "dataset-early Frontier requires one physical manifest window so dataset completion is known before submission"
+                "dataset-early Frontier requires one physical manifest window so dataset "
+                "completion is known before submission"
             )
         frontier_pipeline_started = time.monotonic()
         frontier_pipeline_executor = (
@@ -2987,13 +3141,16 @@ class SelfPlayRolloutRunner:
                     dataset_rollouts = [
                         rollouts_by_id[rollout_id] for rollout_id in sorted(expected_ids)
                     ]
-                    if not all((_rollout_is_training_eligible(item) for item in dataset_rollouts)):
+                    if not all(_rollout_is_training_eligible(item) for item in dataset_rollouts):
                         continue
                 dataset_dir = self.output_dir / "frontier_by_dataset" / (dataset or "unknown")
                 dataset_dir.mkdir(parents=True, exist_ok=True)
                 dataset_runner = copy.copy(self)
                 dataset_runner.output_dir = dataset_dir
-                dataset_runner.config = replace(self.config, pipeline_frontier_by_dataset=False)
+                dataset_runner.config = replace(
+                    self.config,
+                    pipeline_frontier_by_dataset=False,
+                )
                 dataset_runner._frontier_graph_semaphore = frontier_graph_semaphore
 
                 def collect(runner, selected_proposals, selected_rollouts):
@@ -3003,7 +3160,10 @@ class SelfPlayRolloutRunner:
                         )
 
                 frontier_dataset_futures[dataset] = frontier_pipeline_executor.submit(
-                    collect, dataset_runner, tuple(dataset_proposals), tuple(dataset_rollouts)
+                    collect,
+                    dataset_runner,
+                    tuple(dataset_proposals),
+                    tuple(dataset_rollouts),
                 )
                 _append_jsonl(
                     self.output_dir / "pipeline_events.jsonl",
@@ -3073,20 +3233,25 @@ class SelfPlayRolloutRunner:
                     if callable(reserve):
                         reserve(proposal)
                 window_entries.append((task_id, proposal))
+
             state_dict = getattr(self.proposer, "state_dict", None)
             if callable(state_dict):
                 _write_json(state_path, state_dict())
+
             expected_rollout_ids = {
                 _rollout_id(task_id, rollout_index)
-                for (task_id, _proposal) in window_entries
+                for task_id, _proposal in window_entries
                 for rollout_index in range(self.config.rollouts_per_task)
             }
+            # Freeze the complete physical-window order before filtering
+            # durable rows.  Exact resume therefore retains the original rank
+            # of every remaining job instead of recomputing a new queue.
             planned_jobs = [
                 (proposal, rollout_index)
                 for rollout_index in range(self.config.rollouts_per_task)
-                for (_task_id, proposal) in window_entries
+                for _task_id, proposal in window_entries
             ]
-            (ordered_jobs, frozen_job_schedule) = _freeze_primary_job_schedule(
+            ordered_jobs, frozen_job_schedule = _freeze_primary_job_schedule(
                 self.output_dir,
                 window_start=window_start,
                 jobs=planned_jobs,
@@ -3119,7 +3284,10 @@ class SelfPlayRolloutRunner:
                 )
 
             def scheduler_event(
-                event: str, *, scheduler_path: Path = scheduler_path, **payload: Any
+                event: str,
+                *,
+                scheduler_path: Path = scheduler_path,
+                **payload: Any,
             ) -> None:
                 _append_jsonl(
                     scheduler_path,
@@ -3154,6 +3322,7 @@ class SelfPlayRolloutRunner:
                         "jobs": len(jobs),
                     },
                 )
+
             collection_cancelled = threading.Event()
 
             def collect_primary_steps(
@@ -3165,7 +3334,7 @@ class SelfPlayRolloutRunner:
                 scheduler_finished_by_group=scheduler_finished_by_group,
                 scheduler_expected_by_group=scheduler_expected_by_group,
             ):
-                (proposal, rollout_index) = job
+                proposal, rollout_index = job
                 attempt_events: list[dict[str, Any]] = []
                 dataset = canonical_dataset_name(proposal.task.metadata.get("dataset", ""))
                 task_id = str(proposal.task.task_id)
@@ -3218,6 +3387,9 @@ class SelfPlayRolloutRunner:
                     else self.config.non_swe_recovery_attempts
                 )
                 if not self.config.allow_legacy_whole_rollout_recovery:
+                    # A restart of stateless generation or an expired slot changes
+                    # no failed condition. Local formatter/Judge retries already
+                    # happen inside the original attempt.
                     maximum_attempt = 0
                 slot_timeout_s = self._slot_wall_time_s(proposal)
                 attempt_timeout_s = self._deadline_profile(proposal)[0]
@@ -3239,7 +3411,8 @@ class SelfPlayRolloutRunner:
                     slot_remaining_s = slot_timeout_s - slot_elapsed_s
                     if slot_remaining_s <= 0:
                         exc = WorkerWallClockLimitExceeded(
-                            f"same-slot recovery exhausted its shared wall-clock budget ({slot_elapsed_s:.1f}/{slot_timeout_s:.1f}s)",
+                            "same-slot recovery exhausted its shared wall-clock budget "
+                            f"({slot_elapsed_s:.1f}/{slot_timeout_s:.1f}s)",
                             reason="hard_deadline",
                             stage="same_slot_recovery_admission",
                             elapsed_s=slot_elapsed_s,
@@ -3270,9 +3443,12 @@ class SelfPlayRolloutRunner:
                             status="slot_wall_clock_exhausted",
                         )
                         finish_scheduler_job("slot_wall_clock_exhausted")
-                        return (job, None, exc, attempt_events)
+                        return job, None, exc, attempt_events
                     attempt_started = time.monotonic()
-                    effective_attempt_timeout_s = min(attempt_timeout_s, slot_remaining_s)
+                    effective_attempt_timeout_s = min(
+                        attempt_timeout_s,
+                        slot_remaining_s,
+                    )
                     scheduler_event(
                         "attempt_started",
                         task_id=task_id,
@@ -3293,21 +3469,22 @@ class SelfPlayRolloutRunner:
                             total_timeout_s_override=effective_attempt_timeout_s,
                         )
                     except Exception as exc:
-                        decision = _recovery_decision(dataset, error=exc)
+                        decision = _recovery_decision(
+                            dataset,
+                            error=exc,
+                        )
                         direct_backend_failure = classify_backend_failure(exc)
                         retryable_backend = (
-                            isinstance(exc, WorkerBackendUnavailableError)
-                            and exc.retryable
-                            or (
-                                direct_backend_failure.backend_failure
-                                and direct_backend_failure.retryable
-                            )
+                            isinstance(exc, WorkerBackendUnavailableError) and exc.retryable
+                        ) or (
+                            direct_backend_failure.backend_failure
+                            and direct_backend_failure.retryable
                         )
                         backend_retry_available = (
                             retryable_backend
                             and self.config.allow_legacy_whole_rollout_recovery
-                            and (backend_retries_used < self.config.backend_failure_retry_attempts)
-                            and (not collection_cancelled.is_set())
+                            and backend_retries_used < self.config.backend_failure_retry_attempts
+                            and not collection_cancelled.is_set()
                         )
                         backend_failure_skipped = (
                             (
@@ -3315,7 +3492,7 @@ class SelfPlayRolloutRunner:
                                 or direct_backend_failure.backend_failure
                             )
                             and self.config.backend_failure_retry_attempts > 0
-                            and (not backend_retry_available)
+                            and not backend_retry_available
                         )
                         event = self._rollout_attempt_event(
                             proposal,
@@ -3328,16 +3505,24 @@ class SelfPlayRolloutRunner:
                             {
                                 "recovery_scope": decision.scope.value,
                                 "recovery_reason": decision.reason,
-                                "effective_attempt_timeout_s": effective_attempt_timeout_s,
+                                "effective_attempt_timeout_s": (effective_attempt_timeout_s),
                                 "slot_timeout_s": slot_timeout_s,
-                                "infrastructure_incident": decision.infrastructure_incident
-                                and (not backend_retry_available)
-                                and (not backend_failure_skipped),
+                                # Positive diagnostic policy preserves failures without
+                                # replay; full retries require the legacy switch.
+                                "infrastructure_incident": (
+                                    decision.infrastructure_incident
+                                    and not backend_retry_available
+                                    and not backend_failure_skipped
+                                ),
                                 "backend_retries_used": backend_retries_used,
-                                "backend_retry_limit": self.config.backend_failure_retry_attempts
-                                if self.config.allow_legacy_whole_rollout_recovery
-                                else 0,
-                                "backend_rollout_replay_disabled": not self.config.allow_legacy_whole_rollout_recovery,
+                                "backend_retry_limit": (
+                                    self.config.backend_failure_retry_attempts
+                                    if self.config.allow_legacy_whole_rollout_recovery
+                                    else 0
+                                ),
+                                "backend_rollout_replay_disabled": (
+                                    not self.config.allow_legacy_whole_rollout_recovery
+                                ),
                             }
                         )
                         attempt_events.append(event)
@@ -3425,11 +3610,11 @@ class SelfPlayRolloutRunner:
                             )
                         if decision.infrastructure_incident:
                             finish_scheduler_job("infrastructure_incident")
-                            return (job, None, exc, attempt_events)
+                            return job, None, exc, attempt_events
                         if (
                             decision.scope is not RecoveryScope.NONE
                             and semantic_recoveries_used < maximum_attempt
-                            and (not collection_cancelled.is_set())
+                            and not collection_cancelled.is_set()
                         ):
                             semantic_recoveries_used += 1
                             replacement_attempt += 1
@@ -3441,26 +3626,25 @@ class SelfPlayRolloutRunner:
                                 job,
                                 None,
                                 UncertainAttributionExhaustedError(
-                                    "attribution-uncertain failure exhausted its one same-slot recovery; reason="
-                                    + decision.reason
+                                    "attribution-uncertain failure exhausted its one "
+                                    "same-slot recovery; reason=" + decision.reason
                                 ),
                                 attempt_events,
                             )
-                        return (job, None, exc, attempt_events)
+                        return job, None, exc, attempt_events
                     bounded_terminal = outcome.rollout.trajectory.metadata.get(
                         "bounded_director_terminal"
-                    ) in {"director_no_legal_continuation", "director_no_progress_exhausted"} and (
-                        not any(
-                            (
-                                outcome.rollout.trajectory.metadata.get(key)
-                                for key in (
-                                    "worker_backend_failure",
-                                    "infrastructure_failure",
-                                    "swe_infrastructure_failure",
-                                    "swe_synthetic_evaluation",
-                                    "swe_non_train_split",
-                                )
-                            )
+                    ) in {
+                        "director_no_legal_continuation",
+                        "director_no_progress_exhausted",
+                    } and not any(
+                        outcome.rollout.trajectory.metadata.get(key)
+                        for key in (
+                            "worker_backend_failure",
+                            "infrastructure_failure",
+                            "swe_infrastructure_failure",
+                            "swe_synthetic_evaluation",
+                            "swe_non_train_split",
                         )
                     )
                     if bounded_terminal and self.config.uncertain_attribution_zero_reward:
@@ -3494,7 +3678,7 @@ class SelfPlayRolloutRunner:
                                     "recovery_scope": "accepted_primary",
                                     "recovery_reason": admission_reason,
                                     "training_eligible": training_eligible,
-                                    "effective_attempt_timeout_s": effective_attempt_timeout_s,
+                                    "effective_attempt_timeout_s": (effective_attempt_timeout_s),
                                     "slot_timeout_s": slot_timeout_s,
                                 }
                             )
@@ -3511,12 +3695,18 @@ class SelfPlayRolloutRunner:
                             training_eligible=training_eligible,
                             recovery_reason=admission_reason,
                         )
+                        _spool_completed_primary(
+                            self.output_dir, outcome.rollout.trajectory.to_dict()
+                        )
                         finish_scheduler_job("accepted_primary")
-                        return (job, outcome, None, attempt_events)
+                        return job, outcome, None, attempt_events
                     last_exclusions = list(
                         outcome.rollout.trajectory.metadata.get("training_exclusion_reasons", ())
                     )
-                    decision = _recovery_decision(dataset, rollout=outcome.rollout)
+                    decision = _recovery_decision(
+                        dataset,
+                        rollout=outcome.rollout,
+                    )
                     event = self._rollout_attempt_event(
                         proposal,
                         rollout_index,
@@ -3530,7 +3720,7 @@ class SelfPlayRolloutRunner:
                             "recovery_reason": decision.reason,
                             "effective_attempt_timeout_s": effective_attempt_timeout_s,
                             "slot_timeout_s": slot_timeout_s,
-                            "infrastructure_incident": decision.infrastructure_incident,
+                            "infrastructure_incident": (decision.infrastructure_incident),
                         }
                     )
                     attempt_events.append(event)
@@ -3548,7 +3738,7 @@ class SelfPlayRolloutRunner:
                     )
                     if (
                         self.config.uncertain_attribution_zero_reward
-                        and (not decision.infrastructure_incident)
+                        and not decision.infrastructure_incident
                         and (
                             decision.scope is not RecoveryScope.NONE
                             or "outcome_attribution_unresolved" in last_exclusions
@@ -3563,13 +3753,15 @@ class SelfPlayRolloutRunner:
                         if scored.trajectory.metadata.get("reward_known") is True:
                             outcome.rollout = scored
                             finish_scheduler_job("scored_terminal_failure")
-                            return (job, outcome, None, attempt_events)
+                            return job, outcome, None, attempt_events
                     if decision.reason == "isolated_swe_verifier_transport_failure":
+                        # Preserve the failed verification and policy record for diagnosis;
+                        # it remains ineligible for Solver and Frontier evidence.
                         outcome.rollout.trajectory.metadata[
                             "isolated_verifier_transport_failure"
                         ] = True
                         finish_scheduler_job("isolated_verifier_transport_failure")
-                        return (job, outcome, None, attempt_events)
+                        return job, outcome, None, attempt_events
                     outcome.close()
                     if decision.infrastructure_incident:
                         finish_scheduler_job("infrastructure_incident")
@@ -3577,8 +3769,8 @@ class SelfPlayRolloutRunner:
                             job,
                             None,
                             CollectionInfrastructureIncidentError(
-                                "runtime reported a backend, tool, or environment incident; reason="
-                                + decision.reason
+                                "runtime reported a backend, tool, or environment "
+                                "incident; reason=" + decision.reason
                             ),
                             attempt_events,
                         )
@@ -3597,8 +3789,8 @@ class SelfPlayRolloutRunner:
                         job,
                         None,
                         UncertainAttributionExhaustedError(
-                            "attribution-uncertain terminal result exhausted its one same-slot recovery; reason="
-                            + decision.reason
+                            "attribution-uncertain terminal result exhausted its one "
+                            "same-slot recovery; reason=" + decision.reason
                         ),
                         attempt_events,
                     )
@@ -3606,7 +3798,8 @@ class SelfPlayRolloutRunner:
                     job,
                     None,
                     NonTrainablePrimaryExhaustedError(
-                        f"{dataset or 'unknown'} same-slot recovery exhausted without a trainable terminal result; exclusions="
+                        f"{dataset or 'unknown'} same-slot recovery exhausted without "
+                        "a trainable terminal result; exclusions="
                         + ",".join(last_exclusions or ["unknown"])
                     ),
                     attempt_events,
@@ -3617,6 +3810,7 @@ class SelfPlayRolloutRunner:
                 collect_primary_steps=collect_primary_steps,
                 collection_cancelled=collection_cancelled,
             ):
+                # Compatibility for custom pools without resumable scheduling.
                 steps = collect_primary_steps(job)
                 while True:
                     try:
@@ -3633,14 +3827,17 @@ class SelfPlayRolloutRunner:
                     collect_primary_steps,
                     jobs,
                     group_key=lambda job: str(job[0].task.task_id),
-                    max_active_groups=self.config.max_active_task_groups
-                    if self.config.task_scheduling_policy == "frozen_manifest_dynamic"
-                    else max(1, len(jobs)),
+                    max_active_groups=(
+                        self.config.max_active_task_groups
+                        if self.config.task_scheduling_policy == "frozen_manifest_dynamic"
+                        else max(1, len(jobs))
+                    ),
                 )
             elif self.config.task_scheduling_policy == "frozen_manifest_dynamic":
                 if not callable(grouped_iter_map):
                     raise TypeError(
-                        "frozen_manifest_dynamic scheduling requires a rollout pool with iter_map_grouped"
+                        "frozen_manifest_dynamic scheduling requires a rollout pool "
+                        "with iter_map_grouped"
                     )
                 results = grouped_iter_map(
                     collect_primary_outcome,
@@ -3666,13 +3863,13 @@ class SelfPlayRolloutRunner:
             circuit_open = False
             collection_abort: dict[str, Any] | None = None
             for job, outcome, error, attempt_events in results:
-                (proposal, rollout_index) = job
+                proposal, rollout_index = job
                 rollout_id = _rollout_id(proposal.task.task_id, rollout_index)
                 completed_job_ids.add(rollout_id)
                 for attempt_event in attempt_events:
                     persisted_attempt = {
                         key: value
-                        for (key, value) in attempt_event.items()
+                        for key, value in attempt_event.items()
                         if key not in {"partial_state", "trajectory"}
                     }
                     if bool(persisted_attempt.get("infrastructure_incident")):
@@ -3683,7 +3880,7 @@ class SelfPlayRolloutRunner:
                                 "event": "infrastructure_incident",
                                 "counted_as_recovery_attempt": False,
                                 "requires_cycle_recollection": True,
-                                "checkpoint_resume_policy": "last_committed_checkpoint_only",
+                                "checkpoint_resume_policy": ("last_committed_checkpoint_only"),
                             },
                         )
                         continue
@@ -3734,7 +3931,8 @@ class SelfPlayRolloutRunner:
                     if attempt_events:
                         error_event["attempt_count"] = len(attempt_events)
                     if isinstance(
-                        error, (WorkerBackendUnavailableError, BackendRetryExhaustedError)
+                        error,
+                        (WorkerBackendUnavailableError, BackendRetryExhaustedError),
                     ):
                         error_event["backend_failure"] = dict(error.failure)
                         for request_event in error.request_events:
@@ -3759,10 +3957,12 @@ class SelfPlayRolloutRunner:
                                 },
                             )
                         backend_failure_total += 1
+                        # Retryability controls bounded request recovery, not whether
+                        # a capacity/queue failure should cancel independent jobs.
                         isolate_transient_failure = (
                             isinstance(error, BackendRetryExhaustedError)
                             and error.retryable
-                            and (not error.disable_route)
+                            and not error.disable_route
                         )
                         isolate_judge_failure = canonical_dataset_name(
                             proposal.task.metadata.get("dataset", "")
@@ -3789,7 +3989,7 @@ class SelfPlayRolloutRunner:
                             backend_failure_by_route[route] = (
                                 backend_failure_by_route.get(route, 0) + 1
                             )
-                            (counts_for_route, disable_route) = error.route_policy(route)
+                            counts_for_route, disable_route = error.route_policy(route)
                             if isolate_transient_failure or isolate_judge_failure:
                                 counts_for_route = False
                             if counts_for_route:
@@ -3804,10 +4004,12 @@ class SelfPlayRolloutRunner:
                             if route_health_store is not None and counts_for_route:
                                 state = route_health_store.record_failure(
                                     route,
-                                    failure_type=",".join(error.failure_types) or "unknown",
-                                    threshold=1
-                                    if disable_route
-                                    else self.config.backend_failure_route_threshold,
+                                    failure_type=(",".join(error.failure_types) or "unknown"),
+                                    threshold=(
+                                        1
+                                        if disable_route
+                                        else self.config.backend_failure_route_threshold
+                                    ),
                                     evidence={
                                         "output_dir": str(self.output_dir),
                                         "rollout_id": rollout_id,
@@ -3833,35 +4035,38 @@ class SelfPlayRolloutRunner:
                     _append_jsonl(self.output_dir / "rollout_errors.jsonl", error_event)
                     terminal_failed_ids.add(str(error_event["rollout_id"]))
                     attempt_marked_infrastructure = any(
-                        (bool(event.get("infrastructure_incident")) for event in attempt_events)
+                        bool(event.get("infrastructure_incident")) for event in attempt_events
                     )
                     backend_incident = (
                         isinstance(
-                            error, (WorkerBackendUnavailableError, BackendRetryExhaustedError)
+                            error,
+                            (WorkerBackendUnavailableError, BackendRetryExhaustedError),
                         )
                         or classification.backend_failure
                     )
                     is_infrastructure_incident = isinstance(
                         error,
-                        (CollectionInfrastructureIncidentError, SWEWorkspaceProvisioningError),
+                        (
+                            CollectionInfrastructureIncidentError,
+                            SWEWorkspaceProvisioningError,
+                        ),
                     ) or (
                         (
                             isinstance(error, WorkerBackendUnavailableError)
                             or attempt_marked_infrastructure
                         )
-                        and (
-                            not (
-                                self.config.continue_after_backend_failure_circuit
-                                and backend_incident
-                            )
+                        and not (
+                            self.config.continue_after_backend_failure_circuit and backend_incident
                         )
                     )
                     is_uncertain_exhausted = isinstance(error, UncertainAttributionExhaustedError)
                     if (
                         (is_uncertain_exhausted or isinstance(error, WorkerWallClockLimitExceeded))
-                        and (not is_infrastructure_incident)
+                        and not is_infrastructure_incident
                         and self.config.uncertain_attribution_zero_reward
                     ):
+                        # There is no complete policy trajectory for this exception.
+                        # Persist a score-only outcome; never fabricate PPO tokens.
                         _append_jsonl(
                             self.output_dir / "uncertain_failure_outcomes.jsonl",
                             {
@@ -3880,48 +4085,61 @@ class SelfPlayRolloutRunner:
                         )
                     if is_infrastructure_incident or (
                         is_uncertain_exhausted
-                        and (not self.config.continue_on_uncertain_attribution_exhausted)
-                        and (self.config.rollout_group_policy != "eligible_subset")
-                        and (not self.config.uncertain_attribution_zero_reward)
+                        and not self.config.continue_on_uncertain_attribution_exhausted
+                        and self.config.rollout_group_policy != "eligible_subset"
+                        and not self.config.uncertain_attribution_zero_reward
                     ):
                         collection_abort = {
                             **error_event,
                             "event": "collection_aborted",
-                            "incident_class": "infrastructure"
-                            if is_infrastructure_incident
-                            else "attribution_uncertain_recovery_exhausted",
+                            "incident_class": (
+                                "infrastructure"
+                                if is_infrastructure_incident
+                                else "attribution_uncertain_recovery_exhausted"
+                            ),
                             "counted_as_recovery_attempt": False,
                             "requires_cycle_recollection": True,
                             "checkpoint_resume_policy": "last_committed_checkpoint_only",
-                            "resume_instruction": "repair the incident, start a fresh collection epoch, and continue training from the most recent committed checkpoint; do not reuse this partial cycle",
+                            "resume_instruction": (
+                                "repair the incident, start a fresh collection epoch, "
+                                "and continue training from the most recent committed "
+                                "checkpoint; do not reuse this partial cycle"
+                            ),
                         }
                         collection_cancelled.set()
                         _append_jsonl(
-                            self.output_dir / "collection_incidents.jsonl", collection_abort
+                            self.output_dir / "collection_incidents.jsonl",
+                            collection_abort,
                         )
                         close_results = getattr(results, "close", None)
                         if callable(close_results):
                             close_results()
                         break
                     circuit_open = (
-                        isinstance(error, WorkerBackendUnavailableError)
-                        and persistent_circuit_open
+                        (
+                            isinstance(error, WorkerBackendUnavailableError)
+                            and persistent_circuit_open
+                        )
                         or (
                             circuit_relevant
                             and consecutive_backend_failures
                             >= self.config.backend_failure_total_threshold
                         )
                         or any(
-                            (
-                                count >= self.config.backend_failure_route_threshold
-                                for count in consecutive_backend_failures_by_route.values()
-                            )
+                            count >= self.config.backend_failure_route_threshold
+                            for count in consecutive_backend_failures_by_route.values()
                         )
                     )
                     if circuit_open:
                         if self.config.continue_after_backend_failure_circuit:
+                            # Keep the durable error for exact missing-slot repair,
+                            # but do not cancel unrelated evaluation jobs.
                             circuit_open = False
                             continue
+                        # Tell already-running jobs to stop at their next deadline
+                        # boundary and, critically, prevent a timed-out job from
+                        # launching a fresh replacement while iterator shutdown
+                        # waits for running futures.
                         collection_cancelled.set()
                         close_results = getattr(results, "close", None)
                         if callable(close_results):
@@ -3976,10 +4194,17 @@ class SelfPlayRolloutRunner:
                                     "rollout_id": rollout_id,
                                 },
                             )
+                    # The primary transaction commits before relation scheduling or
+                    # evaluation.  A process interruption during the optional probe
+                    # therefore leaves a complete, exact-resume-safe primary row.
                     _append_jsonl(
-                        self.output_dir / "solver_rollouts.jsonl", rollout.trajectory.to_dict()
+                        self.output_dir / "solver_rollouts.jsonl",
+                        rollout.trajectory.to_dict(),
                     )
-                    self._write_progress(proposals=proposals, rollouts_by_id=rollouts_by_id)
+                    self._write_progress(
+                        proposals=proposals,
+                        rollouts_by_id=rollouts_by_id,
+                    )
                     if not _rollout_is_training_eligible(rollout):
                         _append_jsonl(
                             self.output_dir / "rollout_training_exclusions.jsonl",
@@ -3993,6 +4218,10 @@ class SelfPlayRolloutRunner:
                     self._persist_counterfactual_metadata(primary.rollout)
                     if primary.decisions:
                         if dynamic_counterfactual_executor is not None:
+                            # The durable primary row is sufficient for optional
+                            # relation credit.  Start it immediately at low request
+                            # priority instead of retaining every live application
+                            # until the entire dynamic manifest has completed.
                             submit_dynamic_counterfactual(
                                 primary,
                                 window_index=window_start // max(1, self.config.task_window),
@@ -4008,27 +4237,35 @@ class SelfPlayRolloutRunner:
                                 {"rollout_id": rollout_id, **event},
                             )
                         primary.close()
+                    # The final rollout of a dataset unlocks its Frontier work
+                    # while unrelated primary jobs continue in the same manifest.
                     submit_ready_frontier_datasets()
                 except BaseException:
                     primary.close()
                     raise
+
             if collection_abort is not None:
                 if frontier_pipeline_executor is not None:
                     frontier_pipeline_executor.shutdown(wait=False, cancel_futures=True)
                 if self.primary_probability_observer is not None:
                     self.primary_probability_observer.abort()
                 finish_dynamic_counterfactuals(
-                    reason="collection_aborted", wait_for_completion=False
+                    reason="collection_aborted",
+                    wait_for_completion=False,
                 )
                 for primary in counterfactual_jobs:
                     primary.close()
                 counterfactual_jobs.clear()
-                _write_json(self.output_dir / "collection_abort.json", collection_abort)
+                _write_json(
+                    self.output_dir / "collection_abort.json",
+                    collection_abort,
+                )
                 raise CollectionInfrastructureIncidentError(
                     "collection aborted before any optimizer update; "
                     + str(collection_abort["incident_class"])
                     + "; resume from the last committed checkpoint after repair"
                 )
+
             if self.config.pipeline_counterfactuals:
                 _append_jsonl(
                     self.output_dir / "pipeline_events.jsonl",
@@ -4039,6 +4276,7 @@ class SelfPlayRolloutRunner:
                         "persisted_rollouts": len(expected_rollout_ids & rollouts_by_id.keys()),
                     },
                 )
+
             if circuit_open:
                 for proposal, rollout_index in jobs:
                     rollout_id = _rollout_id(proposal.task.task_id, rollout_index)
@@ -4049,7 +4287,10 @@ class SelfPlayRolloutRunner:
                         "rollout_id": rollout_id,
                         "rollout_index": rollout_index,
                         "error_type": "BackendCircuitOpenError",
-                        "message": "rollout not started or result discarded after the backend failure circuit opened",
+                        "message": (
+                            "rollout not started or result discarded after the backend "
+                            "failure circuit opened"
+                        ),
                     }
                     collection_errors.append(error_event)
                     _append_jsonl(self.output_dir / "rollout_errors.jsonl", error_event)
@@ -4067,9 +4308,13 @@ class SelfPlayRolloutRunner:
                         "total_threshold": self.config.backend_failure_total_threshold,
                     },
                 )
+                # Successful primaries already committed before the circuit
+                # opened remain exact-resume-safe, but optional relation probes
+                # must not issue more Worker calls during an outage window.
                 for primary in counterfactual_jobs:
                     primary.close()
                 counterfactual_jobs.clear()
+
             window_complete_entries: list[tuple[str, ProposedTask]] = []
             for task_id, proposal in window_entries:
                 expected_ids = {
@@ -4077,18 +4322,14 @@ class SelfPlayRolloutRunner:
                     for rollout_index in range(self.config.rollouts_per_task)
                 }
                 valid_ids = sorted(
-                    (
-                        rollout_id
-                        for rollout_id in expected_ids & rollouts_by_id.keys()
-                        if _rollout_is_training_eligible(rollouts_by_id[rollout_id])
-                    )
+                    rollout_id
+                    for rollout_id in expected_ids & rollouts_by_id.keys()
+                    if _rollout_is_training_eligible(rollouts_by_id[rollout_id])
                 )
                 non_trainable_ids = sorted(
-                    (
-                        rollout_id
-                        for rollout_id in expected_ids & rollouts_by_id.keys()
-                        if not _rollout_is_training_eligible(rollouts_by_id[rollout_id])
-                    )
+                    rollout_id
+                    for rollout_id in expected_ids & rollouts_by_id.keys()
+                    if not _rollout_is_training_eligible(rollouts_by_id[rollout_id])
                 )
                 if (
                     len(valid_ids) == self.config.rollouts_per_task
@@ -4097,6 +4338,7 @@ class SelfPlayRolloutRunner:
                     window_complete_entries.append((task_id, proposal))
                     continue
                 if self.config.rollout_group_policy == "eligible_subset":
+                    # Per-slot errors remain durable; missing siblings do not quarantine a task.
                     continue
                 if task_id in quarantined_task_ids:
                     continue
@@ -4106,11 +4348,15 @@ class SelfPlayRolloutRunner:
                 quarantine = {
                     "task_id": task_id,
                     "status": "quarantined",
-                    "reason": "backend_circuit_open"
-                    if circuit_open
-                    else "non_trainable_rollout_group"
-                    if non_trainable_ids
-                    else "incomplete_rollout_group",
+                    "reason": (
+                        "backend_circuit_open"
+                        if circuit_open
+                        else (
+                            "non_trainable_rollout_group"
+                            if non_trainable_ids
+                            else "incomplete_rollout_group"
+                        )
+                    ),
                     "expected_rollout_count": self.config.rollouts_per_task,
                     "valid_rollout_count": len(valid_ids),
                     "valid_rollout_ids": valid_ids,
@@ -4130,7 +4376,11 @@ class SelfPlayRolloutRunner:
                 }
                 quarantined_groups.append(quarantine)
                 quarantined_task_ids.add(task_id)
-                _append_jsonl(self.output_dir / "quarantined_groups.jsonl", quarantine)
+                _append_jsonl(
+                    self.output_dir / "quarantined_groups.jsonl",
+                    quarantine,
+                )
+
             current_window = _WindowPipelineState(
                 window_start=window_start,
                 window_entries=window_entries,
@@ -4139,7 +4389,12 @@ class SelfPlayRolloutRunner:
                 counterfactual_jobs=counterfactual_jobs,
                 circuit_open=circuit_open,
             )
+
             if self.config.task_scheduling_policy == "frozen_manifest_dynamic":
+                # Split this physical collection window into logical training
+                # windows without closing the cycle-wide counterfactual queue.
+                # The queue is frozen only once, at the actual update boundary
+                # after every physical collection window has finished.
                 complete_by_task = dict(current_window.window_complete_entries)
                 logical_windows: list[_WindowPipelineState] = []
                 for logical_offset in range(
@@ -4148,14 +4403,14 @@ class SelfPlayRolloutRunner:
                     logical_entries = current_window.window_entries[
                         logical_offset : logical_offset + self.config.task_window
                     ]
-                    logical_task_ids = {task_id for (task_id, _proposal) in logical_entries}
+                    logical_task_ids = {task_id for task_id, _proposal in logical_entries}
                     logical_windows.append(
                         _WindowPipelineState(
                             window_start=window_start + logical_offset,
                             window_entries=logical_entries,
                             window_complete_entries=[
                                 (task_id, complete_by_task[task_id])
-                                for (task_id, _proposal) in logical_entries
+                                for task_id, _proposal in logical_entries
                                 if task_id in complete_by_task
                             ],
                             collection_errors=[
@@ -4172,7 +4427,7 @@ class SelfPlayRolloutRunner:
                         )
                     )
                 for logical_index, logical_window in enumerate(logical_windows):
-                    if logical_window.counterfactual_jobs and (not circuit_open):
+                    if logical_window.counterfactual_jobs and not circuit_open:
                         if self.config.pipeline_counterfactuals:
                             _append_jsonl(
                                 self.output_dir / "pipeline_events.jsonl",
@@ -4230,7 +4485,10 @@ class SelfPlayRolloutRunner:
                 if circuit_open:
                     break
                 continue
+
             if self.config.pipeline_counterfactuals:
+                # Relation probes already run in the cycle-wide queue.  Logical
+                # curriculum windows can finalize without waiting for them.
                 collapse_error = self._finalize_window(
                     current_window,
                     proposals=proposals,
@@ -4268,6 +4526,7 @@ class SelfPlayRolloutRunner:
                     raise collapse_error
                 if circuit_open:
                     break
+
         if pending_window is not None:
             collapse_error = self._finalize_window(
                 pending_window,
@@ -4282,7 +4541,10 @@ class SelfPlayRolloutRunner:
             )
             deferred_collapse_error = deferred_collapse_error or collapse_error
             pending_window = None
-        finish_dynamic_counterfactuals(reason="training_batch_boundary", wait_for_completion=True)
+        finish_dynamic_counterfactuals(
+            reason="training_batch_boundary",
+            wait_for_completion=True,
+        )
         if deferred_collapse_error is not None:
             raise deferred_collapse_error
         if self.config.require_all_proposals and failed_task_ids:
@@ -4321,7 +4583,8 @@ class SelfPlayRolloutRunner:
             _write_json(self.output_dir / "probability_identity_exclusions.json", exclusions)
         selection = None
         if self.config.rollout_group_policy == "eligible_subset":
-            (_, durable_rollouts) = self._load()
+            # Freeze from durable rows plus durable metadata updates, not mutable runtime objects.
+            _, durable_rollouts = self._load()
             rollouts_by_id = {r.trajectory.rollout_id: r for r in durable_rollouts}
             selection = build_training_selection(
                 proposals,
@@ -4335,13 +4598,11 @@ class SelfPlayRolloutRunner:
             for proposal in proposals
             if proposal.task.task_id not in quarantined_task_ids
             and all(
-                (
-                    _rollout_id(proposal.task.task_id, rollout_index) in rollouts_by_id
-                    and _rollout_is_training_eligible(
-                        rollouts_by_id[_rollout_id(proposal.task.task_id, rollout_index)]
-                    )
-                    for rollout_index in range(self.config.rollouts_per_task)
+                _rollout_id(proposal.task.task_id, rollout_index) in rollouts_by_id
+                and _rollout_is_training_eligible(
+                    rollouts_by_id[_rollout_id(proposal.task.task_id, rollout_index)]
                 )
+                for rollout_index in range(self.config.rollouts_per_task)
             )
         ]
         eligible_rollouts = [
@@ -4355,24 +4616,26 @@ class SelfPlayRolloutRunner:
             }
             eligible_proposals = [p for p in proposals if p.task.task_id in selected_tasks]
             eligible_rollouts = [rollouts_by_id[rid] for rid in selection["selected_rollout_ids"]]
-        all_planned_groups_complete = len(eligible_proposals) == len(proposals) and (
-            not quarantined_task_ids
+        all_planned_groups_complete = (
+            len(eligible_proposals) == len(proposals) and not quarantined_task_ids
         )
         if selection is not None:
             all_planned_groups_complete = all(
-                (g["planned_group_complete"] for g in selection["groups"])
+                g["planned_group_complete"] for g in selection["groups"]
             )
         training_ready = len(eligible_proposals) >= self.config.minimum_complete_task_groups and (
             not self.config.require_all_planned_task_groups_for_training
             or all_planned_groups_complete
         )
         incomplete_task_ids = sorted(
-            (proposal.task.task_id for proposal in proposals if proposal not in eligible_proposals)
+            proposal.task.task_id for proposal in proposals if proposal not in eligible_proposals
         )
         batch_gate = {
-            "status": "ready" if training_ready else "blocked",
+            "status": ("ready" if training_ready else "blocked"),
             "minimum_complete_task_groups": self.config.minimum_complete_task_groups,
-            "require_all_planned_task_groups_for_training": self.config.require_all_planned_task_groups_for_training,
+            "require_all_planned_task_groups_for_training": (
+                self.config.require_all_planned_task_groups_for_training
+            ),
             "planned_task_group_count": len(proposals),
             "all_planned_task_groups_complete": all_planned_groups_complete,
             "complete_task_group_count": len(eligible_proposals),
@@ -4381,10 +4644,8 @@ class SelfPlayRolloutRunner:
             "quarantined_task_group_count": len(quarantined_task_ids),
             "quarantined_task_ids": sorted(quarantined_task_ids),
             "training_excluded_rollout_count": sum(
-                (
-                    int(not _rollout_is_training_eligible(rollout))
-                    for rollout in rollouts_by_id.values()
-                )
+                int(not _rollout_is_training_eligible(rollout))
+                for rollout in rollouts_by_id.values()
             ),
             "rollouts_per_task": self.config.rollouts_per_task,
             "optimizer_steps": 0,
@@ -4396,17 +4657,15 @@ class SelfPlayRolloutRunner:
                 selected_task_group_count=len(eligible_proposals),
                 selected_rollout_count=len(eligible_rollouts),
                 eligible_rollout_count=sum(
-                    (g["eligible_rollout_count"] for g in selection["groups"])
+                    g["eligible_rollout_count"] for g in selection["groups"]
                 ),
                 training_excluded_rollout_count=sum(
-                    (
-                        not row["eligible"] and row["source_sha256"] is not None
-                        for g in selection["groups"]
-                        for row in g["rollouts"]
-                    )
+                    not row["eligible"] and row["source_sha256"] is not None
+                    for g in selection["groups"]
+                    for row in g["rollouts"]
                 ),
                 complete_task_group_count=sum(
-                    (g["planned_group_complete"] for g in selection["groups"])
+                    g["planned_group_complete"] for g in selection["groups"]
                 ),
                 complete_task_ids=[
                     g["task_id"] for g in selection["groups"] if g["planned_group_complete"]
@@ -4419,17 +4678,25 @@ class SelfPlayRolloutRunner:
         _write_json(self.output_dir / "batch_gate.json", batch_gate)
         if circuit_open:
             raise RuntimeError(
-                "backend failure circuit opened before the planned cycle was fully collected; preserving independent successes and complete groups is not sufficient to authorize a truncated optimizer update; freshly re-probe routes and exact-resume the missing rollout ids"
+                "backend failure circuit opened before the planned cycle was fully "
+                "collected; preserving independent successes and complete groups is "
+                "not sufficient to authorize a truncated optimizer update; freshly "
+                "re-probe routes and exact-resume the missing rollout ids"
             )
         if not training_ready and selection is None:
             if self.config.require_all_planned_task_groups_for_training:
                 raise InsufficientCompleteRolloutGroupsError(
-                    f"all planned task groups are required before training; complete={len(eligible_proposals)}/{len(proposals)}; incomplete="
+                    "all planned task groups are required before training; "
+                    f"complete={len(eligible_proposals)}/{len(proposals)}; "
+                    "incomplete="
                     + ",".join(incomplete_task_ids or ["unknown"])
                     + "; no optimizer update was started"
                 )
             raise InsufficientCompleteRolloutGroupsError(
-                f"insufficient complete rollout groups after preserving independent successes for safe batch assembly ({len(eligible_proposals)}/{self.config.minimum_complete_task_groups}); no optimizer update was started"
+                "insufficient complete rollout groups after preserving independent successes "
+                "for safe batch assembly "
+                f"({len(eligible_proposals)}/{self.config.minimum_complete_task_groups}); "
+                "no optimizer update was started"
             )
         if self.snapshots.phase.value == "proposer_collection":
             self.snapshots.advance()
@@ -4453,6 +4720,9 @@ class SelfPlayRolloutRunner:
                 frontier_proposals, frontier_rollouts
             )
         else:
+            # Resume and partially eligible cycles may only become decidable at
+            # the final admission gate. Submit any remaining complete datasets,
+            # then join the already running dataset jobs.
             submit_ready_frontier_datasets()
             allowed_ids = {proposal.task.task_id for proposal in frontier_proposals}
             frontier_reverification = {}
@@ -4477,6 +4747,9 @@ class SelfPlayRolloutRunner:
                                 "early Frontier selected a task excluded by the final training gate: "
                                 + ",".join(sorted(unexpected - probability_excluded_tasks))
                             )
+                        # A later probability admission check may invalidate one
+                        # sibling. Keep the completed verification for audit, but
+                        # never train a Proposer target from a partial group.
                         _append_jsonl(
                             self.output_dir / "frontier_late_admission_exclusions.jsonl",
                             {
@@ -4486,11 +4759,7 @@ class SelfPlayRolloutRunner:
                             },
                         )
                     frontier_reverification.update(
-                        {
-                            key: value
-                            for (key, value) in dataset_records.items()
-                            if key in allowed_ids
-                        }
+                        {key: value for key, value in dataset_records.items() if key in allowed_ids}
                     )
                     dataset_dir = self.output_dir / "frontier_by_dataset" / (dataset or "unknown")
                     selection_path = dataset_dir / "frontier_reverify_selection.json"
@@ -4546,10 +4815,7 @@ class SelfPlayRolloutRunner:
                 {
                     "duration_s": time.monotonic() - frontier_pipeline_started,
                     "selected_task_count": sum(
-                        (
-                            len(row.get("selected_task_ids", ()))
-                            for row in selection_datasets.values()
-                        )
+                        len(row.get("selected_task_ids", ())) for row in selection_datasets.values()
                     ),
                     "completed_task_count": len(frontier_reverification),
                     "excluded_task_count": len(
@@ -4576,7 +4842,7 @@ class SelfPlayRolloutRunner:
             proposal_extraction=extraction,
         )
         if selection is not None:
-            result = replace(result, tasks=tuple((p.task for p in proposals)))
+            result = replace(result, tasks=tuple(p.task for p in proposals))
         self._persist_result(result)
         if selection is not None:
             selection["proposer_task_ids"] = [s.task_id for s in result.proposer_batch.samples]
@@ -4585,7 +4851,7 @@ class SelfPlayRolloutRunner:
             credit_rows = _read_jsonl(self.output_dir / "relation_counterfactuals.jsonl")
             selected_credits = [r for r in credit_rows if r.get("rollout_id") in selected_ids]
             (self.output_dir / "training_relation_credits.jsonl").write_text(
-                "".join((json.dumps(r, ensure_ascii=False) + "\n" for r in selected_credits))
+                "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in selected_credits)
             )
             _write_json(
                 self.output_dir / "credit_selection.json",
@@ -4654,7 +4920,9 @@ class SelfPlayRolloutRunner:
         return result
 
     def _collect_frontier_reverification(
-        self, proposals: list[ProposedTask], rollouts: list[SolverRollout]
+        self,
+        proposals: list[ProposedTask],
+        rollouts: list[SolverRollout],
     ) -> dict[str, dict[str, Any]]:
         phase_started = time.monotonic()
         override_path = self.output_dir / "frontier_execution_override.json"
@@ -4718,10 +4986,10 @@ class SelfPlayRolloutRunner:
             task_id for task_ids in selected_by_dataset.values() for task_id in task_ids
         }
         manifest_datasets: dict[str, Any] = {}
-        for dataset in sorted({dataset for (_task, dataset, _score) in candidates}):
-            layer = [(task_id, score) for (task_id, key, score) in candidates if key == dataset]
+        for dataset in sorted({dataset for _task, dataset, _score in candidates}):
+            layer = [(task_id, score) for task_id, key, score in candidates if key == dataset]
             positive = sorted(
-                ((task_id, score) for (task_id, score) in layer if score > 0.0),
+                ((task_id, score) for task_id, score in layer if score > 0.0),
                 key=lambda item: (-item[1], item[0]),
             )
             selected = selected_by_dataset.get(dataset, ())
@@ -4730,7 +4998,7 @@ class SelfPlayRolloutRunner:
                 "positive_candidate_count": len(positive),
                 "quota": math.ceil(fraction * len(layer)),
                 "selected_task_ids": list(selected),
-                "actual_cutoff": provisional[selected[-1]] if selected else None,
+                "actual_cutoff": (provisional[selected[-1]] if selected else None),
                 "tie_break": "task_id",
             }
         selection_manifest = {
@@ -4742,6 +5010,7 @@ class SelfPlayRolloutRunner:
             "excluded_frontiers": excluded_frontiers,
         }
         _write_json(self.output_dir / "frontier_reverify_selection.json", selection_manifest)
+
         selection_sha256 = hashlib.sha256(
             json.dumps(selection_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -4749,7 +5018,7 @@ class SelfPlayRolloutRunner:
         partial_rows = _read_jsonl(partial_path)
         partial_ids = [str(row.get("task_id", "")) for row in partial_rows]
         if len(set(partial_ids)) != len(partial_ids) or any(
-            (task_id not in selected_ids for task_id in partial_ids)
+            task_id not in selected_ids for task_id in partial_ids
         ):
             raise RuntimeError("Frontier reverify partial journal does not match selection")
         records: dict[str, dict[str, Any]] = {str(row["task_id"]): row for row in partial_rows}
@@ -4760,11 +5029,11 @@ class SelfPlayRolloutRunner:
             for row in graph_partial_rows
         ]
         if len(set(graph_partial_keys)) != len(graph_partial_keys) or any(
-            (task_id not in selected_ids for (task_id, _index) in graph_partial_keys)
+            task_id not in selected_ids for task_id, _index in graph_partial_keys
         ):
             raise RuntimeError("Frontier graph partial journal does not match selection")
         graph_partial_records = {
-            key: row for (key, row) in zip(graph_partial_keys, graph_partial_rows, strict=True)
+            key: row for key, row in zip(graph_partial_keys, graph_partial_rows, strict=True)
         }
         proposals_by_id = {proposal.task.task_id: proposal for proposal in proposals}
         pending_graph_futures: dict[Future[dict[str, Any]], tuple[str, int]] = {}
@@ -4778,11 +5047,14 @@ class SelfPlayRolloutRunner:
             if getattr(self, "_independent_frontier", False):
                 incomplete = [
                     i
-                    for (i, r) in enumerate(group)
+                    for i, r in enumerate(group)
                     if not r.graph.output_agent
-                    or any((not node.configured for node in r.graph.nodes.values()))
+                    or any(not node.configured for node in r.graph.nodes.values())
                 ]
                 if incomplete:
+                    # A known terminal failure can be valid primary evidence,
+                    # yet its unfinished graph cannot undergo fixed-graph replay.
+                    # Exclude this Proposer target, never cancel other tasks.
                     proposal.metadata["frontier_training_exclusion"] = (
                         "frontier_reverify_not_replayable"
                     )
@@ -4801,9 +5073,11 @@ class SelfPlayRolloutRunner:
                 self.config.base_seed, task_id, phase="frontier_reverify"
             )
             bundle_signatures = {_rollout_executor_compatibility_signature(item) for item in group}
+
             if len(bundle_signatures) != 1:
                 if not allow_current_executor:
                     raise RuntimeError("primary graph group used inconsistent Executor bundles")
+                # Stable provenance for a group assembled across authorized route repairs.
                 bundle_signatures = {
                     hashlib.sha256(json.dumps(sorted(bundle_signatures)).encode()).hexdigest()
                 }
@@ -4829,8 +5103,12 @@ class SelfPlayRolloutRunner:
                         "Frontier reverify partial record does not match primary graph group"
                     )
                 if existing_record.get("selection_sha256") != selection_sha256:
-                    records[task_id] = {**existing_record, "selection_sha256": selection_sha256}
+                    records[task_id] = {
+                        **existing_record,
+                        "selection_sha256": selection_sha256,
+                    }
                 continue
+
             journal_lock = threading.Lock()
 
             def evaluate_one(
@@ -4858,7 +5136,10 @@ class SelfPlayRolloutRunner:
                         raise RuntimeError(
                             "Frontier graph partial record does not match primary graph"
                         )
-                    return {**existing_graph_record, "selection_sha256": selection_sha256}
+                    return {
+                        **existing_graph_record,
+                        "selection_sha256": selection_sha256,
+                    }
                 graph_started = time.monotonic()
                 graph_semaphore = getattr(self, "_frontier_graph_semaphore", None)
                 if graph_semaphore is not None:
@@ -4932,7 +5213,8 @@ class SelfPlayRolloutRunner:
                                 incident,
                             )
                         raise CollectionInfrastructureIncidentError(
-                            f"Frontier reverify aborted before optimizer update; task_id={task_id}; graph_index={graph_index}; {exc}"
+                            "Frontier reverify aborted before optimizer update; task_id="
+                            f"{task_id}; graph_index={graph_index}; {exc}"
                         ) from exc
                     if not isinstance(outcome, dict):
                         raise RuntimeError("Frontier reverify did not return verification details")
@@ -4940,7 +5222,7 @@ class SelfPlayRolloutRunner:
                         raise GraphEvaluationIncompleteError(
                             "Frontier reverify has no verified outcome; statistical zero is not a trusted tie"
                         )
-                    (reward, _breakdown) = _outcome_task_reward(
+                    reward, _breakdown = _outcome_task_reward(
                         str(proposal.task.metadata.get("dataset", "")),
                         outcome.get("verification"),
                         prediction=str(outcome.get("prediction", "")),
@@ -4978,19 +5260,23 @@ class SelfPlayRolloutRunner:
             }
             graph_results_by_task[task_id] = {}
             for index, item in enumerate(group):
-                pending_graph_futures[executor.submit(evaluate_one, index, item)] = (task_id, index)
+                pending_graph_futures[executor.submit(evaluate_one, index, item)] = (
+                    task_id,
+                    index,
+                )
+
         errors: list[Exception] = []
         infrastructure_failures_by_task: dict[str, list[dict[str, Any]]] = dict(
             nonreplayable_failures
         )
         try:
             for future in as_completed(pending_graph_futures):
-                (task_id, index) = pending_graph_futures[future]
+                task_id, index = pending_graph_futures[future]
                 try:
                     graph_record = future.result()
                     graph_results_by_task[task_id][index] = graph_record
                     if (task_id, index) not in graph_partial_records:
-                        graph_partial_records[task_id, index] = graph_record
+                        graph_partial_records[(task_id, index)] = graph_record
                         _append_jsonl(graph_partial_path, graph_record)
                 except (
                     CollectionInfrastructureIncidentError,
@@ -5014,11 +5300,15 @@ class SelfPlayRolloutRunner:
                 raise errors[0]
         finally:
             executor.shutdown(wait=True, cancel_futures=bool(errors))
+
         for task_id in sorted(task_contexts):
             context = task_contexts[task_id]
             proposal = context["proposal"]
             group = context["group"]
             if task_id in infrastructure_failures_by_task:
+                # Frontier contributes only Proposer credit. Preserve all
+                # valid Solver trajectories and exclude this one Proposer
+                # sample when its independent reverify is incomplete.
                 proposal.metadata["frontier_training_exclusion"] = (
                     "frontier_reverify_infrastructure_failure"
                 )
@@ -5078,14 +5368,12 @@ class SelfPlayRolloutRunner:
                 raise RuntimeError("incompatible action protocol; start a fresh run")
         else:
             if any(
-                (
-                    (self.output_dir / name).exists()
-                    for name in (
-                        "solver_rollouts.jsonl",
-                        "progress.json",
-                        "manifest.json",
-                        "mace_snapshots",
-                    )
+                (self.output_dir / name).exists()
+                for name in (
+                    "solver_rollouts.jsonl",
+                    "progress.json",
+                    "manifest.json",
+                    "mace_snapshots",
                 )
             ):
                 raise RuntimeError("legacy run lacks Director SET_MODEL protocol; read-only only")
@@ -5099,26 +5387,32 @@ class SelfPlayRolloutRunner:
         cancellation_event: threading.Event | None = None,
         total_timeout_s_override: float | None = None,
     ) -> _PrimaryCollection:
-        (proposal, rollout_index) = job
+        proposal, rollout_index = job
         policy_attempt_offset = self.config.policy_sampling_attempt_offsets.get(
             proposal.task.task_id, 0
         )
         policy_sampling_attempt = replacement_attempt + policy_attempt_offset
         rollout_seed = _rollout_sampling_seed(
-            self.config.base_seed, proposal.task.task_id, rollout_index, policy_sampling_attempt
+            self.config.base_seed,
+            proposal.task.task_id,
+            rollout_index,
+            policy_sampling_attempt,
         )
         executor_seed = _stable_execution_seed(
             self.config.base_seed, proposal.task.task_id, phase="primary"
         )
         started = time.monotonic()
-        (total_timeout_s, request_timeout_s, request_overrides) = self._deadline_profile(proposal)
+        total_timeout_s, request_timeout_s, request_overrides = self._deadline_profile(proposal)
         if total_timeout_s_override is not None:
             if total_timeout_s_override <= 0:
                 raise ValueError("total_timeout_s_override must be positive")
             total_timeout_s = min(total_timeout_s, total_timeout_s_override)
         deadline = RolloutDeadline(
             total_timeout_s=total_timeout_s,
-            no_progress_timeout_s=min(self.config.rollout_no_progress_time_s, total_timeout_s),
+            no_progress_timeout_s=min(
+                self.config.rollout_no_progress_time_s,
+                total_timeout_s,
+            ),
             request_timeout_s=min(request_timeout_s, total_timeout_s),
             request_timeout_overrides_s=request_overrides,
             started_monotonic=started,
@@ -5144,7 +5438,8 @@ class SelfPlayRolloutRunner:
                 and callable(configure_routes)
             ):
                 solve_metadata["scoped_route_admission"] = configure_routes(
-                    dataset=dataset_key, request_role="primary"
+                    dataset=dataset_key,
+                    request_role="primary",
                 )
         except BaseException:
             close = getattr(application, "close", None)
@@ -5169,9 +5464,14 @@ class SelfPlayRolloutRunner:
                 "task_id": proposal.task.task_id,
                 "task_type": proposal.task.task_type,
                 "reference": proposal.task.reference,
-                "run_id": f"{proposal.task.task_id}-r{rollout_index}"
-                if replacement_attempt == 0
-                else f"{proposal.task.task_id}-r{rollout_index}-replacement-{replacement_attempt}",
+                "run_id": (
+                    f"{proposal.task.task_id}-r{rollout_index}"
+                    if replacement_attempt == 0
+                    else (
+                        f"{proposal.task.task_id}-r{rollout_index}"
+                        f"-replacement-{replacement_attempt}"
+                    )
+                ),
                 "metadata": solve_metadata,
             }
             if proposal.task.private_verifier_payload:
@@ -5202,7 +5502,11 @@ class SelfPlayRolloutRunner:
                 max_tokens=self.config.max_tokens,
                 duration_s=duration_s,
                 reward_version=str(
-                    getattr(director_reward_config, "version", PROTOCOL_GATE_REWARD_VERSION)
+                    getattr(
+                        director_reward_config,
+                        "version",
+                        PROTOCOL_GATE_REWARD_VERSION,
+                    )
                 ),
             )
             rollout.trajectory.metadata.update(
@@ -5259,17 +5563,20 @@ class SelfPlayRolloutRunner:
             return {}
         route = str(event.get("route", "")).strip()
         event_kind = str(event.get("event", ""))
-        if not route or event_kind not in {"backend_request_success", "backend_request_failure"}:
+        if not route or event_kind not in {
+            "backend_request_success",
+            "backend_request_failure",
+        }:
             return {}
         success = event_kind == "backend_request_success"
         counts_toward_circuit = bool(event.get("counts_toward_route_circuit", False))
         if (
             self.config.backend_failure_retry_attempts > 0
             and event.get("retryable")
-            and (not event.get("disable_route"))
+            and not event.get("disable_route")
         ):
             counts_toward_circuit = False
-        if not success and (not counts_toward_circuit):
+        if not success and not counts_toward_circuit:
             return {}
         state = store.record_scoped_outcome(
             route,
@@ -5277,9 +5584,11 @@ class SelfPlayRolloutRunner:
             request_role=request_role,
             success=success,
             total_elapsed_s=float(event.get("total_elapsed_s", 0.0) or 0.0),
-            upstream_elapsed_s=float(event["upstream_elapsed_s"])
-            if event.get("upstream_elapsed_s") is not None
-            else None,
+            upstream_elapsed_s=(
+                float(event["upstream_elapsed_s"])
+                if event.get("upstream_elapsed_s") is not None
+                else None
+            ),
             slow_threshold_s=self.config.scoped_route_slow_request_s,
             failure_counts_toward_circuit=counts_toward_circuit,
             threshold=self.config.scoped_route_unhealthy_threshold,
@@ -5304,6 +5613,7 @@ class SelfPlayRolloutRunner:
 
     def _deadline_profile(self, proposal: ProposedTask) -> tuple[float, float, dict[str, float]]:
         """Return the compact timeout profile selected from public task metadata."""
+
         dataset = str(proposal.task.metadata.get("dataset", "")).strip().lower()
         if dataset in {"swe_bench", "swe-bench", "swebench"}:
             total_timeout_s = self.config.swe_rollout_wall_time_s
@@ -5317,10 +5627,12 @@ class SelfPlayRolloutRunner:
                 self.config.aime_request_wall_time_s,
                 {
                     "grok": self.config.grok_aime_request_wall_time_s,
+                    # The isolated AIME dynamic-budget experiment gives the local
+                    # Director 6 minutes; routed Worker budgets stay unchanged.
                     **({"": 360.0} if self.config.evaluation_only else {}),
                 },
             )
-        return (total_timeout_s, self.config.request_wall_time_s, {})
+        return total_timeout_s, self.config.request_wall_time_s, {}
 
     def _slot_wall_time_s(self, proposal: ProposedTask) -> float:
         dataset = canonical_dataset_name(proposal.task.metadata.get("dataset", ""))
@@ -5331,7 +5643,7 @@ class SelfPlayRolloutRunner:
         return self.config.rollout_slot_wall_time_s
 
     def _deadline_profile_payload(self, proposal: ProposedTask) -> dict[str, Any]:
-        (total_timeout_s, request_timeout_s, overrides) = self._deadline_profile(proposal)
+        total_timeout_s, request_timeout_s, overrides = self._deadline_profile(proposal)
         return {
             "dataset": str(proposal.task.metadata.get("dataset", "")),
             "total_timeout_s": total_timeout_s,
@@ -5360,7 +5672,10 @@ class SelfPlayRolloutRunner:
             outcome.rollout_seed
             if outcome is not None
             else _rollout_sampling_seed(
-                self.config.base_seed, proposal.task.task_id, rollout_index, policy_sampling_attempt
+                self.config.base_seed,
+                proposal.task.task_id,
+                rollout_index,
+                policy_sampling_attempt,
             )
         )
         outcome_eligible = bool(
@@ -5379,9 +5694,11 @@ class SelfPlayRolloutRunner:
                 self.config.base_seed, proposal.task.task_id, phase="primary"
             ),
             "success": error is None and (outcome is None or outcome_eligible),
-            "accepted_as_primary": bool(accepted_as_primary)
-            if accepted_as_primary is not None
-            else error is None and outcome_eligible,
+            "accepted_as_primary": (
+                bool(accepted_as_primary)
+                if accepted_as_primary is not None
+                else error is None and outcome_eligible
+            ),
             "same_slot_seed_preserved": True,
             "same_slot_executor_seed_preserved": True,
             "policy_resampled_on_replacement": policy_sampling_attempt > 0,
@@ -5398,7 +5715,12 @@ class SelfPlayRolloutRunner:
         elif duration_s is not None:
             event["duration_s"] = max(0.0, float(duration_s))
         if error is not None:
-            event.update({"error_type": type(error).__name__, "message": str(error)})
+            event.update(
+                {
+                    "error_type": type(error).__name__,
+                    "message": str(error),
+                }
+            )
             timeout_diagnostics = getattr(error, "to_dict", None)
             if callable(timeout_diagnostics):
                 event["timeout"] = timeout_diagnostics()
@@ -5409,7 +5731,8 @@ class SelfPlayRolloutRunner:
 
     @staticmethod
     def _partial_timeout_state(
-        application: AdaptiveSolverApplication, deadline: RolloutDeadline
+        application: AdaptiveSolverApplication,
+        deadline: RolloutDeadline,
     ) -> dict[str, Any]:
         solver = getattr(application, "solver", None)
         canvas = getattr(solver, "active_canvas", None)
@@ -5464,13 +5787,20 @@ class SelfPlayRolloutRunner:
         except Exception as exc:
             rollout.trajectory.metadata["relation_counterfactual_candidate_count"] = 0
             rollout.trajectory.metadata.setdefault("relation_counterfactual_errors", []).append(
-                {"stage": "schedule", "error_type": type(exc).__name__, "message": str(exc)}
+                {
+                    "stage": "schedule",
+                    "error_type": type(exc).__name__,
+                    "message": str(exc),
+                }
             )
             primary.decisions = ()
 
     def _collect_counterfactual(
         self, primary: _PrimaryCollection
     ) -> tuple[SolverRollout, list[dict[str, Any]]]:
+        # Work on detached metadata so a branch that is cancelled at the update
+        # boundary cannot mutate the already-durable primary while its training
+        # batch is being frozen.
         rollout = replace(
             primary.rollout,
             trajectory=replace(
@@ -5480,15 +5810,14 @@ class SelfPlayRolloutRunner:
         )
         proposal = primary.proposal
         action_spans = rollout.trajectory.metadata.get(
-            "relation_choice_token_spans", rollout.trajectory.metadata.get("action_token_spans", ())
+            "relation_choice_token_spans",
+            rollout.trajectory.metadata.get("action_token_spans", ()),
         )
         credits: list[dict[str, Any]] = []
         counterfactual_errors = list(
             rollout.trajectory.metadata.get("relation_counterfactual_errors", ())
         )
-        (_primary_timeout_s, request_timeout_s, request_overrides) = self._deadline_profile(
-            proposal
-        )
+        _primary_timeout_s, request_timeout_s, request_overrides = self._deadline_profile(proposal)
         pair_budget = self.config.counterfactual_pair_wall_time_s
         pair_deadline = RolloutDeadline(
             exclude_failed_request_time=True,
@@ -5497,7 +5826,7 @@ class SelfPlayRolloutRunner:
             no_progress_timeout_s=min(self.config.rollout_no_progress_time_s, pair_budget),
             request_timeout_s=min(request_timeout_s, pair_budget),
             request_timeout_overrides_s={
-                route: min(value, pair_budget) for (route, value) in request_overrides.items()
+                route: min(value, pair_budget) for route, value in request_overrides.items()
             },
             cancellation_event=primary.counterfactual_cancellation_event,
             cancellation_reason="counterfactual_collection_aborted",
@@ -5522,6 +5851,8 @@ class SelfPlayRolloutRunner:
                     raise RuntimeError(
                         "Executor bundle changed between primary and full graph branch"
                     )
+                # Both branches consume the same independent deadline.  The
+                # second branch receives only what remains after the first.
                 branch.set_rollout_deadline(pair_deadline)
                 score = float(
                     branch.evaluate_graph(copy.deepcopy(proposal.task), graph, seed=same_seed)
@@ -5562,7 +5893,7 @@ class SelfPlayRolloutRunner:
                 rollout.trajectory.metadata["relation_counterfactual_skip_reason"] = (
                     "insufficient_paired_probe_budget"
                 )
-                return (rollout, [])
+                return rollout, []
             for decision in primary.decisions:
                 try:
                     credit = evaluate_relation_decision(
@@ -5573,6 +5904,8 @@ class SelfPlayRolloutRunner:
                         evaluate=evaluate_branch,
                     )
                 except Exception as exc:
+                    # A relation probe is optional local credit. Its failure must
+                    # not invalidate the already durable primary graph rollout.
                     counterfactual_errors.append(
                         {
                             "action_index": decision.action_index,
@@ -5591,7 +5924,7 @@ class SelfPlayRolloutRunner:
                 rollout.trajectory.metadata["relation_counterfactual_errors"] = (
                     counterfactual_errors
                 )
-            return (rollout, credits)
+            return rollout, credits
         finally:
             primary.close()
 
@@ -5602,7 +5935,6 @@ class SelfPlayRolloutRunner:
         pool: RolloutPool[Any, Any],
         low_priority: bool,
     ) -> list[tuple[_PrimaryCollection, Any, Exception | None]]:
-
         def collect(primary: _PrimaryCollection):
             try:
                 if low_priority:
@@ -5610,9 +5942,9 @@ class SelfPlayRolloutRunner:
                         outcome = self._collect_counterfactual(primary)
                 else:
                     outcome = self._collect_counterfactual(primary)
-                return (primary, outcome, None)
-            except Exception as exc:
-                return (primary, None, exc)
+                return primary, outcome, None
+            except Exception as exc:  # optional credit never invalidates a primary
+                return primary, None, exc
 
         iter_map = getattr(pool, "iter_map", None)
         results = (
@@ -5621,7 +5953,8 @@ class SelfPlayRolloutRunner:
         return list(results)
 
     def _persist_counterfactual_batch(
-        self, results: list[tuple[_PrimaryCollection, Any, Exception | None]]
+        self,
+        results: list[tuple[_PrimaryCollection, Any, Exception | None]],
     ) -> None:
         for primary, outcome, error in results:
             rollout_id = primary.rollout.trajectory.rollout_id
@@ -5635,16 +5968,26 @@ class SelfPlayRolloutRunner:
                 primary.rollout.trajectory.metadata.setdefault(
                     "relation_counterfactual_errors", []
                 ).append(event)
-                _append_jsonl(self.output_dir / "relation_counterfactual_errors.jsonl", event)
+                _append_jsonl(
+                    self.output_dir / "relation_counterfactual_errors.jsonl",
+                    event,
+                )
                 primary.close()
             else:
                 assert outcome is not None
-                (rollout, credit_payloads) = outcome
+                rollout, credit_payloads = outcome
+                # Keep persistence safe for adapters/tests that return the
+                # original rollout object instead of the detached copy used by
+                # the built-in collector.  Clearing an aliased mapping first
+                # would otherwise erase all training metadata.
                 outcome_metadata = dict(rollout.trajectory.metadata)
                 primary.rollout.trajectory.metadata.clear()
                 primary.rollout.trajectory.metadata.update(outcome_metadata)
                 for payload in credit_payloads:
-                    _append_jsonl(self.output_dir / "relation_counterfactuals.jsonl", payload)
+                    _append_jsonl(
+                        self.output_dir / "relation_counterfactuals.jsonl",
+                        payload,
+                    )
                 for event in rollout.trajectory.metadata.get("relation_counterfactual_errors", ()):
                     _append_jsonl(
                         self.output_dir / "relation_counterfactual_errors.jsonl",
@@ -5654,6 +5997,7 @@ class SelfPlayRolloutRunner:
 
     def _collect(self, job: tuple[ProposedTask, int]) -> tuple[SolverRollout, list[dict[str, Any]]]:
         """Compatibility helper for direct unit callers; run() uses two durable phases."""
+
         primary = self._collect_primary(job)
         self._prepare_counterfactual(primary)
         return self._collect_counterfactual(primary)
@@ -5661,7 +6005,10 @@ class SelfPlayRolloutRunner:
     def _persist_counterfactual_metadata(self, rollout: SolverRollout) -> None:
         _append_jsonl(
             self.output_dir / "rollout_metadata_updates.jsonl",
-            {"rollout_id": rollout.trajectory.rollout_id, "metadata": rollout.trajectory.metadata},
+            {
+                "rollout_id": rollout.trajectory.rollout_id,
+                "metadata": rollout.trajectory.metadata,
+            },
         )
 
     def _write_progress(
@@ -5674,30 +6021,24 @@ class SelfPlayRolloutRunner:
     ) -> None:
         payload: dict[str, Any] = {
             "completed_tasks": sum(
-                (
-                    int(
-                        all(
-                            (
-                                (rollout_id := _rollout_id(proposal.task.task_id, rollout_index))
-                                in rollouts_by_id
-                                and _rollout_is_training_eligible(rollouts_by_id[rollout_id])
-                                for rollout_index in range(self.config.rollouts_per_task)
-                            )
-                        )
+                int(
+                    all(
+                        (rollout_id := _rollout_id(proposal.task.task_id, rollout_index))
+                        in rollouts_by_id
+                        and _rollout_is_training_eligible(rollouts_by_id[rollout_id])
+                        for rollout_index in range(self.config.rollouts_per_task)
                     )
-                    for proposal in proposals
                 )
+                for proposal in proposals
             ),
             "proposed_tasks": len(proposals),
             "rollouts": len(rollouts_by_id),
             "training_eligible_rollouts": sum(
-                (int(_rollout_is_training_eligible(rollout)) for rollout in rollouts_by_id.values())
+                int(_rollout_is_training_eligible(rollout)) for rollout in rollouts_by_id.values()
             ),
             "training_excluded_rollouts": sum(
-                (
-                    int(not _rollout_is_training_eligible(rollout))
-                    for rollout in rollouts_by_id.values()
-                )
+                int(not _rollout_is_training_eligible(rollout))
+                for rollout in rollouts_by_id.values()
             ),
         }
         if failed_rollout_ids:
@@ -5732,6 +6073,7 @@ class SelfPlayRolloutRunner:
                     "jobs": len(state.counterfactual_jobs),
                 },
             )
+
         pending_observations: list[tuple[ProposedTask, list[float]]] = []
         for task_id, proposal in state.window_complete_entries:
             expected_ids = {
@@ -5745,6 +6087,7 @@ class SelfPlayRolloutRunner:
                 for rollout_index in range(self.config.rollouts_per_task)
             ]
             pending_observations.append((proposal, task_rewards))
+
         observe_many = getattr(self.proposer, "observe_many", None)
         observe = getattr(self.proposer, "observe", None)
         if pending_observations and callable(observe_many):
@@ -5764,7 +6107,11 @@ class SelfPlayRolloutRunner:
             _append_jsonl(self.output_dir / "curriculum_observations.jsonl", observation)
         state_dict = getattr(self.proposer, "state_dict", None)
         if callable(state_dict):
-            _write_json(self.output_dir / "curriculum_state.json", state_dict())
+            _write_json(
+                self.output_dir / "curriculum_state.json",
+                state_dict(),
+            )
+
         self._write_progress(
             proposals=proposals,
             rollouts_by_id=rollouts_by_id,
@@ -5803,57 +6150,48 @@ class SelfPlayRolloutRunner:
         prior_events: list[dict[str, Any]],
         inherited_streak: int = 0,
     ) -> dict[str, Any] | None:
-        task_ids = [task_id for (task_id, _proposal) in window_entries]
+        task_ids = [task_id for task_id, _proposal in window_entries]
         window_key = ",".join(task_ids)
-        if not task_ids or any((event.get("window_key") == window_key for event in prior_events)):
+        if not task_ids or any(event.get("window_key") == window_key for event in prior_events):
             return None
         groups: list[list[SolverRollout]] = []
         for task_id in task_ids:
             rollout_ids = [
                 _rollout_id(task_id, index) for index in range(self.config.rollouts_per_task)
             ]
-            if not all((rollout_id in rollouts_by_id for rollout_id in rollout_ids)):
+            if not all(rollout_id in rollouts_by_id for rollout_id in rollout_ids):
                 return None
             groups.append([rollouts_by_id[rollout_id] for rollout_id in rollout_ids])
         flat = [item for group in groups for item in group]
-        single_agent_rate = sum((len(item.graph.nodes) == 1 for item in flat)) / len(flat)
+        single_agent_rate = sum(len(item.graph.nodes) == 1 for item in flat) / len(flat)
         within_ratios = [
             len({canonical_graph_key(item.graph) for item in group}) / len(group)
             for group in groups
         ]
         within_unique = sum(within_ratios) / len(within_ratios)
         task_relation_rates = [
-            sum(
-                (
-                    bool(item.graph.directed_edges or item.graph.bidirectional_edges)
-                    for item in group
-                )
-            )
+            sum(bool(item.graph.directed_edges or item.graph.bidirectional_edges) for item in group)
             / len(group)
             for group in groups
         ]
         max_task_relation_rate = max(task_relation_rates)
         relation_rate = sum(
-            (bool(item.graph.directed_edges or item.graph.bidirectional_edges) for item in flat)
+            bool(item.graph.directed_edges or item.graph.bidirectional_edges) for item in flat
         ) / len(flat)
         disconnected_multi_agent_rate = sum(
-            (
-                len(item.graph.nodes) > 1
-                and (not (item.graph.directed_edges or item.graph.bidirectional_edges))
-                for item in flat
-            )
+            len(item.graph.nodes) > 1
+            and not (item.graph.directed_edges or item.graph.bidirectional_edges)
+            for item in flat
         ) / len(flat)
         counterfactual_eligible_rate = sum(
-            (
-                int(item.trajectory.metadata.get("relation_counterfactual_candidate_count", 0)) > 0
-                for item in flat
-            )
+            int(item.trajectory.metadata.get("relation_counterfactual_candidate_count", 0)) > 0
+            for item in flat
         ) / len(flat)
         legacy_alert = (
             self.config.structural_exploration_policy == "stratified"
             and single_agent_rate >= self.config.collapse_single_agent_threshold
-            and (within_unique <= self.config.collapse_unique_graph_threshold)
-            and (max_task_relation_rate <= self.config.collapse_task_relation_threshold)
+            and within_unique <= self.config.collapse_unique_graph_threshold
+            and max_task_relation_rate <= self.config.collapse_task_relation_threshold
         )
         disconnected_alert = (
             disconnected_multi_agent_rate > self.config.collapse_disconnected_multi_agent_threshold
@@ -5887,11 +6225,13 @@ class SelfPlayRolloutRunner:
             "alert_reasons": alert_reasons,
             "consecutive_alert_windows": prior_streak + 1 if alert else 0,
             "thresholds": {
-                "structural_exploration_policy": self.config.structural_exploration_policy,
+                "structural_exploration_policy": (self.config.structural_exploration_policy),
                 "single_agent_rate": self.config.collapse_single_agent_threshold,
                 "within_task_unique_graph_ratio": self.config.collapse_unique_graph_threshold,
                 "max_task_relation_rate": self.config.collapse_task_relation_threshold,
-                "disconnected_multi_agent_rate": self.config.collapse_disconnected_multi_agent_threshold,
+                "disconnected_multi_agent_rate": (
+                    self.config.collapse_disconnected_multi_agent_threshold
+                ),
                 "patience_windows": self.config.collapse_patience_windows,
             },
         }
@@ -5916,22 +6256,24 @@ class SelfPlayRolloutRunner:
                 executor_version=str(item.get("executor_version", "adaptive-v1")),
                 metadata=dict(item.get("metadata", {})),
                 policy_calls=tuple(
-                    (
-                        TokenizedPolicyCall(
-                            call_id=str(call["call_id"]),
-                            token_ids=tuple(call["token_ids"]),
-                            action_mask=tuple(call["action_mask"]),
-                            behavior_log_probs=tuple(call.get("behavior_log_probs", ())),
-                            action_token_span=tuple(call["action_token_span"])
+                    TokenizedPolicyCall(
+                        call_id=str(call["call_id"]),
+                        token_ids=tuple(call["token_ids"]),
+                        action_mask=tuple(call["action_mask"]),
+                        behavior_log_probs=tuple(call.get("behavior_log_probs", ())),
+                        action_token_span=(
+                            tuple(call["action_token_span"])
                             if call.get("action_token_span") is not None
-                            else None,
-                            relation_token_span=tuple(call["relation_token_span"])
+                            else None
+                        ),
+                        relation_token_span=(
+                            tuple(call["relation_token_span"])
                             if call.get("relation_token_span") is not None
-                            else None,
-                            metadata=dict(call.get("metadata", {})),
-                        )
-                        for call in item.get("policy_calls", ())
+                            else None
+                        ),
+                        metadata=dict(call.get("metadata", {})),
                     )
+                    for call in item.get("policy_calls", ())
                 ),
             )
             existing = trajectories_by_id.get(trajectory.rollout_id)
@@ -5946,15 +6288,13 @@ class SelfPlayRolloutRunner:
             if existing is None:
                 continue
             trajectories_by_id[rollout_id] = replace(
-                existing, metadata=dict(update.get("metadata", existing.metadata))
+                existing,
+                metadata=dict(update.get("metadata", existing.metadata)),
             )
-        return (
-            proposals,
-            [
-                SolverRollout(item, MultiAgentGraph.from_dict(item.graph))
-                for item in trajectories_by_id.values()
-            ],
-        )
+        return proposals, [
+            SolverRollout(item, MultiAgentGraph.from_dict(item.graph))
+            for item in trajectories_by_id.values()
+        ]
 
     def _persist_result(self, result: DryRunSelfPlayResult) -> None:
         _write_json(
@@ -5972,7 +6312,7 @@ class SelfPlayRolloutRunner:
                 if getattr(self, "_independent_frontier", False)
                 else "legacy",
                 "frontier_reward_source": "solver_task_reward",
-                "minimum_complete_task_groups": self.config.minimum_complete_task_groups,
+                "minimum_complete_task_groups": (self.config.minimum_complete_task_groups),
                 "proposals_per_seed": self.config.proposals_per_seed,
                 "task_window": self.config.task_window,
                 "rollout_workers": self.config.workers,
@@ -5980,29 +6320,33 @@ class SelfPlayRolloutRunner:
                     "deadline_profiles_seconds": {
                         "stateless": self.config.rollout_wall_time_s,
                         "swe": self.config.swe_rollout_wall_time_s,
-                        "webshop_alfworld": self.config.stateful_rollout_wall_time_s,
+                        "webshop_alfworld": (self.config.stateful_rollout_wall_time_s),
                     },
                     "rollout_wall_time_s": self.config.rollout_wall_time_s,
-                    "stateful_rollout_wall_time_s": self.config.stateful_rollout_wall_time_s,
-                    "swe_rollout_wall_time_s": self.config.swe_rollout_wall_time_s,
+                    "stateful_rollout_wall_time_s": (self.config.stateful_rollout_wall_time_s),
+                    "swe_rollout_wall_time_s": (self.config.swe_rollout_wall_time_s),
                     "swe_slot_wall_time_s": self.config.swe_slot_wall_time_s,
-                    "rollout_slot_wall_time_s": self.config.rollout_slot_wall_time_s,
-                    "stateful_slot_wall_time_s": self.config.stateful_slot_wall_time_s,
-                    "rollout_no_progress_time_s": self.config.rollout_no_progress_time_s,
+                    "rollout_slot_wall_time_s": (self.config.rollout_slot_wall_time_s),
+                    "stateful_slot_wall_time_s": (self.config.stateful_slot_wall_time_s),
+                    "rollout_no_progress_time_s": (self.config.rollout_no_progress_time_s),
                     "request_wall_time_s": self.config.request_wall_time_s,
-                    "aime_request_wall_time_s": self.config.aime_request_wall_time_s,
-                    "grok_aime_request_wall_time_s": self.config.grok_aime_request_wall_time_s,
+                    "aime_request_wall_time_s": (self.config.aime_request_wall_time_s),
+                    "grok_aime_request_wall_time_s": (self.config.grok_aime_request_wall_time_s),
                     "pause_no_progress_during_active_request": True,
-                    "replacement_rollouts_per_task": self.config.replacement_rollouts_per_task,
-                    "swe_non_trainable_recovery_attempts": self.config.swe_non_trainable_recovery_attempts,
-                    "non_swe_recovery_attempts": self.config.non_swe_recovery_attempts,
+                    "replacement_rollouts_per_task": (self.config.replacement_rollouts_per_task),
+                    "swe_non_trainable_recovery_attempts": (
+                        self.config.swe_non_trainable_recovery_attempts
+                    ),
+                    "non_swe_recovery_attempts": (self.config.non_swe_recovery_attempts),
                     "backend_circuit_semantics": "consecutive_failures",
-                    "backend_failure_route_threshold": self.config.backend_failure_route_threshold,
+                    "backend_failure_route_threshold": (
+                        self.config.backend_failure_route_threshold
+                    ),
                     "scoped_route_circuit": {
                         "enabled": self.config.scoped_route_circuit_enabled,
                         "scope": "route_x_dataset_x_request_role",
                         "datasets": sorted(_SCOPED_ROUTE_CIRCUIT_DATASETS),
-                        "unhealthy_threshold": self.config.scoped_route_unhealthy_threshold,
+                        "unhealthy_threshold": (self.config.scoped_route_unhealthy_threshold),
                         "slow_request_s": self.config.scoped_route_slow_request_s,
                         "recovery": "bounded_complex_worker_probe",
                     },
@@ -6011,25 +6355,38 @@ class SelfPlayRolloutRunner:
                     "mode": "independent_requests_continuous_server_batch",
                     "task_scheduling_policy": self.config.task_scheduling_policy,
                     "primary_job_order": self.config.primary_job_order,
-                    "primary_duration_estimate_version": PRIMARY_DURATION_ESTIMATE_VERSION,
-                    "max_active_task_groups": self.config.max_active_task_groups
-                    if self.config.task_scheduling_policy == "frozen_manifest_dynamic"
-                    else self.config.task_window,
+                    "primary_duration_estimate_version": (PRIMARY_DURATION_ESTIMATE_VERSION),
+                    "max_active_task_groups": (
+                        self.config.max_active_task_groups
+                        if self.config.task_scheduling_policy == "frozen_manifest_dynamic"
+                        else self.config.task_window
+                    ),
                     "curriculum_observation_order": "logical_manifest_windows",
-                    "logical_window_size": self.config.task_window * self.config.rollouts_per_task,
+                    "logical_window_size": (
+                        self.config.task_window * self.config.rollouts_per_task
+                    ),
                     "max_active_rollouts": min(
-                        self.config.workers, self.config.task_window * self.config.rollouts_per_task
+                        self.config.workers,
+                        self.config.task_window * self.config.rollouts_per_task,
                     ),
                     "incomplete_group_policy": "quarantine_without_exact_resume",
-                    "training_eligibility_policy": "valid_finished_execution_only",
+                    "training_eligibility_policy": ("valid_finished_execution_only"),
                     **(
                         {
-                            "counterfactual_pipeline": "global_queue_as_each_primary_rollout_completes",
+                            "counterfactual_pipeline": (
+                                "global_queue_as_each_primary_rollout_completes"
+                            ),
                             "counterfactual_workers": self.config.counterfactual_workers,
-                            "counterfactual_pair_wall_time_s": self.config.counterfactual_pair_wall_time_s,
-                            "counterfactual_pair_budget": "independent_from_primary_shared_by_off_on",
-                            "request_priority": "primary_before_queued_counterfactual",
-                            "final_training_barrier": "wait_for_bounded_counterfactual_completion",
+                            "counterfactual_pair_wall_time_s": (
+                                self.config.counterfactual_pair_wall_time_s
+                            ),
+                            "counterfactual_pair_budget": (
+                                "independent_from_primary_shared_by_off_on"
+                            ),
+                            "request_priority": ("primary_before_queued_counterfactual"),
+                            "final_training_barrier": (
+                                "wait_for_bounded_counterfactual_completion"
+                            ),
                         }
                         if self.config.pipeline_counterfactuals
                         else {}
@@ -6057,7 +6414,10 @@ class SelfPlayRolloutRunner:
                         str(
                             sample.metadata.get("model_roles", {})
                             .get("canvas_execution", {})
-                            .get("structural_exploration_policy", "legacy_unspecified")
+                            .get(
+                                "structural_exploration_policy",
+                                "legacy_unspecified",
+                            )
                         )
                         for sample in result.solver_batch.samples
                     }
@@ -6066,7 +6426,9 @@ class SelfPlayRolloutRunner:
                     "single_agent_threshold": self.config.collapse_single_agent_threshold,
                     "unique_graph_threshold": self.config.collapse_unique_graph_threshold,
                     "task_relation_threshold": self.config.collapse_task_relation_threshold,
-                    "disconnected_multi_agent_threshold": self.config.collapse_disconnected_multi_agent_threshold,
+                    "disconnected_multi_agent_threshold": (
+                        self.config.collapse_disconnected_multi_agent_threshold
+                    ),
                     "patience_windows": self.config.collapse_patience_windows,
                 },
             },
@@ -6102,22 +6464,24 @@ def _proposal_from_dict(value: dict[str, Any]) -> ProposedTask:
         tuple(value["action_mask"]),
         dict(value.get("metadata", {})),
         tuple(
-            (
-                TokenizedPolicyCall(
-                    call_id=str(call["call_id"]),
-                    token_ids=tuple(call["token_ids"]),
-                    action_mask=tuple(call["action_mask"]),
-                    behavior_log_probs=tuple(call.get("behavior_log_probs", ())),
-                    action_token_span=tuple(call["action_token_span"])
+            TokenizedPolicyCall(
+                call_id=str(call["call_id"]),
+                token_ids=tuple(call["token_ids"]),
+                action_mask=tuple(call["action_mask"]),
+                behavior_log_probs=tuple(call.get("behavior_log_probs", ())),
+                action_token_span=(
+                    tuple(call["action_token_span"])
                     if call.get("action_token_span") is not None
-                    else None,
-                    relation_token_span=tuple(call["relation_token_span"])
+                    else None
+                ),
+                relation_token_span=(
+                    tuple(call["relation_token_span"])
                     if call.get("relation_token_span") is not None
-                    else None,
-                    metadata=dict(call.get("metadata", {})),
-                )
-                for call in value.get("policy_calls", ())
+                    else None
+                ),
+                metadata=dict(call.get("metadata", {})),
             )
+            for call in value.get("policy_calls", ())
         ),
     )
 
@@ -6140,6 +6504,42 @@ def _write_json(path: Path, payload: Any) -> None:
     os.replace(temporary, path)
 
 
+def _spool_completed_primary(root: Path, row: dict[str, Any]) -> None:
+    """Commit in the worker even if the result-consumer thread is interrupted."""
+    rollout_id = str(row["rollout_id"])
+    if not rollout_id or Path(rollout_id).name != rollout_id or rollout_id in {".", ".."}:
+        raise ValueError("invalid primary spool rollout ID")
+    directory = root / "completed_primary_spool"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / (rollout_id + ".json")
+    if path.exists():
+        if json.loads(path.read_text()) != row:
+            raise ValueError("conflicting completed primary spool row")
+        return
+    temporary = path.with_suffix(".json.tmp")
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(row, handle, ensure_ascii=False)
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _recover_completed_primary_spool(root: Path) -> None:
+    """Merge only missing immutable worker completions before exact resume."""
+    target = root / "solver_rollouts.jsonl"
+    existing = {str(row["rollout_id"]): row for row in _read_jsonl(target)}
+    for path in sorted((root / "completed_primary_spool").glob("*.json")):
+        row = json.loads(path.read_text())
+        rollout_id = str(row["rollout_id"])
+        if rollout_id in existing:
+            if existing[rollout_id] != row:
+                raise ValueError("completed primary spool differs from durable trajectory")
+            continue
+        _append_jsonl(target, row)
+        existing[rollout_id] = row
+
+
 def _proposal_failure_kind(detail: str) -> str:
     normalized = detail.casefold()
     if "json" in normalized:
@@ -6152,7 +6552,7 @@ def _proposal_failure_kind(detail: str) -> str:
 
 
 def _proposal_extraction_summary(attempts: list[dict[str, Any]]) -> dict[str, Any]:
-    successes = sum((int(bool(item.get("success"))) for item in attempts))
+    successes = sum(int(bool(item.get("success"))) for item in attempts)
     failure_kinds: dict[str, int] = {}
     for item in attempts:
         kind = item.get("failure_kind")

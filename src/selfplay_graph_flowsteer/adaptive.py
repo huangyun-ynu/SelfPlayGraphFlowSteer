@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import json
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
+
 from .aime_submission import is_aime_dataset
 from .alfworld import alfworld_lifecycles
 from .answer_submission import AnswerFinalizer, AnswerSubmission, qa_token_f1
@@ -34,6 +36,7 @@ from .runtime import (
     artifact_backend_failure_records,
     artifact_integrity_failure_risks,
 )
+from .skills import SolverSkillBank
 from .swebench import public_swe_evaluation, swe_lifecycles
 from .webshop import webshop_lifecycles
 
@@ -56,7 +59,9 @@ _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES = frozenset(
 )
 
 
-def _deduplicate_backend_request_events(events: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+def _deduplicate_backend_request_events(
+    events: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
     unique: list[dict[str, Any]] = []
     seen: set[str] = set()
     for event in events:
@@ -70,7 +75,10 @@ def _deduplicate_backend_request_events(events: Iterable[dict[str, Any]]) -> lis
     return unique
 
 
-def _aggregate_output_agent_tool_evidence(canvas: GraphCanvas, output_artifact: Any) -> None:
+def _aggregate_output_agent_tool_evidence(
+    canvas: GraphCanvas,
+    output_artifact: Any,
+) -> None:
     """Make final-output integrity reflect its whole Worker execution history.
 
     A prompt revision replaces the current Artifact, but it does not erase the
@@ -80,11 +88,13 @@ def _aggregate_output_agent_tool_evidence(canvas: GraphCanvas, output_artifact: 
     current-Artifact facts for debugging while publishing an output-Agent-wide
     ledger for terminal eligibility and reporting.
     """
+
     if output_artifact is None:
         return
     output_agent = str(getattr(output_artifact, "agent_id", "")).strip()
     if not output_agent:
         return
+
     current_evidence = dict(getattr(output_artifact, "runtime_tool_evidence", {}) or {})
     seen_artifacts: set[str] = set()
     successful_call_ids: list[str] = []
@@ -98,58 +108,55 @@ def _aggregate_output_agent_tool_evidence(canvas: GraphCanvas, output_artifact: 
             if str(getattr(artifact, "agent_id", "")) != output_agent:
                 continue
             artifact_id = str(getattr(artifact, "artifact_id", "")).strip()
+            # Execution reports contain snapshots of the Runtime cache.  The
+            # same Artifact may appear in later zero-work synchronization
+            # reports, so count each material Artifact only once.
             identity = artifact_id or f"history-{id(artifact)}"
             if identity in seen_artifacts:
                 continue
             seen_artifacts.add(identity)
             evidence = dict(getattr(artifact, "runtime_tool_evidence", {}) or {})
             successful_call_ids.extend(
-                (
-                    f"{identity}:{value}"
-                    for value in evidence.get("successful_call_ids", ())
-                    if str(value).strip()
-                )
+                f"{identity}:{value}"
+                for value in evidence.get("successful_call_ids", ())
+                if str(value).strip()
             )
             failed_call_ids.extend(
-                (
-                    f"{identity}:{value}"
-                    for value in evidence.get("failed_call_ids", ())
-                    if str(value).strip()
-                )
+                f"{identity}:{value}"
+                for value in evidence.get("failed_call_ids", ())
+                if str(value).strip()
             )
             failure_codes.extend(
-                (str(value) for value in evidence.get("failure_codes", ()) if str(value).strip())
+                str(value) for value in evidence.get("failure_codes", ()) if str(value).strip()
             )
+
+    # The selected Artifact can be produced by a recovery step after the last
+    # normal Canvas execution.  Include it even if no history report retained
+    # it yet.
     current_id = str(getattr(output_artifact, "artifact_id", "")).strip()
     current_identity = current_id or f"current-{id(output_artifact)}"
     if current_identity not in seen_artifacts:
         seen_artifacts.add(current_identity)
         successful_call_ids.extend(
-            (
-                f"{current_identity}:{value}"
-                for value in current_evidence.get("successful_call_ids", ())
-                if str(value).strip()
-            )
+            f"{current_identity}:{value}"
+            for value in current_evidence.get("successful_call_ids", ())
+            if str(value).strip()
         )
         failed_call_ids.extend(
-            (
-                f"{current_identity}:{value}"
-                for value in current_evidence.get("failed_call_ids", ())
-                if str(value).strip()
-            )
+            f"{current_identity}:{value}"
+            for value in current_evidence.get("failed_call_ids", ())
+            if str(value).strip()
         )
         failure_codes.extend(
-            (
-                str(value)
-                for value in current_evidence.get("failure_codes", ())
-                if str(value).strip()
-            )
+            str(value) for value in current_evidence.get("failure_codes", ()) if str(value).strip()
         )
+
     attempted_count = len(successful_call_ids) + len(failed_call_ids)
     successful_count = len(successful_call_ids)
     failed_count = len(failed_call_ids)
     if attempted_count == 0:
         return
+
     all_actions_failed = successful_count == 0
     updated_evidence = {
         **current_evidence,
@@ -172,7 +179,13 @@ def _aggregate_output_agent_tool_evidence(canvas: GraphCanvas, output_artifact: 
         },
     }
     if not all_actions_failed:
-        cleared = {"all_tool_actions_failed", "unsupported_tool_verification_claim"}
+        # These two risks are defined by the absence of any trusted tool
+        # success.  They are false once the full output-Agent history contains
+        # a successful Action; keep terminal failure itself intact.
+        cleared = {
+            "all_tool_actions_failed",
+            "unsupported_tool_verification_claim",
+        }
         output_artifact.integrity_risks = [
             risk for risk in output_artifact.integrity_risks if risk not in cleared
         ]
@@ -191,13 +204,15 @@ def _aggregate_output_agent_tool_evidence(canvas: GraphCanvas, output_artifact: 
             else getattr(output_artifact, "confidence", 0.0)
         )
         output_artifact.confidence = max(
-            0.0, min(1.0, claimed_confidence, *confidence_caps.values())
+            0.0,
+            min(1.0, claimed_confidence, *confidence_caps.values()),
         )
     output_artifact.runtime_tool_evidence = updated_evidence
 
 
 def _is_model_attributed_terminal_tool_failure(artifact: Any) -> bool:
     """Whether a terminal tool failure is a completed model-policy outcome."""
+
     evidence = dict(getattr(artifact, "runtime_tool_evidence", {}) or {})
     failure_codes = {
         str(value).strip() for value in evidence.get("failure_codes", ()) if str(value).strip()
@@ -205,15 +220,17 @@ def _is_model_attributed_terminal_tool_failure(artifact: Any) -> bool:
     return bool(
         evidence.get("terminal_failure")
         and failure_codes
-        and (failure_codes <= _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES)
+        and failure_codes <= _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES
     )
 
 
 def _swe_is_infrastructure_failure(evaluation: dict[str, Any]) -> bool:
-    return str(evaluation.get("status", "")).strip().casefold() in _SWE_INFRASTRUCTURE_STATUSES
+    return str(evaluation.get("status", "")).strip().casefold() in (_SWE_INFRASTRUCTURE_STATUSES)
 
 
-def _runtime_owned_swe_policy_evaluation(artifact: Any) -> dict[str, Any] | None:
+def _runtime_owned_swe_policy_evaluation(
+    artifact: Any,
+) -> dict[str, Any] | None:
     if artifact is None or not isinstance(artifact.swe_progress, dict):
         return None
     raw_policy_failure = artifact.swe_progress.get("policy_failure")
@@ -223,7 +240,7 @@ def _runtime_owned_swe_policy_evaluation(artifact: Any) -> dict[str, Any] | None
     if not (
         policy_failure.get("status") == "typed_policy_failure"
         and policy_failure.get("attribution") == "model_policy"
-        and (policy_failure.get("normalized_diff_empty") is True)
+        and policy_failure.get("normalized_diff_empty") is True
     ):
         return None
     return {
@@ -239,7 +256,11 @@ def _runtime_owned_swe_policy_evaluation(artifact: Any) -> dict[str, Any] | None
     }
 
 
-def _requires_structural_exploration(action_adapter: Any, seed: int, policy: str) -> bool:
+def _requires_structural_exploration(
+    action_adapter: Any,
+    seed: int,
+    policy: str,
+) -> bool:
     if policy == "off":
         return False
     if policy != "stratified":
@@ -247,7 +268,7 @@ def _requires_structural_exploration(action_adapter: Any, seed: int, policy: str
     return bool(
         action_adapter is not None
         and action_adapter.environment_state.value == "stateless"
-        and (int(seed) % 5 in {1, 2, 3})
+        and int(seed) % 5 in {1, 2, 3}
     )
 
 
@@ -257,24 +278,30 @@ class AdaptiveSolverResult:
     verification: VerificationResult | None
     trace: ExecutionTrace
     flowsteer_structure: FlowSteerStructureEvaluation
+    skills_used: tuple[str, ...] = ()
+    skill_context: dict[str, Any] = field(default_factory=dict)
     answer_submission: AnswerSubmission | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
             "director_run": self.director_run.to_dict(),
-            "verification": {
-                "score": self.verification.score,
-                "passed": self.verification.passed,
-                "verifier": self.verification.verifier,
-                "detail": self.verification.detail,
-            }
-            if self.verification
-            else None,
+            "verification": (
+                {
+                    "score": self.verification.score,
+                    "passed": self.verification.passed,
+                    "verifier": self.verification.verifier,
+                    "detail": self.verification.detail,
+                }
+                if self.verification
+                else None
+            ),
             "trace": self.trace.to_dict(),
             "flowsteer_structure": self.flowsteer_structure.to_dict(),
-            "answer_submission": self.answer_submission.to_dict()
-            if self.answer_submission
-            else None,
+            "skills_used": list(self.skills_used),
+            "skill_context": self.skill_context,
+            "answer_submission": (
+                self.answer_submission.to_dict() if self.answer_submission else None
+            ),
         }
 
 
@@ -287,6 +314,7 @@ class AdaptiveWorkflowSolver:
         director_backend: ChatBackend,
         runtime: MultiAgentRuntime,
         verifier: Verifier | None = None,
+        skillbank: SolverSkillBank | None = None,
         trace_store: JSONLTraceStore | None = None,
         canvas_config: CanvasConfig | None = None,
         runtime_routes: tuple[str, ...] = (),
@@ -302,6 +330,7 @@ class AdaptiveWorkflowSolver:
         self.director_backend = director_backend
         self.runtime = runtime
         self.verifier = verifier
+        self.skillbank = skillbank
         self.trace_store = trace_store
         self.canvas_config = canvas_config
         self.runtime_routes = tuple(runtime_routes)
@@ -319,7 +348,12 @@ class AdaptiveWorkflowSolver:
         self.active_canvas: GraphCanvas | None = None
 
     def finalize_answer(
-        self, task: TaskSpec, raw_answer: str, *, raw_summary: str = "", allow_model: bool = True
+        self,
+        task: TaskSpec,
+        raw_answer: str,
+        *,
+        raw_summary: str = "",
+        allow_model: bool = True,
     ) -> AnswerSubmission:
         if self.answer_finalizer is None and is_aime_dataset(task.metadata.get("dataset", "")):
             return AnswerFinalizer().finalize(task, raw_answer)
@@ -333,11 +367,30 @@ class AdaptiveWorkflowSolver:
                 valid=bool(raw),
             )
         return self.answer_finalizer.finalize(
-            task, raw_answer, raw_summary=raw_summary, allow_model=allow_model
+            task,
+            raw_answer,
+            raw_summary=raw_summary,
+            allow_model=allow_model,
         )
 
     def solve(self, task: TaskSpec, *, run_id: str) -> AdaptiveSolverResult:
         task.metadata["judge_evaluation_scope"] = f"primary:{run_id}:{self.runtime.seed}"
+
+        skill_manifest = {}
+        if self.skillbank and hasattr(self.skillbank, "select_context"):
+            selected_skills, skill_context, skill_manifest = self.skillbank.select_context(
+                task.prompt,
+                task_type=task.task_type,
+                tokenizer=self.director_tokenizer,
+                tools=getattr(self.runtime.executor, "tools", {}).keys(),
+            )
+        else:
+            selected_skills = (
+                self.skillbank.retrieve(task.prompt, task_type=task.task_type)
+                if self.skillbank
+                else []
+            )
+            skill_context = SolverSkillBank.format_prompt_context(selected_skills)
         action_adapter = self.action_registry.resolve(task)
         lifecycle_tools = getattr(self.runtime.executor, "tools", {})
         active_webshop_lifecycles = webshop_lifecycles(lifecycle_tools)
@@ -366,7 +419,7 @@ class AdaptiveWorkflowSolver:
                 lifecycle.bind_task(task)
             self.runtime.environment_fingerprint = active_swe_lifecycles[0].environment_fingerprint
         base_canvas_config = self.canvas_config or CanvasConfig()
-        (dataset_key, selected_token_budget) = base_canvas_config.token_budget_for_dataset(
+        dataset_key, selected_token_budget = base_canvas_config.token_budget_for_dataset(
             task.metadata.get("dataset", "")
         )
         task.metadata["canvas_token_budget"] = {
@@ -385,10 +438,16 @@ class AdaptiveWorkflowSolver:
             task_type=task.task_type,
             action_adapter=action_adapter,
             dataset=str(task.metadata.get("dataset", "")),
-            duplicate_responsibility_policy=self.swe_duplicate_responsibility_policy,
+            duplicate_responsibility_policy=(self.swe_duplicate_responsibility_policy),
             rollout_deadline=self.rollout_deadline,
+            # The default policy is off so graph size remains task-conditioned.
+            # The optional stratified ablation reproduces the historical behavior:
+            # three of five stateless sibling seeds must try a connected multi-Agent
+            # graph, while stateful environments retain dynamic topology choice.
             structural_exploration_required=_requires_structural_exploration(
-                action_adapter, self.runtime.seed, base_canvas_config.structural_exploration_policy
+                action_adapter,
+                self.runtime.seed,
+                base_canvas_config.structural_exploration_policy,
             ),
             binary_relation_policy=self.director_tokenizer is not None,
         )
@@ -397,6 +456,7 @@ class AdaptiveWorkflowSolver:
             run = GraphDirector(
                 backend=self.director_backend,
                 canvas=canvas,
+                solver_skill_context=skill_context,
                 prompt_variant=self.director_prompt_variant,
                 tokenizer=self.director_tokenizer,
                 call_namespace=run_id,
@@ -419,10 +479,10 @@ class AdaptiveWorkflowSolver:
         if (
             run.finished
             and action_adapter is not None
-            and (action_adapter.adapter_id == "aime")
-            and (output_artifact is not None)
-            and ("terminal_tool_failure" in artifact_integrity_failure_risks(output_artifact))
-            and (not _is_model_attributed_terminal_tool_failure(output_artifact))
+            and action_adapter.adapter_id == "aime"
+            and output_artifact is not None
+            and "terminal_tool_failure" in artifact_integrity_failure_risks(output_artifact)
+            and not _is_model_attributed_terminal_tool_failure(output_artifact)
         ):
             before_artifact_id = output_artifact.artifact_id
             before_risks = artifact_integrity_failure_risks(output_artifact)
@@ -442,15 +502,17 @@ class AdaptiveWorkflowSolver:
                 "reason": "terminal_tool_failure",
                 "output_agent": canvas.graph.output_agent,
                 "before_artifact_id": before_artifact_id,
-                "after_artifact_id": output_artifact.artifact_id
-                if output_artifact is not None
-                else None,
+                "after_artifact_id": (
+                    output_artifact.artifact_id if output_artifact is not None else None
+                ),
                 "before_integrity_risks": before_risks,
                 "after_integrity_risks": after_risks,
                 "recovered": not after_risks,
-                "worker_model_calls": recovery_step.execution.worker_model_calls_total
-                if recovery_step.execution is not None
-                else 0,
+                "worker_model_calls": (
+                    recovery_step.execution.worker_model_calls_total
+                    if recovery_step.execution is not None
+                    else 0
+                ),
             }
             if output_artifact is not None:
                 run.output = output_artifact.answer
@@ -471,7 +533,7 @@ class AdaptiveWorkflowSolver:
                 "alfworld_progress": dict(artifact.alfworld_progress),
                 "webshop_progress": dict(artifact.webshop_progress),
             }
-            for (agent_id, artifact) in self.runtime.artifacts.items()
+            for agent_id, artifact in self.runtime.artifacts.items()
         }
         output_integrity_failure_risks = (
             artifact_integrity_failure_risks(output_artifact) if output_artifact is not None else []
@@ -529,6 +591,8 @@ class AdaptiveWorkflowSolver:
                         sole.environment_result.get("environment_completed") is True
                         and sole.environment_result.get("won") is True
                     ):
+                        # Preserve a unique already-won episode, without setting
+                        # output or selecting the best of multiple Agent runs.
                         environment_result = dict(sole.environment_result)
                         task.metadata["environment_result_preservation"] = {
                             "source": "sole_completed_episode",
@@ -547,6 +611,10 @@ class AdaptiveWorkflowSolver:
             )
             policy_evaluation = _runtime_owned_swe_policy_evaluation(output_artifact)
             if output_agent and policy_evaluation is not None:
+                # This terminal state is proven by the trusted local Action
+                # ledger, not by private SWE-bench tests.  Calling the remote
+                # harness for an empty patch would add latency and could turn a
+                # valid model-policy negative into an infrastructure failure.
                 evaluation = policy_evaluation
             elif output_agent and active_swe_lifecycles[0].harness_backend is not None:
                 private_evaluation = active_swe_lifecycles[0].evaluate_artifact(output_agent)
@@ -587,11 +655,9 @@ class AdaptiveWorkflowSolver:
             if artifact.answer == WORKER_BACKEND_FAILURE_SENTINEL
         ]
         backend_request_events = _deduplicate_backend_request_events(
-            (
-                event
-                for artifact in self.runtime.artifacts.values()
-                for event in artifact.backend_request_events
-            )
+            event
+            for artifact in self.runtime.artifacts.values()
+            for event in artifact.backend_request_events
         )
         task.metadata["backend_request_events"] = backend_request_events
         answer_submission = self.finalize_answer(
@@ -613,7 +679,9 @@ class AdaptiveWorkflowSolver:
         task.metadata["answer_submission"] = answer_submission.to_dict()
         task.metadata["qa_token_f1"] = qa_token_f1(task, answer_submission.submitted_answer)
         task.metadata["qa_official_metrics"] = qa_official_metrics(
-            task.metadata.get("dataset"), answer_submission.submitted_answer, task.reference
+            task.metadata.get("dataset"),
+            answer_submission.submitted_answer,
+            task.reference,
         )
         terminal_failure = terminal_policy_failure(
             str(task.metadata.get("dataset", "")),
@@ -631,17 +699,19 @@ class AdaptiveWorkflowSolver:
         )
         task.metadata["runtime_terminal_policy_failure"] = terminal_failure
         trusted_environment = any(
-            (
-                trusted_environment_outcome(dataset, task.metadata.get(key))
-                for (dataset, key) in (
-                    ("alfworld", "alfworld_environment_result"),
-                    ("webshop", "webshop_environment_result"),
-                    ("swe_bench", "swe_environment_result"),
-                )
+            trusted_environment_outcome(dataset, task.metadata.get(key))
+            for dataset, key in (
+                ("alfworld", "alfworld_environment_result"),
+                ("webshop", "webshop_environment_result"),
+                ("swe_bench", "swe_environment_result"),
             )
         )
         if backend_failures:
+            # Backend availability is not task correctness. Keep the trace for
+            # diagnosis, but do not verify the sentinel or commit zero reward to
+            # either MACE bandit. The rollout runner will leave this ID missing.
             self.runtime.discard_peer_rewards("worker_backend_failure")
+
             failure_details = [
                 {**record, "agent_id": artifact.agent_id}
                 for artifact in backend_failures
@@ -649,7 +719,7 @@ class AdaptiveWorkflowSolver:
             ]
             task.metadata["worker_backend_failure"] = {
                 "count": len(backend_failures),
-                "agents": sorted((artifact.agent_id for artifact in backend_failures)),
+                "agents": sorted(artifact.agent_id for artifact in backend_failures),
                 "routes": sorted(
                     {artifact.model_route or "unassigned" for artifact in backend_failures}
                 ),
@@ -658,28 +728,35 @@ class AdaptiveWorkflowSolver:
                 ),
                 "failure_details": failure_details,
                 "request_events": backend_request_events,
-                "retryable": any((bool(record.get("retryable")) for record in failure_details)),
+                "retryable": any(bool(record.get("retryable")) for record in failure_details),
                 "counts_toward_route_circuit": any(
-                    (bool(record.get("counts_toward_route_circuit")) for record in failure_details)
+                    bool(record.get("counts_toward_route_circuit")) for record in failure_details
                 ),
                 "disable_route": any(
-                    (bool(record.get("disable_route")) for record in failure_details)
+                    bool(record.get("disable_route")) for record in failure_details
                 ),
             }
+            # A later backend failure cannot erase an already committed
+            # official environment result. Keep the incident as a separate
+            # training exclusion; never ask a text Judge to score the sentinel.
             verification = (
                 self.verifier.verify(task, answer_submission.submitted_answer)
                 if trusted_environment and self.verifier
                 else None
             )
+
         elif (
             terminal_failure
-            and (not trusted_environment)
+            and not trusted_environment
             and (
                 not answer_submission.valid
                 or canonical_dataset_name(task.metadata.get("dataset", ""))
                 in {"alfworld", "webshop", "swe_bench"}
             )
         ):
+            # A missing answer is not a low-quality HealthBench answer: only
+            # this typed terminal path bypasses Judge. Valid answers still use
+            # the complete official rubric and continuous reward adapter.
             verification = VerificationResult(
                 0.0,
                 False,
@@ -698,6 +775,9 @@ class AdaptiveWorkflowSolver:
         elif not answer_submission.valid and canonical_dataset_name(
             task.metadata.get("dataset", "")
         ) in {"aime", "nq_open", "hotpotqa", "healthbench_professional"}:
+            # No legal answer and no explicit terminal evidence: unscored, not
+            # an invented Judge failure/zero. A valid low-quality answer still
+            # reaches the normal verifier below.
             verification = None
             task.metadata["outcome_exclusion_reason"] = "invalid_submission_attribution_unknown"
         else:
@@ -709,14 +789,19 @@ class AdaptiveWorkflowSolver:
                     f"invalid_answer_submission:{answer_submission.detail}",
                 )
                 if self.verifier
-                and (not answer_submission.valid)
+                and not answer_submission.valid
                 and is_aime_dataset(task.metadata.get("dataset", ""))
                 else self.verifier.verify(task, answer_submission.submitted_answer)
                 if self.verifier
                 else None
             )
+        # Model selection is a Director action trained from final graph reward.
+        # Never score a local responsibility against the original task answer.
         trace = trace_from_canvas(
-            run_id=run_id, task=task, canvas=canvas, verification=verification
+            run_id=run_id,
+            task=task,
+            canvas=canvas,
+            verification=verification,
         )
         if self.trace_store:
             self.trace_store.append(trace)
@@ -725,6 +810,8 @@ class AdaptiveWorkflowSolver:
             verification=verification,
             trace=trace,
             flowsteer_structure=flowsteer_structure,
+            skills_used=tuple(skill.skill_id for skill in selected_skills),
+            skill_context=skill_manifest,
             answer_submission=answer_submission,
         )
 
@@ -733,8 +820,8 @@ def _reference_reward_verifier(task: TaskSpec) -> Verifier | None:
     if task.reference is None or not str(task.reference).strip():
         return None
     task_type = task.task_type.casefold()
-    if any((value in task_type for value in ("math", "numeric", "number"))):
+    if any(value in task_type for value in ("math", "numeric", "number")):
         return NumericVerifier()
-    if any((value in task_type for value in ("multiple_choice", "choice", "mcq", "gpqa"))):
+    if any(value in task_type for value in ("multiple_choice", "choice", "mcq", "gpqa")):
         return MultipleChoiceVerifier()
     return ExactMatchVerifier()

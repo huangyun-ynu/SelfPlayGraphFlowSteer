@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import argparse
 import json
 import math
@@ -8,8 +9,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+
 from .ads_preprocessing import ADSPreprocessingConfig, prepare_ads_pool
 from .application import (
+    consolidate_selfplay_skills,
     create_adaptive_application,
     create_fixed_pool_proposer,
     create_qwen_task_proposer,
@@ -48,6 +51,7 @@ from .selfplay_runtime import (
     _read_jsonl,
 )
 from .services import ModelServiceSpec, VLLMServiceManager
+from .skills import SolverSkillBank
 from .training import (
     AlternatingGRPOTrainer,
     AlternatingTrainingConfig,
@@ -70,6 +74,7 @@ VERIFIERS = (
     "healthbench_rubric",
     "healthbench_rubric_low_cost",
 )
+
 DEFAULT_CURRICULUM_PROFILE = (
     Path(__file__).resolve().parents[2] / "configs" / "curriculum" / "joint_1500.toml"
 )
@@ -99,10 +104,13 @@ class _CollectedExperimentCycle:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="SelfPlayGraphFlowSteer runtime")
     commands = parser.add_subparsers(dest="command", required=True)
+
     validate = commands.add_parser("validate-config", help="parse and validate a TOML config")
     validate.add_argument("path", type=Path)
+
     adaptive = commands.add_parser(
-        "adaptive-solve", help="run Director model selection + MANTA communication + Verifier"
+        "adaptive-solve",
+        help="run Director model selection + MANTA communication + Verifier + SkillBank",
     )
     adaptive.add_argument("--task", required=True)
     adaptive.add_argument(
@@ -124,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     adaptive.add_argument("--runtime-base-url")
     adaptive.add_argument("--runtime-api-key")
     adaptive.add_argument("--runtime-model")
+
     selfplay = commands.add_parser(
         "selfplay-rollout", help="collect real Proposer/Solver rollouts and training batches"
     )
@@ -179,10 +188,14 @@ def build_parser() -> argparse.ArgumentParser:
     selfplay.add_argument(
         "--resume",
         action="store_true",
-        help="reload a collection only after all primary rollouts are durable; exact missing-ID recollection is disabled",
+        help=(
+            "reload a collection only after all primary rollouts are durable; "
+            "exact missing-ID recollection is disabled"
+        ),
     )
     selfplay.add_argument("--mock", action="store_true")
     selfplay.add_argument("--verifier", choices=VERIFIERS)
+
     train = commands.add_parser(
         "train-cycle", help="update Proposer then Solver from one collected rollout directory"
     )
@@ -192,12 +205,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(__file__).resolve().parents[2] / "configs" / "adaptive.toml",
     )
     train.add_argument("--run-dir", type=Path, required=True)
-    train.add_argument("--proposer-learning-rate", type=float, default=1e-05)
-    train.add_argument("--solver-learning-rate", type=float, default=1e-05)
+    train.add_argument("--proposer-learning-rate", type=float, default=1e-5)
+    train.add_argument("--solver-learning-rate", type=float, default=1e-5)
     train.add_argument("--epochs", type=int, default=1)
     _add_grpo_arguments(train)
     train.add_argument(
-        "--device", help="explicit device override; default/cuda uses the role GPU from [resources]"
+        "--device",
+        help="explicit device override; default/cuda uses the role GPU from [resources]",
     )
     train.add_argument("--full-finetune", action="store_true")
     train.add_argument(
@@ -208,6 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--mock-trainer", action="store_true")
     train.add_argument("--manage-services", action="store_true")
     train.add_argument("--service-state-dir", type=Path, default=Path("state/services"))
+
     benchmark = commands.add_parser(
         "benchmark", help="run a fixed JSONL dataset and optionally compare FlowSteer"
     )
@@ -222,6 +237,7 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--seed", type=int, action="append", default=[])
     benchmark.add_argument("--flowsteer-baseline", type=Path)
     benchmark.add_argument("--mock", action="store_true")
+
     services = commands.add_parser("model-services", help="manage owned vLLM model services")
     services.add_argument("action", choices=("status", "start", "stop", "refresh"))
     services.add_argument(
@@ -233,13 +249,19 @@ def build_parser() -> argparse.ArgumentParser:
     services.add_argument("--role", choices=("proposer", "solver", "runtime", "all"), default="all")
     services.add_argument("--checkpoint", type=Path)
     services.add_argument("--wait-s", type=float, default=120.0)
+
     ads = commands.add_parser(
-        "prepare-ads-pool", help="extract base-policy embeddings/NLL and add ADS K-Means metadata"
+        "prepare-ads-pool",
+        help="extract base-policy embeddings/NLL and add ADS K-Means metadata",
     )
     ads.add_argument("--input", type=Path, action="append", required=True)
     ads.add_argument("--output", type=Path, required=True)
     ads.add_argument("--artifacts-dir", type=Path, required=True)
-    ads.add_argument("--model-path", type=Path, default=Path("models/Qwen3.5-9B"))
+    ads.add_argument(
+        "--model-path",
+        type=Path,
+        default=Path("models/Qwen3.5-9B"),
+    )
     ads.add_argument("--num-clusters", type=int, required=True)
     ads.add_argument("--device", default="cuda:0")
     ads.add_argument("--dtype", choices=("bfloat16", "float16", "float32"), default="bfloat16")
@@ -248,6 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     ads.add_argument("--pca-dim", type=int, default=128)
     ads.add_argument("--seed", type=int, default=42)
     ads.add_argument("--overwrite", action="store_true")
+
     experiment = commands.add_parser(
         "selfplay-experiment",
         help="run repeated rollout -> Proposer update -> Solver update cycles",
@@ -261,7 +284,10 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--frozen-pool-selection",
         type=Path,
-        help="replay the exact fixed-pool selections recorded in a tasks.jsonl file; requires --task-pool and --mock-trainer and is intended for paired evaluation",
+        help=(
+            "replay the exact fixed-pool selections recorded in a tasks.jsonl file; "
+            "requires --task-pool and --mock-trainer and is intended for paired evaluation"
+        ),
     )
     experiment.add_argument(
         "--task-pool",
@@ -293,7 +319,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         choices=(1, 4, 5),
         default=5,
-        help="minimum qualified Worker routes selected from a six-route report; four enables degraded-route experiments; one requires frozen, single-cycle, no-MACE evaluation",
+        help=(
+            "minimum qualified Worker routes selected from a six-route report; "
+            "four enables degraded-route experiments; one requires frozen, "
+            "single-cycle, no-MACE evaluation"
+        ),
     )
     experiment.add_argument("--max-route-report-age-s", type=float, default=1800.0)
     experiment.add_argument(
@@ -304,18 +334,21 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--checkpoint-root",
         type=Path,
-        help="experiment-owned checkpoint directory; defaults to OUTPUT/checkpoints so debug and formal runs cannot overwrite the configured policy lineage",
+        help=(
+            "experiment-owned checkpoint directory; defaults to OUTPUT/checkpoints so "
+            "debug and formal runs cannot overwrite the configured policy lineage"
+        ),
     )
     experiment.add_argument(
         "--runtime-state-root",
         type=Path,
-        help="experiment-owned trace directory; defaults to OUTPUT/runtime_state",
+        help=("experiment-owned SkillBank and trace directory; defaults to OUTPUT/runtime_state"),
     )
     experiment.add_argument("--cycles", type=int, default=1)
     experiment.add_argument(
         "--collection-only",
         action="store_true",
-        help="Preserve training collection, CF and Frontier, but skip both policy updates .",
+        help="Preserve training collection, CF and Frontier, but skip both policy updates and skill consolidation.",
     )
     experiment.add_argument(
         "--final-cycle-collection-only",
@@ -325,12 +358,19 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--final-cycle-evaluation-only",
         action="store_true",
-        help="collect and score the final cycle without updating either policy; the final cycle is recorded as evaluation_only and contributes no optimizer steps",
+        help=(
+            "collect and score the final cycle without updating either policy; "
+            "the final cycle is recorded as evaluation_only and contributes no "
+            "optimizer steps or SkillBank mutations"
+        ),
     )
     experiment.add_argument(
         "--resume",
         action="store_true",
-        help="skip completed cycles and resume training from complete rollout batches; incomplete rollout collection is preserved but not recollected",
+        help=(
+            "skip completed cycles and resume training from complete rollout batches; "
+            "incomplete rollout collection is preserved but not recollected"
+        ),
     )
     experiment.add_argument(
         "--resume-planned-interruption",
@@ -340,27 +380,42 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--resume-transient-backend-circuit",
         action="store_true",
-        help="with --resume, reopen only groups quarantined by a preserved transient Worker backend circuit and collect their exact missing rollout IDs",
+        help=(
+            "with --resume, reopen only groups quarantined by a preserved transient "
+            "Worker backend circuit and collect their exact missing rollout IDs"
+        ),
     )
     experiment.add_argument(
         "--resume-after-attribution-classifier-repair",
         action="store_true",
-        help="with --resume, continue an interrupted collection only after a verified attribution-classifier repair attestation",
+        help=(
+            "with --resume, continue an interrupted collection only after a "
+            "verified attribution-classifier repair attestation"
+        ),
     )
     experiment.add_argument(
         "--resume-after-infrastructure-repair",
         action="store_true",
-        help="with --resume, recollect a preserved immutable task manifest after an attested environment or tool repair",
+        help=(
+            "with --resume, recollect a preserved immutable task manifest after "
+            "an attested environment or tool repair"
+        ),
     )
     experiment.add_argument(
         "--resume-after-uncertain-group-recollection",
         action="store_true",
-        help="with --resume, discard and recollect every sibling of an attested task group whose attribution-uncertain recovery was exhausted",
+        help=(
+            "with --resume, discard and recollect every sibling of an attested "
+            "task group whose attribution-uncertain recovery was exhausted"
+        ),
     )
     experiment.add_argument(
         "--resume-after-proposal-selection-repair",
         action="store_true",
-        help="with --resume, fill attested fixed-pool proposal holes while retaining durable unaffected proposals and primary rollouts",
+        help=(
+            "with --resume, fill attested fixed-pool proposal holes while retaining "
+            "durable unaffected proposals and primary rollouts"
+        ),
     )
     experiment.add_argument("--rollouts", type=int)
     experiment.add_argument("--proposals-per-seed", type=int, default=1)
@@ -388,7 +443,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--backend-failure-retries",
         type=int,
         default=0,
-        help="positive values preserve failed backend slots and continue independent collection; no whole-rollout replay in normal runs (retry count is legacy-only); 0 aborts on a backend incident",
+        help=(
+            "positive values preserve failed backend slots and continue independent collection; "
+            "no whole-rollout replay in normal runs (retry count is legacy-only); "
+            "0 aborts on a backend incident"
+        ),
     )
     experiment.add_argument(
         "--proposer-learning-mode",
@@ -407,12 +466,19 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--allow-skipped-task-groups",
         action="store_true",
-        help="legacy complete mode: allow remaining complete groups; eligible_subset already admits groups with at least two qualified trajectories",
+        help=(
+            "legacy complete mode: allow remaining complete groups; eligible_subset "
+            "already admits groups with at least two qualified trajectories"
+        ),
     )
     experiment.add_argument(
         "--continue-on-uncertain-attribution-exhausted",
         action="store_true",
-        help="diagnostic-only: quarantine a task group after its one attribution-uncertain same-slot recovery is exhausted, instead of aborting the whole cycle; requires --allow-skipped-task-groups in complete mode",
+        help=(
+            "diagnostic-only: quarantine a task group after its one attribution-uncertain "
+            "same-slot recovery is exhausted, instead of aborting the whole cycle; requires "
+            "--allow-skipped-task-groups in complete mode"
+        ),
     )
     experiment.add_argument(
         "--enable-swe",
@@ -456,7 +522,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--async-next-cycle-rollouts",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="collect cycle N+1 from the frozen cycle-N policy snapshots while cycle N updates; requires a distinct inference GPU and permits at most one stale update",
+        help=(
+            "collect cycle N+1 from the frozen cycle-N policy snapshots while cycle N "
+            "updates; requires a distinct inference GPU and permits at most one stale update"
+        ),
     )
     experiment.add_argument(
         "--async-rollout-gpu-id",
@@ -492,29 +561,41 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--replacement-rollouts-per-task", type=int, default=2)
     experiment.add_argument("--counterfactuals-per-rollout", type=int, default=1)
     experiment.add_argument("--verifier", choices=VERIFIERS, default="auto")
-    experiment.add_argument("--proposer-learning-rate", type=float, default=1e-05)
-    experiment.add_argument("--solver-learning-rate", type=float, default=1e-05)
+    experiment.add_argument("--proposer-learning-rate", type=float, default=1e-5)
+    experiment.add_argument("--solver-learning-rate", type=float, default=1e-5)
     experiment.add_argument("--epochs", type=int, default=1)
     _add_grpo_arguments(experiment)
     experiment.add_argument(
-        "--device", help="explicit device override; default/cuda uses the role GPU from [resources]"
+        "--device",
+        help="explicit device override; default/cuda uses the role GPU from [resources]",
     )
     experiment.add_argument("--full-finetune", action="store_true")
     experiment.add_argument("--mock", action="store_true")
     experiment.add_argument("--mock-trainer", action="store_true")
     experiment.add_argument(
-        "--freeze-runtime-state", action="store_true", help="disable persistent runtime updates"
+        "--freeze-runtime-state",
+        action="store_true",
+        help="record rollout-local SkillBank events without persisting cross-rollout updates",
     )
     experiment.add_argument("--manage-services", action="store_true")
     experiment.add_argument("--service-state-dir", type=Path, default=Path("state/services"))
+
     build = commands.add_parser("build-graph", help="validate a graph JSON document")
     build.add_argument("path", type=Path)
+
     inspect_trace = commands.add_parser("inspect-trace", help="inspect stored trace JSONL")
     inspect_trace.add_argument("path", type=Path)
     inspect_trace.add_argument("--run-id")
+
     replay = commands.add_parser("replay", help="replay accepted Canvas actions")
     replay.add_argument("path", type=Path)
     replay.add_argument("--run-id", required=True)
+
+    skills = commands.add_parser("inspect-skillbank", help="inspect Workflow Solver skills")
+    skills.add_argument("path", type=Path)
+    skills.add_argument("--query", default="")
+    skills.add_argument("--task-type", default="")
+
     dry = commands.add_parser("dry-run-selfplay", help="build self-play batches without training")
     dry.add_argument("--mock", action="store_true", required=True)
     dry.add_argument("--num-tasks", type=int, default=2)
@@ -532,11 +613,21 @@ def _nominal_optimizer_steps(
 
 def _add_grpo_arguments(parser: argparse.ArgumentParser) -> None:
     """Expose the FlowSteer optimizer recipe without coupling the two policy LRs."""
+
     parser.add_argument("--clip-range", type=float, default=0.2)
     parser.add_argument("--kl-coefficient", type=float, default=0.005)
     parser.add_argument("--entropy-coefficient", type=float, default=0.0)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--warmup-steps", type=int, default=10)
+    parser.add_argument(
+        "--warmup-start-factor",
+        type=float,
+        default=0.0,
+        help="initial LR / peak LR during warmup; zero preserves the legacy schedule",
+    )
+    parser.add_argument(
+        "--learning-rate-schedule", choices=("cosine", "constant"), default="cosine"
+    )
     parser.add_argument(
         "--total-optimizer-steps",
         type=int,
@@ -567,7 +658,7 @@ def _add_grpo_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--max-micro-batch-tokens",
         type=int,
-        default=16384,
+        default=16_384,
         help="maximum padded tokens in one dynamic device micro-batch",
     )
     parser.add_argument(
@@ -608,7 +699,10 @@ def _add_grpo_arguments(parser: argparse.ArgumentParser) -> None:
         "--short-call-batching",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="experimental short-call batching inside probability precomputation; keep disabled until numerical acceptance",
+        help=(
+            "experimental short-call batching inside probability precomputation; "
+            "keep disabled until numerical acceptance"
+        ),
     )
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--max-sequence-length", type=int, default=4096)
@@ -616,7 +710,9 @@ def _add_grpo_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--lora-alpha", type=int, default=64)
     parser.add_argument("--lora-dropout", type=float, default=0.05)
     parser.add_argument(
-        "--gradient-checkpointing", action=argparse.BooleanOptionalAction, default=True
+        "--gradient-checkpointing",
+        action=argparse.BooleanOptionalAction,
+        default=True,
     )
     parser.add_argument(
         "--activation-cpu-offload",
@@ -628,7 +724,10 @@ def _add_grpo_arguments(parser: argparse.ArgumentParser) -> None:
         "--activation-cpu-offload-min-tokens",
         type=int,
         default=0,
-        help="when activation CPU offload is enabled, stage only micro-batches containing a sequence at least this long; zero stages every call",
+        help=(
+            "when activation CPU offload is enabled, stage only micro-batches "
+            "containing a sequence at least this long; zero stages every call"
+        ),
     )
 
 
@@ -640,7 +739,7 @@ def adaptive_solve(args: argparse.Namespace) -> int:
         current = getattr(config, f"{role}_model")
         role_overrides = {
             field_name: value
-            for (field_name, value) in (
+            for field_name, value in (
                 ("base_url", getattr(args, f"{role}_base_url")),
                 ("api_key", getattr(args, f"{role}_api_key")),
                 ("served_model", getattr(args, f"{role}_model")),
@@ -649,10 +748,13 @@ def adaptive_solve(args: argparse.Namespace) -> int:
             if value is not None
         }
         if role_overrides:
-            config = replace(config, **{f"{role}_model": replace(current, **role_overrides)})
+            config = replace(
+                config,
+                **{f"{role}_model": replace(current, **role_overrides)},
+            )
     runtime_overrides = {
         key: value
-        for (key, value) in (
+        for key, value in (
             ("base_url", args.runtime_base_url),
             ("api_key", args.runtime_api_key),
             ("served_model", args.runtime_model),
@@ -711,6 +813,13 @@ def replay(path: Path, run_id: str) -> int:
     return 0
 
 
+def inspect_skillbank(path: Path, query: str, task_type: str) -> int:
+    bank = SolverSkillBank(path)
+    selected = bank.retrieve(query, task_type=task_type) if query else list(bank.skills.values())
+    print(json.dumps([skill.to_dict() for skill in selected], ensure_ascii=False, indent=2))
+    return 0
+
+
 class _MockProposer:
     def propose(self, seed: SeedInput, *, task_id: str) -> ProposedTask:
         from .observability import TaskSpec
@@ -721,9 +830,11 @@ class _MockProposer:
             task=TaskSpec(
                 task_id,
                 f"Resolve {seed_spec.content}",
-                reference=seed_spec.target_answer
-                if seed_spec.target_answer not in (None, "", [], {})
-                else "ok",
+                reference=(
+                    seed_spec.target_answer
+                    if seed_spec.target_answer not in (None, "", [], {})
+                    else "ok"
+                ),
                 metadata={
                     "selfplay_seed": seed_spec.to_dict(),
                     "required_reasoning_hops": seed_spec.required_reasoning_hops,
@@ -731,7 +842,7 @@ class _MockProposer:
             ),
             response=response,
             token_ids=tuple(response.encode()),
-            action_mask=tuple((1 for _ in response.encode())),
+            action_mask=tuple(1 for _ in response.encode()),
         )
 
 
@@ -746,7 +857,7 @@ def _mock_solver(task: object, rollout_index: int) -> SolverRollout:
         rollout_id=f"{task_id}-r{rollout_index}",
         task_id=task_id,
         token_ids=tuple(response.encode()),
-        action_mask=tuple((1 for _ in response.encode())),
+        action_mask=tuple(1 for _ in response.encode()),
         reward=float(rollout_index % 2 == 0),
         graph=graph.to_dict(),
         seed=rollout_index,
@@ -760,7 +871,7 @@ def dry_run_selfplay(num_tasks: int, rollouts: int, output: Path | None) -> int:
         raise ValueError("num_tasks must be positive")
     result = DryRunSelfPlayCoordinator(
         proposer=_MockProposer(), solve=_mock_solver, rollouts_per_task=rollouts
-    ).run((f"seed-{index}" for index in range(num_tasks)))
+    ).run(f"seed-{index}" for index in range(num_tasks))
     text = json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -783,7 +894,10 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
     fixed_components = None
     if args.task_pool:
         fixed_components = _fixed_pool_components(
-            args.task_pool, config=config, mock=args.mock, seed=args.base_seed
+            args.task_pool,
+            config=config,
+            mock=args.mock,
+            seed=args.base_seed,
         )
         seeds = fixed_components[0].selection_seeds(args.num_tasks or 128)
     seeds = [seed for seed in seeds if not isinstance(seed, str) or seed.strip()]
@@ -800,21 +914,28 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
         None
         if args.mock
         else SemanticGraphFeatureExtractor(
-            E5DelegationEncoder(config.graph_embedding_model_path or "intfloat/e5-base-v2")
+            E5DelegationEncoder(config.skillbank_embedding_model_path or "intfloat/e5-base-v2")
         )
     )
     if fixed_components is not None:
-        (pool, scheduler, retriever, backend) = fixed_components
+        pool, scheduler, retriever, backend = fixed_components
         proposer = create_fixed_pool_proposer(
-            config, pool, scheduler, retriever, backend=backend, tokenizer=tokenizer
+            config,
+            pool,
+            scheduler,
+            retriever,
+            backend=backend,
+            tokenizer=tokenizer,
         )
     elif args.mock:
         proposer = _MockProposer()
     else:
         proposer = create_qwen_task_proposer(config, tokenizer=tokenizer)
+
     route_latency_tracker = RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
     route_token_tracker = RouteTokenTracker(
-        window_size=config.canvas.worker_token_window, path=args.output / "route_token_usage.json"
+        window_size=config.canvas.worker_token_window,
+        path=args.output / "route_token_usage.json",
     )
 
     def application_factory(seed: int):
@@ -841,7 +962,7 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
             args.workers,
             args.proposals_per_seed,
             args.task_window,
-            require_all_proposals=args.task_scheduling_policy == "frozen_manifest_dynamic",
+            require_all_proposals=(args.task_scheduling_policy == "frozen_manifest_dynamic"),
             task_scheduling_policy=args.task_scheduling_policy,
             primary_job_order=args.primary_job_order,
             max_active_task_groups=args.max_active_task_groups,
@@ -852,7 +973,7 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
             rollout_slot_wall_time_s=args.rollout_slot_wall_time_s,
             stateful_slot_wall_time_s=args.stateful_slot_wall_time_s,
             swe_slot_wall_time_s=args.swe_slot_wall_time_s,
-            swe_non_trainable_recovery_attempts=args.swe_non_trainable_recovery_attempts,
+            swe_non_trainable_recovery_attempts=(args.swe_non_trainable_recovery_attempts),
             non_swe_recovery_attempts=args.non_swe_recovery_attempts,
             rollout_no_progress_time_s=args.rollout_no_progress_time_s,
             request_wall_time_s=args.request_wall_time_s,
@@ -867,6 +988,7 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
         ),
         graph_feature_extractor=graph_feature_extractor,
     ).run(seeds, resume=args.resume)
+    consolidate_selfplay_skills(config, result, mock=args.mock, step=result.snapshots["cycle"] + 1)
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
@@ -882,22 +1004,28 @@ def train_cycle(args: argparse.Namespace) -> int:
     adaptive = load_adaptive_config(args.config)
     durable_training_state = _load_optional_json(args.run_dir / "training_state.json") or {}
     pending_metrics_updates = _pending_cycle_metrics_updates(
-        durable_training_state, args.run_dir / "training_metrics_latest.json"
+        durable_training_state,
+        args.run_dir / "training_metrics_latest.json",
     )
     validation_roles = (
         ()
         if pending_metrics_updates is not None
-        else ("solver",)
-        if durable_training_state.get("phase") == "solver"
-        else ("proposer", "solver")
+        else (
+            ("solver",)
+            if durable_training_state.get("phase") == "solver"
+            else ("proposer", "solver")
+        )
     )
     active_roles = {b.role for b in (proposer_batch, solver_batch) if b.samples}
-    validation_roles = tuple((role for role in validation_roles if role in active_roles))
+    validation_roles = tuple(role for role in validation_roles if role in active_roles)
     if validation_roles:
         _validate_rollout_policy_snapshots(
-            args.run_dir, adaptive, allow_stale=args.allow_stale_rollouts, roles=validation_roles
+            args.run_dir,
+            adaptive,
+            allow_stale=args.allow_stale_rollouts,
+            roles=validation_roles,
         )
-    (proposer_device, solver_device) = _training_devices(adaptive, args.device)
+    proposer_device, solver_device = _training_devices(adaptive, args.device)
     if not set(args.solver_data_parallel_gpus or ()) <= set(adaptive.allocated_gpu_ids):
         raise ValueError("Solver data-parallel GPUs must be explicitly allocated in config")
     proposer = _policy_training_config(
@@ -906,9 +1034,9 @@ def train_cycle(args: argparse.Namespace) -> int:
         args.proposer_learning_rate,
         proposer_device,
         args,
-        total_optimizer_steps=args.proposer_total_optimizer_steps
-        or args.total_optimizer_steps
-        or 300,
+        total_optimizer_steps=(
+            args.proposer_total_optimizer_steps or args.total_optimizer_steps or 300
+        ),
     )
     solver = _policy_training_config(
         adaptive.solver_model.base_model_path,
@@ -916,9 +1044,9 @@ def train_cycle(args: argparse.Namespace) -> int:
         args.solver_learning_rate,
         solver_device,
         args,
-        total_optimizer_steps=args.solver_total_optimizer_steps
-        or args.total_optimizer_steps
-        or 300,
+        total_optimizer_steps=(
+            args.solver_total_optimizer_steps or args.total_optimizer_steps or 300
+        ),
     )
     config = AlternatingTrainingConfig(
         proposer,
@@ -952,7 +1080,7 @@ def train_cycle(args: argparse.Namespace) -> int:
 
         def checkpoint_callback(role: str, checkpoint: str) -> None:
             if config.solver.data_parallel_gpu_ids:
-                return
+                return  # Restore both roles after training releases both GPUs.
             if initially_running[role]:
                 manager.refresh(_service_specs(adaptive)[role], checkpoint)
 
@@ -971,11 +1099,16 @@ def train_cycle(args: argparse.Namespace) -> int:
         )
     )
     if pending_metrics_updates is not None:
+        # Both role checkpoints are already durably committed.  A previous CLI
+        # invocation failed only while producing post-update telemetry, so
+        # repeating train_cycle here would apply the same batch a second time.
         results = pending_metrics_updates
     else:
         try:
             results = trainer.train_cycle(
-                proposer_batch, solver_batch, relation_credits=relation_credits
+                proposer_batch,
+                solver_batch,
+                relation_credits=relation_credits,
             )
         finally:
             if manager:
@@ -988,11 +1121,13 @@ def train_cycle(args: argparse.Namespace) -> int:
             updates=results,
             frontier_scores=_load_frontier_scores(args.run_dir / "frontier_scores.json"),
             relation_credits=relation_credits,
+            skillbank_path=adaptive.skillbank_path,
             mace_path=None,
             context={
                 "config": str(args.config.resolve()),
                 "run_dir": str(args.run_dir.resolve()),
                 "verifier": adaptive.verifier,
+                "skills_enabled": adaptive.skillbank_enabled,
                 "model_selection_policy": "director_set_model_v1",
                 "proposer_device": proposer_device,
                 "solver_device": solver_device,
@@ -1005,9 +1140,11 @@ def train_cycle(args: argparse.Namespace) -> int:
 
 
 def _pending_cycle_metrics_updates(
-    state: dict[str, Any], latest_metrics_path: Path
+    state: dict[str, Any],
+    latest_metrics_path: Path,
 ) -> tuple[PolicyUpdateResult, PolicyUpdateResult] | None:
     """Recover telemetry after a committed update without replaying the batch."""
+
     current_cycle = int(state.get("cycle", 0)) - 1
     tagged = {
         row["role"]: row
@@ -1019,12 +1156,10 @@ def _pending_cycle_metrics_updates(
         if int(latest.get("cycle", -1)) >= current_cycle:
             return None
         return tuple(
-            (
-                PolicyUpdateResult(
-                    **{**tagged[role], "step_metrics": tuple(tagged[role].get("step_metrics", ()))}
-                )
-                for role in ("proposer", "solver")
+            PolicyUpdateResult(
+                **{**tagged[role], "step_metrics": tuple(tagged[role].get("step_metrics", ()))}
             )
+            for role in ("proposer", "solver")
         )
     if (
         state.get("phase") != "proposer"
@@ -1055,24 +1190,30 @@ def _pending_cycle_metrics_updates(
         by_role[role] = PolicyUpdateResult(**normalized)
     if set(by_role) != {"proposer", "solver"}:
         raise RuntimeError(
-            "training state contains a committed cycle without a complete proposer/solver history; refusing both telemetry recovery and duplicate optimization"
+            "training state contains a committed cycle without a complete proposer/solver "
+            "history; refusing both telemetry recovery and duplicate optimization"
         )
-    return (by_role["proposer"], by_role["solver"])
+    return by_role["proposer"], by_role["solver"]
 
 
 def benchmark(args: argparse.Namespace) -> int:
     config = replace(
-        load_adaptive_config(args.config), verifier=args.verifier, persist_runtime_updates=False
+        load_adaptive_config(args.config),
+        verifier=args.verifier,
+        persist_runtime_updates=False,
     )
     route_latency_tracker = RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
 
     def application_factory(seed: int):
         return create_adaptive_application(
-            replace(config, seed=seed), mock=args.mock, route_latency_tracker=route_latency_tracker
+            replace(config, seed=seed),
+            mock=args.mock,
+            route_latency_tracker=route_latency_tracker,
         )
 
     records = BenchmarkRunner(
-        application_factory, checkpoint=str(config.solver_model.checkpoint_path)
+        application_factory,
+        checkpoint=str(config.solver_model.checkpoint_path),
     ).run(load_fixed_jsonl(args.dataset), seeds=args.seed or [0])
     baseline = load_flowsteer_records(args.flowsteer_baseline) if args.flowsteer_baseline else None
     payload = write_benchmark(args.output, records, baseline=baseline)
@@ -1181,6 +1322,7 @@ def _async_rollout_service(
     solver_snapshot: str | None = None,
 ) -> tuple[ModelServiceSpec, Any]:
     """Serve the two frozen behavior adapters from one independent base."""
+
     if (
         config.proposer_model.base_model_path.resolve()
         != config.solver_model.base_model_path.resolve()
@@ -1205,27 +1347,25 @@ def _async_rollout_service(
         config.proposer_model.base_model_path,
     )
     solver_adapter = adapter_for(
-        solver_snapshot, config.solver_model.checkpoint_path, config.solver_model.base_model_path
+        solver_snapshot,
+        config.solver_model.checkpoint_path,
+        config.solver_model.base_model_path,
     )
     modules = tuple(
-        (
-            (alias, adapter)
-            for (alias, adapter) in (
-                (proposer_alias, proposer_adapter),
-                (solver_alias, solver_adapter),
-            )
-            if adapter is not None
+        (alias, adapter)
+        for alias, adapter in (
+            (proposer_alias, proposer_adapter),
+            (solver_alias, solver_adapter),
         )
+        if adapter is not None
     )
     base_aliases = tuple(
-        (
-            alias
-            for (alias, adapter) in (
-                (proposer_alias, proposer_adapter),
-                (solver_alias, solver_adapter),
-            )
-            if adapter is None
+        alias
+        for alias, adapter in (
+            (proposer_alias, proposer_adapter),
+            (solver_alias, solver_adapter),
         )
+        if adapter is None
     ) or ("spgfs-async-policy-base",)
     base_url = f"http://127.0.0.1:{port}/v1"
     rollout_config = replace(
@@ -1249,7 +1389,7 @@ def _async_rollout_service(
         extra_env=qwen_vllm_server_env(config.solver_model.served_model),
         gpu_ids=(gpu_id,),
     )
-    return (spec, rollout_config)
+    return spec, rollout_config
 
 
 def _latest_adapter(root: Path) -> Path | None:
@@ -1262,7 +1402,7 @@ def _latest_adapter(root: Path) -> Path | None:
 
 def _training_devices(config, override: str | None) -> tuple[str, str]:
     if override and override != "cuda":
-        return (override, override)
+        return override, override
     return (
         training_device_for_gpu(config.proposer_gpu_id),
         training_device_for_gpu(config.solver_gpu_id),
@@ -1270,11 +1410,13 @@ def _training_devices(config, override: str | None) -> tuple[str, str]:
 
 
 def _restore_managed_policy_services(
-    manager: VLLMServiceManager, config, enabled: dict[str, bool]
+    manager: VLLMServiceManager,
+    config,
+    enabled: dict[str, bool],
 ) -> None:
     specs = _service_specs(config)
     for role in ("proposer", "solver"):
-        if enabled.get(role) and (not manager.status(specs[role]).running):
+        if enabled.get(role) and not manager.status(specs[role]).running:
             manager.start(specs[role])
 
 
@@ -1287,8 +1429,12 @@ def _validate_post_update_state(
     adaptive_config: Any,
 ) -> dict[str, Any]:
     """Cheap committed-state validation; performs no model forward pass."""
+
     started = time.monotonic()
-    policies = {"proposer": training_config.proposer, "solver": training_config.solver}
+    policies = {
+        "proposer": training_config.proposer,
+        "solver": training_config.solver,
+    }
     rows: list[dict[str, Any]] = []
     for update in updates:
         numeric = (update.loss, update.policy_loss, update.kl, update.grad_norm)
@@ -1297,8 +1443,8 @@ def _validate_post_update_state(
                 update.optimizer_steps != 0
                 or update.checkpoint
                 or update.masked_tokens != 0
-                or (not update.skip_reason)
-                or (not all((math.isfinite(float(x)) for x in numeric)))
+                or not update.skip_reason
+                or not all(math.isfinite(float(x)) for x in numeric)
             ):
                 raise RuntimeError(f"invalid skipped {update.role} update record")
             rows.append(
@@ -1313,7 +1459,7 @@ def _validate_post_update_state(
                 }
             )
             continue
-        if update.optimizer_steps <= 0 or not all((math.isfinite(float(x)) for x in numeric)):
+        if update.optimizer_steps <= 0 or not all(math.isfinite(float(x)) for x in numeric):
             raise RuntimeError(f"invalid committed {update.role} update metrics")
         checkpoint = Path(update.checkpoint)
         if not checkpoint.exists():
@@ -1327,7 +1473,18 @@ def _validate_post_update_state(
             for row in update.step_metrics
             if row.get("parameter_update_l2") is not None
         ]
-        if deltas and (not any((value > 0 and math.isfinite(value) for value in deltas))):
+        initial_zero_lr_warmup = bool(
+            policies[update.role].warmup_steps > 0
+            and policies[update.role].warmup_start_factor == 0.0
+            and len(update.step_metrics) == 1
+            and update.step_metrics[0].get("role_optimizer_step") == 1
+            and update.step_metrics[0].get("applied_learning_rate") == 0.0
+            and deltas == [0.0]
+        )
+        if deltas and (
+            not all(math.isfinite(value) and value >= 0 for value in deltas)
+            or (not any(value > 0 for value in deltas) and not initial_zero_lr_warmup)
+        ):
             raise RuntimeError(f"{update.role} optimizer reported no finite parameter change")
         rows.append(
             {
@@ -1337,6 +1494,7 @@ def _validate_post_update_state(
                 "optimizer_steps": update.optimizer_steps,
                 "masked_tokens": update.masked_tokens,
                 "parameter_update_l2": deltas,
+                "initial_zero_lr_warmup": initial_zero_lr_warmup,
             }
         )
     services: dict[str, Any] = {}
@@ -1383,26 +1541,25 @@ def _can_resume_isolated_judge_failure(cycle_dir: Path) -> bool:
         if _is_healthbench_judge_backend_failure(row.get("backend_failure", {}))
     ]
     return bool(judge_failures) and all(
-        (
-            row.get("error_type") == "BackendCircuitOpenError"
-            or _is_healthbench_judge_backend_failure(row.get("backend_failure", {}))
-            for row in errors
-        )
+        row.get("error_type") == "BackendCircuitOpenError"
+        or _is_healthbench_judge_backend_failure(row.get("backend_failure", {}))
+        for row in errors
     )
 
 
 def _apply_fresh_route_report(config, args: argparse.Namespace):
     """Restrict a real experiment to a fresh qualified route subset."""
+
     if args.route_report is None:
         if not args.mock:
             raise ValueError("real selfplay-experiment requires --route-report")
-        return (config, None)
+        return config, None
     path = args.route_report.resolve()
     age_s = time.time() - path.stat().st_mtime
     if age_s < 0 or age_s > args.max_route_report_age_s:
         raise ValueError(f"route qualification is stale: age_s={age_s:.1f}")
     payload = json.loads(path.read_text(encoding="utf-8"))
-    requested = frozenset((str(value) for value in payload.get("routes_requested", [])))
+    requested = frozenset(str(value) for value in payload.get("routes_requested", []))
     required = set(config.worker_runtime_routes) | {
         member for members in config.runtime_endpoint_pools.values() for member in members
     }
@@ -1411,6 +1568,7 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
     if not required <= requested:
         raise ValueError("route report must probe all configured route candidates and pool members")
     minimum_selected_routes = int(getattr(args, "minimum_selected_routes", 5))
+
     if minimum_selected_routes not in {1, 4, 5}:
         raise ValueError("minimum selected routes must be one, four or five")
     usable = {str(value) for value in payload.get("usable_routes", [])}
@@ -1418,16 +1576,14 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
     if dedicated_judge and dedicated_judge not in usable:
         raise ValueError("dedicated HealthBench Judge route must be freshly qualified")
     qualified = tuple(
-        (
-            str(value)
-            for value in payload.get("usable_routes", [])
-            if str(value) in config.worker_runtime_routes
-        )
+        str(value)
+        for value in payload.get("usable_routes", [])
+        if str(value) in config.worker_runtime_routes
     )
     if len(set(qualified)) < minimum_selected_routes or not set(qualified) <= requested:
         raise ValueError("route report does not contain the requested minimum usable routes")
     selected = tuple(
-        dict.fromkeys((value.strip() for value in args.route_subset.split(",") if value.strip()))
+        dict.fromkeys(value.strip() for value in args.route_subset.split(",") if value.strip())
     )
     routes = selected or qualified
     if len(set(routes)) < minimum_selected_routes or not set(routes) <= set(qualified):
@@ -1437,11 +1593,25 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
     if missing:
         raise ValueError(f"qualified routes absent from config: {sorted(missing)}")
     primary = routes[0]
+    # HealthBench's official grader is a dedicated GPT route, not part of the
+    # Worker rotation.  Preserve it in the runtime pool whenever the fresh
+    # preflight qualified it, even when --route-subset deliberately reserves
+    # GPT from the five Worker routes.
     judge_route = dedicated_judge or ("gpt" if "gpt" in qualified else None)
-    support_routes = tuple(dict.fromkeys((*routes, *((judge_route,) if judge_route else ()))))
+    # Skill distillation has its own configured model and is not a Worker route.
+    # Preserve it without requiring a new Worker qualification probe.
+    support_routes = tuple(
+        dict.fromkeys(
+            (
+                *routes,
+                *((judge_route,) if judge_route else ()),
+                config.skill_distiller_runtime,
+            )
+        )
+    )
     active_pools = {
         key: members
-        for (key, members) in config.runtime_endpoint_pools.items()
+        for key, members in config.runtime_endpoint_pools.items()
         if key in support_routes
     }
     pool_members = {member for members in active_pools.values() for member in members}
@@ -1455,23 +1625,20 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
         additional_runtimes={route: pool[route] for route in support_routes if route != primary},
         worker_runtime_routes=routes,
         runtime_endpoint_pools=active_pools,
-        support_runtime="gpt" if "gpt" in support_routes else primary,
+        skill_distiller_runtime=config.skill_distiller_runtime,
     )
     restricted.validate()
-    return (
-        restricted,
-        {
-            "path": str(path),
-            "age_s_at_start": age_s,
-            "qualified_routes": list(qualified),
-            "selected_routes": list(routes),
-            "minimum_selected_routes": minimum_selected_routes,
-            "degraded_route_mode": minimum_selected_routes < _DEFAULT_MINIMUM_QUALIFIED_ROUTES,
-            "support_routes": list(support_routes),
-            "healthbench_judge_route": judge_route,
-            "deepseek_excluded": "deepseek" not in routes,
-        },
-    )
+    return restricted, {
+        "path": str(path),
+        "age_s_at_start": age_s,
+        "qualified_routes": list(qualified),
+        "selected_routes": list(routes),
+        "minimum_selected_routes": minimum_selected_routes,
+        "degraded_route_mode": (minimum_selected_routes < _DEFAULT_MINIMUM_QUALIFIED_ROUTES),
+        "support_routes": list(support_routes),
+        "healthbench_judge_route": judge_route,
+        "deepseek_excluded": "deepseek" not in routes,
+    }
 
 
 def _validate_rate_limit_repair_resume(cycle_dir: Path, rollouts_per_task: int) -> bool:
@@ -1497,11 +1664,11 @@ def _validate_rate_limit_repair_resume(cycle_dir: Path, rollouts_per_task: int) 
     if (
         repair.get("status") != "prepared"
         or not affected
-        or (not tasks)
-        or (not affected <= limited)
-        or (not affected <= expected)
-        or (not expected - persisted <= affected)
-        or (not set(repair.get("preserved_rollout_ids", [])) <= persisted)
+        or not tasks
+        or not affected <= limited
+        or not affected <= expected
+        or not (expected - persisted) <= affected
+        or not set(repair.get("preserved_rollout_ids", [])) <= persisted
     ):
         raise ValueError("rate-limit repair does not match preserved failed/successful slots")
     return True
@@ -1509,6 +1676,7 @@ def _validate_rate_limit_repair_resume(cycle_dir: Path, rollouts_per_task: int) 
 
 def _validate_transient_backend_circuit_resume(cycle_dir: Path) -> None:
     """Fail closed before exposing the internal exact-ID resume switch."""
+
     quarantine_path = cycle_dir / "quarantined_groups.jsonl"
     errors_path = cycle_dir / "rollout_errors.jsonl"
     if not quarantine_path.is_file() or not errors_path.is_file():
@@ -1530,7 +1698,7 @@ def _validate_transient_backend_circuit_resume(cycle_dir: Path) -> None:
         if (
             status == "quarantined"
             and reason == "backend_circuit_open"
-            and (not row.get("non_trainable_rollout_ids"))
+            and not row.get("non_trainable_rollout_ids")
         ):
             pending_backend.append(task_id)
             continue
@@ -1539,6 +1707,8 @@ def _validate_transient_backend_circuit_resume(cycle_dir: Path) -> None:
             and reason == "non_trainable_rollout_group"
             and row.get("non_trainable_rollout_ids")
         ):
+            # Permanent unsafe/incomplete outcomes remain quarantined and are
+            # unrelated to reopening exact IDs lost to a later provider outage.
             continue
         if (
             status == "reopened_for_exact_resume"
@@ -1550,8 +1720,17 @@ def _validate_transient_backend_circuit_resume(cycle_dir: Path) -> None:
         invalid_quarantines.append(task_id)
     if not pending_backend or invalid_quarantines:
         raise ValueError(
-            f"resume gate requires at least one pending backend-circuit quarantine and permits only preserved non-trainable groups or fully recovered historical backend groups; invalid={sorted(invalid_quarantines)}"
+            "resume gate requires at least one pending backend-circuit quarantine "
+            "and permits only preserved non-trainable groups or fully recovered "
+            f"historical backend groups; invalid={sorted(invalid_quarantines)}"
         )
+    # These are the concrete outer errors emitted by the collection runtime
+    # around a backend outage.  BackendRetryExhaustedError is the source event
+    # that opens the circuit; BackendCircuitOpenError is then written for IDs
+    # prevented from starting.  Other incomplete IDs already in flight when
+    # the circuit opened can retain their own typed terminal error and are
+    # safe to recollect because every such task is explicitly quarantined by
+    # the backend-circuit event above.
     allowed_backend_errors = {
         "BackendCircuitOpenError",
         "WorkerBackendUnavailableError",
@@ -1568,12 +1747,14 @@ def _validate_transient_backend_circuit_resume(cycle_dir: Path) -> None:
     error_types = {str(row.get("error_type", "")) for row in errors}
     if not errors or "BackendCircuitOpenError" not in error_types or invalid_errors:
         raise ValueError(
-            "resume gate accepts backend errors plus typed errors belonging to groups quarantined by the same backend circuit"
+            "resume gate accepts backend errors plus typed errors belonging to "
+            "groups quarantined by the same backend circuit"
         )
 
 
 def _validate_infrastructure_repair_resume(cycle_dir: Path) -> None:
     """Permit exact IDs only for an explicitly attested fresh recollection."""
+
     repair_path = cycle_dir / "collection_repair_attestation.json"
     if not repair_path.is_file():
         raise ValueError("infrastructure-repair resume requires collection_repair_attestation.json")
@@ -1587,19 +1768,20 @@ def _validate_infrastructure_repair_resume(cycle_dir: Path) -> None:
         and repair.get("affected_rollout_ids")
         and repair.get("repaired_instance_ids")
         and repair.get("repair_evidence")
-        and (repair.get("persisted_rollouts_verified_unaffected") is True)
+        and repair.get("persisted_rollouts_verified_unaffected") is True
     )
     if (
         repair.get("status") != "approved"
         or repair.get("incident_class") != "infrastructure"
-        or (not repair.get("source_tasks_sha256"))
-        or (not (valid_full_cycle or valid_exact_missing))
+        or not repair.get("source_tasks_sha256")
+        or not (valid_full_cycle or valid_exact_missing)
     ):
         raise ValueError("invalid infrastructure-repair recollection attestation")
 
 
 def _validate_attribution_classifier_repair_resume(cycle_dir: Path) -> None:
     """Permit one missing slot only after a concrete post-terminal classifier fix."""
+
     repair_path = cycle_dir / "collection_repair_attestation.json"
     if not repair_path.is_file():
         raise ValueError("classifier-repair resume requires collection_repair_attestation.json")
@@ -1617,21 +1799,24 @@ def _validate_attribution_classifier_repair_resume(cycle_dir: Path) -> None:
         repair.get("status") != "approved"
         or repair.get("incident_class") != "attribution_uncertain_recovery_exhausted"
         or repair.get("recollection_mode") != "exact_reclassified_rollout_ids"
-        or (not repair.get("source_tasks_sha256"))
-        or (not repair.get("repair_evidence"))
-        or (repair.get("persisted_rollouts_verified_unaffected") is not True)
-        or (not affected)
-        or (len(affected) != 1)
-        or (affected & persisted)
-        or (affected_tasks - task_ids)
+        or not repair.get("source_tasks_sha256")
+        or not repair.get("repair_evidence")
+        or repair.get("persisted_rollouts_verified_unaffected") is not True
+        or not affected
+        or len(affected) != 1
+        or affected & persisted
+        or affected_tasks - task_ids
     ):
         raise ValueError("invalid attribution-classifier repair attestation")
 
 
 def _validate_uncertain_group_recollection_resume(
-    cycle_dir: Path, *, rollouts_per_task: int
+    cycle_dir: Path,
+    *,
+    rollouts_per_task: int,
 ) -> dict[str, int]:
     """Require a fresh group, or verified partial progress from its reopened epoch."""
+
     repair_path = cycle_dir / "collection_repair_attestation.json"
     if not repair_path.is_file():
         raise ValueError("uncertain-group resume requires collection_repair_attestation.json")
@@ -1652,50 +1837,44 @@ def _validate_uncertain_group_recollection_resume(
     } - {""}
     raw_offsets = repair.get("policy_sampling_attempt_offsets", {})
     policy_sampling_attempt_offsets = (
-        {str(task_id): offset for (task_id, offset) in raw_offsets.items()}
+        {str(task_id): offset for task_id, offset in raw_offsets.items()}
         if isinstance(raw_offsets, dict)
         else {}
     )
     valid_offsets = bool(
         set(policy_sampling_attempt_offsets) == affected_tasks
         and all(
-            (
-                isinstance(offset, int) and (not isinstance(offset, bool)) and (offset > 0)
-                for offset in policy_sampling_attempt_offsets.values()
-            )
+            isinstance(offset, int) and not isinstance(offset, bool) and offset > 0
+            for offset in policy_sampling_attempt_offsets.values()
         )
     )
     incidents = _read_jsonl(cycle_dir / "collection_incidents.jsonl")
     reopened_epoch = bool(
         valid_offsets
         and incidents
-        and (incidents[-1].get("event") == "collection_abort_reopened_for_full_group_recollection")
-        and (incidents[-1].get("task_id") in affected_tasks)
+        and incidents[-1].get("event") == "collection_abort_reopened_for_full_group_recollection"
+        and incidents[-1].get("task_id") in affected_tasks
     )
     current_epoch_rows = all(
-        (
-            row.get("task_id") in affected_tasks
-            and row.get("metadata", {}).get("policy_sampling_attempt_offset")
-            == policy_sampling_attempt_offsets.get(row.get("task_id"))
-            for row in _read_jsonl(cycle_dir / "solver_rollouts.jsonl")
-            if str(row.get("rollout_id", "")) in affected_rollouts
-        )
+        row.get("task_id") in affected_tasks
+        and row.get("metadata", {}).get("policy_sampling_attempt_offset")
+        == policy_sampling_attempt_offsets.get(row.get("task_id"))
+        for row in _read_jsonl(cycle_dir / "solver_rollouts.jsonl")
+        if str(row.get("rollout_id", "")) in affected_rollouts
     )
     if (
         repair.get("status") != "approved"
         or repair.get("incident_class") != "attribution_uncertain_recovery_exhausted"
         or repair.get("recollection_mode") != "exact_affected_task_groups"
-        or (repair.get("group_recollection_scope") != "all_siblings")
-        or (not repair.get("source_tasks_sha256"))
-        or (not repair.get("repair_evidence"))
-        or (repair.get("persisted_rollouts_verified_unaffected") is not True)
-        or (not affected_tasks)
-        or (affected_tasks - task_ids)
-        or (affected_rollouts != expected_rollouts)
-        or (
-            affected_rollouts & persisted_rollouts and (not (reopened_epoch and current_epoch_rows))
-        )
-        or (not valid_offsets)
+        or repair.get("group_recollection_scope") != "all_siblings"
+        or not repair.get("source_tasks_sha256")
+        or not repair.get("repair_evidence")
+        or repair.get("persisted_rollouts_verified_unaffected") is not True
+        or not affected_tasks
+        or affected_tasks - task_ids
+        or affected_rollouts != expected_rollouts
+        or (affected_rollouts & persisted_rollouts and not (reopened_epoch and current_epoch_rows))
+        or not valid_offsets
     ):
         raise ValueError("invalid uncertain-group recollection attestation")
     return policy_sampling_attempt_offsets
@@ -1703,6 +1882,7 @@ def _validate_uncertain_group_recollection_resume(
 
 def _validate_proposal_selection_repair_resume(cycle_dir: Path) -> None:
     """Allow exact resume only for fixed-pool task IDs missing after a typed proposal bug."""
+
     repair_path = cycle_dir / "collection_repair_attestation.json"
     if not repair_path.is_file():
         raise ValueError("proposal-selection repair requires collection_repair_attestation.json")
@@ -1724,13 +1904,13 @@ def _validate_proposal_selection_repair_resume(cycle_dir: Path) -> None:
         repair.get("status") != "approved"
         or repair.get("incident_class") != "proposal_selection_failure"
         or repair.get("recollection_mode") != "exact_missing_proposal_and_rollouts"
-        or (not repair.get("source_tasks_sha256"))
-        or (not repair.get("repair_evidence"))
-        or (repair.get("persisted_rollouts_verified_unaffected") is not True)
-        or (not affected_tasks)
-        or (not affected_tasks <= failed_proposals)
-        or (affected_tasks & persisted_tasks)
-        or (affected_tasks & persisted_rollout_tasks)
+        or not repair.get("source_tasks_sha256")
+        or not repair.get("repair_evidence")
+        or repair.get("persisted_rollouts_verified_unaffected") is not True
+        or not affected_tasks
+        or not affected_tasks <= failed_proposals
+        or affected_tasks & persisted_tasks
+        or affected_tasks & persisted_rollout_tasks
     ):
         raise ValueError("invalid proposal-selection repair attestation")
 
@@ -1793,45 +1973,43 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             raise ValueError("async next-cycle rollouts require actual policy updates")
     if (
         args.continue_on_uncertain_attribution_exhausted
-        and (not args.allow_skipped_task_groups)
-        and (args.rollout_group_policy == "complete")
+        and not args.allow_skipped_task_groups
+        and args.rollout_group_policy == "complete"
     ):
         raise ValueError(
             "--continue-on-uncertain-attribution-exhausted requires --allow-skipped-task-groups"
         )
-    if args.resume_planned_interruption and (not args.resume):
+    if args.resume_planned_interruption and not args.resume:
         raise ValueError("--resume-planned-interruption requires --resume")
-    if args.resume_transient_backend_circuit and (not args.resume):
+    if args.resume_transient_backend_circuit and not args.resume:
         raise ValueError("--resume-transient-backend-circuit requires --resume")
-    if args.resume_after_attribution_classifier_repair and (not args.resume):
+    if args.resume_after_attribution_classifier_repair and not args.resume:
         raise ValueError("--resume-after-attribution-classifier-repair requires --resume")
-    if args.resume_after_infrastructure_repair and (not args.resume):
+    if args.resume_after_infrastructure_repair and not args.resume:
         raise ValueError("--resume-after-infrastructure-repair requires --resume")
-    if args.resume_after_uncertain_group_recollection and (not args.resume):
+    if args.resume_after_uncertain_group_recollection and not args.resume:
         raise ValueError("--resume-after-uncertain-group-recollection requires --resume")
-    if args.resume_after_proposal_selection_repair and (not args.resume):
+    if args.resume_after_proposal_selection_repair and not args.resume:
         raise ValueError("--resume-after-proposal-selection-repair requires --resume")
     if args.resume_transient_backend_circuit and (
         args.resume_after_attribution_classifier_repair or args.resume_after_infrastructure_repair
     ):
         raise ValueError("choose only one exact-resume incident policy per self-play experiment")
     selected_repair_policies = sum(
-        (
-            int(value)
-            for value in (
-                args.resume_transient_backend_circuit,
-                args.resume_after_attribution_classifier_repair,
-                args.resume_after_infrastructure_repair,
-                args.resume_after_uncertain_group_recollection,
-                args.resume_after_proposal_selection_repair,
-            )
+        int(value)
+        for value in (
+            args.resume_transient_backend_circuit,
+            args.resume_after_attribution_classifier_repair,
+            args.resume_after_infrastructure_repair,
+            args.resume_after_uncertain_group_recollection,
+            args.resume_after_proposal_selection_repair,
         )
     )
     if selected_repair_policies > 1:
         raise ValueError("choose only one exact-resume repair policy per self-play experiment")
-    if args.frozen_pool_selection and (not args.task_pool):
+    if args.frozen_pool_selection and not args.task_pool:
         raise ValueError("--frozen-pool-selection requires --task-pool")
-    if args.frozen_pool_selection and (not args.mock_trainer):
+    if args.frozen_pool_selection and not args.mock_trainer:
         raise ValueError("--frozen-pool-selection is evaluation-only and requires --mock-trainer")
     curriculum_profile = (
         CurriculumProfile.from_toml(args.curriculum_profile) if args.task_pool else None
@@ -1847,7 +2025,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
     )
     task_window = args.task_window or (curriculum_profile.task_window if curriculum_profile else 1)
     config = replace(
-        load_adaptive_config(args.config), verifier=args.verifier, persist_runtime_updates=False
+        load_adaptive_config(args.config),
+        verifier=args.verifier,
+        persist_runtime_updates=False,
     )
     if args.enable_swe:
         config = replace(config, swe=replace(config.swe, enabled=True))
@@ -1890,18 +2070,31 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 "async rollout GPU must be distinct from both training GPUs and local runtime GPU"
             )
     if args.director_prompt_variant is not None:
-        config = replace(config, director_prompt_variant=args.director_prompt_variant)
+        config = replace(
+            config,
+            director_prompt_variant=args.director_prompt_variant,
+        )
     config.validate()
     if not set(args.solver_data_parallel_gpus or ()) <= set(config.allocated_gpu_ids):
         raise ValueError("Solver data-parallel GPUs must be explicitly allocated in config")
-    (config, route_qualification) = _apply_fresh_route_report(config, args)
-    checkpoint_root = (args.checkpoint_root or args.output / "checkpoints").resolve()
-    runtime_state_root = (args.runtime_state_root or args.output / "runtime_state").resolve()
+    config, route_qualification = _apply_fresh_route_report(config, args)
+    checkpoint_root = (args.checkpoint_root or (args.output / "checkpoints")).resolve()
+    runtime_state_root = (args.runtime_state_root or (args.output / "runtime_state")).resolve()
     config = replace(
         config,
+        # Collection applications do not persist shared mutable adaptation.
+        # Task-window journals and policy snapshots are owned by the runner.
         persist_runtime_updates=False,
-        proposer_model=replace(config.proposer_model, checkpoint_path=checkpoint_root / "proposer"),
-        solver_model=replace(config.solver_model, checkpoint_path=checkpoint_root / "solver"),
+        proposer_model=replace(
+            config.proposer_model,
+            checkpoint_path=checkpoint_root / "proposer",
+        ),
+        solver_model=replace(
+            config.solver_model,
+            checkpoint_path=checkpoint_root / "solver",
+        ),
+        skillbank_path=runtime_state_root / "solver_skillbank.json",
+        skill_cases_path=runtime_state_root / "solver_skill_cases.json",
         trace_path=runtime_state_root / "traces.jsonl",
         route_health_path=runtime_state_root / "route_health.json",
         healthbench_judge_audit_path=args.output.resolve() / "private" / "healthbench_judge",
@@ -1928,12 +2121,14 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             profile=curriculum_profile,
         )
         if args.frozen_pool_selection:
-            (seeds, frozen_proposer) = _load_frozen_pool_selection(
-                args.frozen_pool_selection, fixed_components[0]
+            seeds, frozen_proposer = _load_frozen_pool_selection(
+                args.frozen_pool_selection,
+                fixed_components[0],
             )
             if len(seeds) != tasks_per_cycle:
                 raise ValueError(
-                    f"frozen selection row count must equal tasks_per_cycle: {len(seeds)} != {tasks_per_cycle}"
+                    "frozen selection row count must equal tasks_per_cycle: "
+                    f"{len(seeds)} != {tasks_per_cycle}"
                 )
         else:
             seeds = fixed_components[0].balanced_selection_seeds(tasks_per_cycle)
@@ -1944,14 +2139,15 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
     if not seeds:
         raise ValueError("seed dataset is empty")
     args.output.mkdir(parents=True, exist_ok=True)
-    (proposer_device, solver_device) = _training_devices(config, args.device)
+    proposer_device, solver_device = _training_devices(config, args.device)
     effective_gradient_accumulation = math.ceil(args.mini_batch_size / args.micro_batch_size)
     if (
         args.gradient_accumulation_steps is not None
         and args.gradient_accumulation_steps != effective_gradient_accumulation
     ):
         raise ValueError(
-            "gradient_accumulation_steps must equal ceil(mini_batch_size / micro_batch_size) for SESA-style mini-batch training"
+            "gradient_accumulation_steps must equal ceil(mini_batch_size / micro_batch_size) "
+            "for SESA-style mini-batch training"
         )
     args.gradient_accumulation_steps = effective_gradient_accumulation
     collection_only = getattr(args, "collection_only", False)
@@ -1964,15 +2160,20 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         )
     )
     nominal_proposer_steps = _nominal_optimizer_steps(
-        training_cycles, tasks_per_cycle, args.epochs, args.mini_batch_size
+        training_cycles,
+        tasks_per_cycle,
+        args.epochs,
+        args.mini_batch_size,
     )
     nominal_solver_steps = _nominal_optimizer_steps(
         training_cycles,
         tasks_per_cycle * rollouts_per_task,
         args.epochs,
-        max(1, tasks_per_cycle * rollouts_per_task)
-        if args.rollout_group_policy == "eligible_subset"
-        else args.mini_batch_size,
+        (
+            max(1, tasks_per_cycle * rollouts_per_task)
+            if args.rollout_group_policy == "eligible_subset"
+            else args.mini_batch_size
+        ),
     )
     proposer_total_optimizer_steps = (
         args.proposer_total_optimizer_steps or args.total_optimizer_steps or nominal_proposer_steps
@@ -2048,6 +2249,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             "max_sequence_length": training_config.solver.max_sequence_length,
             "proposer_learning_rate": training_config.proposer.learning_rate,
             "solver_learning_rate": training_config.solver.learning_rate,
+            "skills_enabled": config.skillbank_enabled,
             "allocated_gpu_ids": list(
                 dict.fromkeys(
                     (
@@ -2077,19 +2279,19 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
     def cycle_seeds(cycle: int) -> list[Any]:
         nonlocal seeds
         if fixed_components is not None and frozen_proposer is None:
-            seeds = prewarmed_cycle_seeds.pop(cycle, None) or fixed_components[
-                0
-            ].balanced_selection_seeds(
-                tasks_per_cycle,
-                offset_per_dataset=cycle
-                * math.ceil(tasks_per_cycle / len(fixed_components[1].dataset_cluster_ids)),
+            seeds = prewarmed_cycle_seeds.pop(cycle, None) or (
+                fixed_components[0].balanced_selection_seeds(
+                    tasks_per_cycle,
+                    offset_per_dataset=cycle
+                    * math.ceil(tasks_per_cycle / len(fixed_components[1].dataset_cluster_ids)),
+                )
             )
         if (
             fixed_components is not None
             and curriculum_profile is not None
             and curriculum_profile.nominal_epoch_cycles
-            and (cycle > 0)
-            and (cycle % curriculum_profile.nominal_epoch_cycles == 0)
+            and cycle > 0
+            and cycle % curriculum_profile.nominal_epoch_cycles == 0
         ):
             fixed_components[1].reset_epoch()
         return list(seeds)
@@ -2108,6 +2310,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         evaluation_only = args.final_cycle_evaluation_only and cycle == args.cycles - 1
         cycle_collection_only = _cycle_collection_only(args, cycle)
         cycle_dir = args.output / f"cycle-{cycle:04d}"
+        from .skill_evolution_v2 import freeze_collection
+
+        collection_config = freeze_collection(collection_config, cycle_dir)
         resumed_partial_cycle = bool(args.resume and (cycle_dir / "solver_rollouts.jsonl").exists())
         policy_sampling_attempt_offsets: dict[str, int] = {}
         rate_limit_repair_resume = bool(
@@ -2118,11 +2323,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         if (
             args.resume_after_infrastructure_repair
             and cycle_dir.exists()
-            and (
-                not (
-                    (cycle_dir / "solver_batch.json").exists()
-                    and (cycle_dir / "proposer_batch.json").exists()
-                )
+            and not (
+                (cycle_dir / "solver_batch.json").exists()
+                and (cycle_dir / "proposer_batch.json").exists()
             )
         ):
             _validate_infrastructure_repair_resume(cycle_dir)
@@ -2130,7 +2333,8 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             _validate_attribution_classifier_repair_resume(cycle_dir)
         if args.resume_after_uncertain_group_recollection and cycle_dir.exists():
             policy_sampling_attempt_offsets = _validate_uncertain_group_recollection_resume(
-                cycle_dir, rollouts_per_task=rollouts_per_task
+                cycle_dir,
+                rollouts_per_task=rollouts_per_task,
             )
         if args.resume_after_proposal_selection_repair and cycle_dir.exists():
             _validate_proposal_selection_repair_resume(cycle_dir)
@@ -2153,14 +2357,14 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             if args.mock
             else SemanticGraphFeatureExtractor(
                 E5DelegationEncoder(
-                    collection_config.graph_embedding_model_path or "intfloat/e5-base-v2"
+                    collection_config.skillbank_embedding_model_path or "intfloat/e5-base-v2"
                 )
             )
         )
         if frozen_proposer is not None:
             proposer = frozen_proposer
         elif fixed_components is not None:
-            (pool, scheduler, retriever, backend) = fixed_components
+            pool, scheduler, retriever, backend = fixed_components
             proposer = create_fixed_pool_proposer(
                 collection_config,
                 pool,
@@ -2176,11 +2380,15 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 if args.mock
                 else create_qwen_task_proposer(collection_config, tokenizer=tokenizer)
             )
+
         route_latency_tracker = RouteLatencyTracker(
             window_size=collection_config.canvas.worker_latency_window
         )
         route_token_tracker = RouteTokenTracker(
             window_size=collection_config.canvas.worker_token_window,
+            # Keep one rolling ledger across cycles and process restarts.  A
+            # cycle-local file would cold-start every new cycle and discard
+            # precisely the route history needed by admission control.
             path=args.output / "route_token_usage.json",
         )
 
@@ -2200,10 +2408,11 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
 
         cycle_training_config = training_config
         probability_observer = None
-        if enable_probability_cache and (not (evaluation_only or cycle_collection_only)):
+        if enable_probability_cache and not (evaluation_only or cycle_collection_only):
             if manager is None:
                 raise ValueError(
-                    "async Solver probability cache requires --manage-services so GPU ownership can be transferred safely"
+                    "async Solver probability cache requires --manage-services so GPU ownership "
+                    "can be transferred safely"
                 )
             binding = probability_cache_binding(training_config.solver)
             cache_path = cycle_dir / "solver_probability_cache.jsonl"
@@ -2227,6 +2436,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     probability_cache_binding=binding,
                 ),
             )
+
         rollout_result = SelfPlayRolloutRunner(
             proposer=proposer,
             application_factory=application_factory,
@@ -2235,7 +2445,11 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             output_dir=cycle_dir,
             config=SelfPlayRunConfig(
                 rollouts_per_task,
-                cycle * 100000,
+                cycle * 100_000,
+                # Preserve the complete sampled policy calls up to the same
+                # explicit bound used by the trainer.  A separate 4096-token
+                # rollout cap silently rejected otherwise valid long Director
+                # calls before the configured 32768-token training gate.
                 args.max_sequence_length,
                 args.counterfactuals_per_rollout,
                 rollout_workers,
@@ -2245,7 +2459,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 task_scheduling_policy=args.task_scheduling_policy,
                 primary_job_order=args.primary_job_order,
                 max_active_task_groups=args.max_active_task_groups,
-                structural_exploration_policy=collection_config.canvas.structural_exploration_policy,
+                structural_exploration_policy=(
+                    collection_config.canvas.structural_exploration_policy
+                ),
                 initial_collapse_alert_streak=previous_collapse_streak,
                 rollout_wall_time_s=args.rollout_wall_time_s,
                 stateful_rollout_wall_time_s=args.stateful_rollout_wall_time_s,
@@ -2253,37 +2469,43 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 rollout_slot_wall_time_s=args.rollout_slot_wall_time_s,
                 stateful_slot_wall_time_s=args.stateful_slot_wall_time_s,
                 swe_slot_wall_time_s=args.swe_slot_wall_time_s,
-                swe_non_trainable_recovery_attempts=args.swe_non_trainable_recovery_attempts,
+                swe_non_trainable_recovery_attempts=(args.swe_non_trainable_recovery_attempts),
                 non_swe_recovery_attempts=args.non_swe_recovery_attempts,
                 rollout_no_progress_time_s=args.rollout_no_progress_time_s,
                 request_wall_time_s=args.request_wall_time_s,
                 replacement_rollouts_per_task=args.replacement_rollouts_per_task,
-                allow_exact_rollout_resume=rate_limit_repair_resume
-                or (
-                    args.resume_planned_interruption
-                    and (not (cycle_dir / "primary_outcomes.json").exists())
-                )
-                or args.resume_transient_backend_circuit
-                or (args.resume and _can_resume_isolated_judge_failure(cycle_dir))
-                or (
-                    args.resume
-                    and (cycle_dir / "tasks.jsonl").exists()
-                    and (not (cycle_dir / "solver_rollouts.jsonl").exists())
-                    and (not (cycle_dir / "rollout_errors.jsonl").exists())
-                )
-                or args.resume_after_attribution_classifier_repair
-                or args.resume_after_infrastructure_repair
-                or args.resume_after_uncertain_group_recollection
-                or args.resume_after_proposal_selection_repair
-                or args.continue_on_uncertain_attribution_exhausted,
-                allow_attribution_classifier_repair_resume=args.resume_after_attribution_classifier_repair,
-                allow_infrastructure_repair_resume=args.resume_after_infrastructure_repair,
-                allow_uncertain_group_recollection_resume=args.resume_after_uncertain_group_recollection,
+                allow_exact_rollout_resume=(
+                    rate_limit_repair_resume
+                    or (
+                        args.resume_planned_interruption
+                        and not (cycle_dir / "primary_outcomes.json").exists()
+                    )
+                    or args.resume_transient_backend_circuit
+                    or (args.resume and _can_resume_isolated_judge_failure(cycle_dir))
+                    or (
+                        args.resume
+                        and (cycle_dir / "tasks.jsonl").exists()
+                        and not (cycle_dir / "solver_rollouts.jsonl").exists()
+                        and not (cycle_dir / "rollout_errors.jsonl").exists()
+                    )
+                    or args.resume_after_attribution_classifier_repair
+                    or args.resume_after_infrastructure_repair
+                    or args.resume_after_uncertain_group_recollection
+                    or args.resume_after_proposal_selection_repair
+                    or args.continue_on_uncertain_attribution_exhausted
+                ),
+                allow_attribution_classifier_repair_resume=(
+                    args.resume_after_attribution_classifier_repair
+                ),
+                allow_infrastructure_repair_resume=(args.resume_after_infrastructure_repair),
+                allow_uncertain_group_recollection_resume=(
+                    args.resume_after_uncertain_group_recollection
+                ),
                 policy_sampling_attempt_offsets=policy_sampling_attempt_offsets,
                 route_health_path=collection_config.route_health_path,
                 route_health_cooldown_s=collection_config.route_health_cooldown_s,
                 worker_runtime_routes=collection_config.worker_runtime_routes,
-                rollout_group_policy="complete" if evaluation_only else args.rollout_group_policy,
+                rollout_group_policy=("complete" if evaluation_only else args.rollout_group_policy),
                 proposer_learning_mode=getattr(
                     args, "proposer_learning_mode", "independent_frontier_v2"
                 ),
@@ -2292,10 +2514,12 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 proposer_baseline_path=args.output / "proposer_baseline_state.json",
                 proposer_baseline_cycle=cycle,
                 require_all_planned_task_groups_for_training=(
-                    evaluation_only or args.rollout_group_policy == "complete"
-                )
-                and (not args.allow_skipped_task_groups),
-                continue_on_uncertain_attribution_exhausted=args.continue_on_uncertain_attribution_exhausted,
+                    (evaluation_only or args.rollout_group_policy == "complete")
+                    and not args.allow_skipped_task_groups
+                ),
+                continue_on_uncertain_attribution_exhausted=(
+                    args.continue_on_uncertain_attribution_exhausted
+                ),
                 backend_failure_retry_attempts=args.backend_failure_retries,
                 uncertain_attribution_zero_reward=args.uncertain_attribution_zero_reward,
                 pipeline_counterfactuals=args.pipeline_counterfactuals,
@@ -2305,11 +2529,13 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 frontier_reverify_fraction=0.0 if evaluation_only else 0.25,
                 pipeline_frontier_by_dataset=args.pipeline_frontier_by_dataset,
                 canary_exclude_migrated_frontier=args.canary_exclude_migrated_frontier,
-                task_execution_window=None
-                if evaluation_only
-                and args.freeze_runtime_state
-                and (args.task_scheduling_policy == "frozen_manifest_dynamic")
-                else max(task_window, args.max_active_task_groups),
+                task_execution_window=(
+                    None
+                    if evaluation_only
+                    and args.freeze_runtime_state
+                    and args.task_scheduling_policy == "frozen_manifest_dynamic"
+                    else max(task_window, args.max_active_task_groups)
+                ),
             ),
             graph_feature_extractor=graph_feature_extractor,
             primary_probability_observer=probability_observer,
@@ -2338,19 +2564,20 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         )
 
     first_snapshots = create_selfplay_snapshots(config)
+    # A committed update may precede the experiment-progress commit when an
+    # asynchronous collector fails. Its old cache must not be rebound to the
+    # now-new learner snapshot; no probability computation is needed to recover it.
     first_update_committed = bool(
         args.resume
         and training_config.state_path.exists()
-        and (
-            int(json.loads(training_config.state_path.read_text(encoding="utf-8")).get("cycle", 0))
-            > completed_cycles
-        )
+        and int(json.loads(training_config.state_path.read_text(encoding="utf-8")).get("cycle", 0))
+        > completed_cycles
     )
     first_lineage_path = args.output / f"cycle-{completed_cycles:04d}" / "policy_lineage.json"
     first_saved_stale = bool(
         args.resume
         and first_lineage_path.exists()
-        and (int(json.loads(first_lineage_path.read_text()).get("staleness_updates", 0)) > 0)
+        and int(json.loads(first_lineage_path.read_text()).get("staleness_updates", 0)) > 0
     )
     collected_cycle = collect_cycle(
         completed_cycles,
@@ -2359,9 +2586,11 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         behavior_update_index=completed_cycles,
         collection_mode="synchronous",
         snapshots=first_snapshots,
-        enable_probability_cache=args.async_solver_probability_cache
-        and (not first_update_committed)
-        and (not first_saved_stale),
+        enable_probability_cache=(
+            args.async_solver_probability_cache
+            and not first_update_committed
+            and not first_saved_stale
+        ),
     )
     pipeline_executor = (
         ThreadPoolExecutor(max_workers=1, thread_name_prefix="async-next-cycle")
@@ -2384,13 +2613,26 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             collection_elapsed_s = collected_cycle.collection_elapsed_s
             next_cycle_future = None
             overlap_started_monotonic = None
+            # V2 saves evidence now and generates candidates in the background.
+            # Each collection freezes its own complete, immutable skill view.
+            skill_changes = (
+                []
+                if evaluation_only or cycle_collection_only
+                else consolidate_selfplay_skills(
+                    config,
+                    rollout_result,
+                    mock=args.mock,
+                    step=cycle + 1,
+                    cycle_dir=cycle_dir,
+                )
+            )
             next_cycle_is_frozen_evaluation = bool(
                 args.final_cycle_evaluation_only and cycle + 1 == args.cycles - 1
             )
             if (
                 args.async_next_cycle_rollouts
                 and cycle + 1 < args.cycles
-                and (not next_cycle_is_frozen_evaluation)
+                and not next_cycle_is_frozen_evaluation
             ):
                 assert manager is not None and pipeline_executor is not None
                 saved_pipeline = (
@@ -2413,7 +2655,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     if resume_queued_cycle
                     else create_selfplay_snapshots(config)
                 )
-                (rollout_spec, rollout_config) = _async_rollout_service(
+                rollout_spec, rollout_config = _async_rollout_service(
                     config,
                     gpu_id=args.async_rollout_gpu_id,
                     port=args.async_rollout_port,
@@ -2446,14 +2688,8 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     state: dict[str, Any] = pipeline_payload,
                 ) -> _CollectedExperimentCycle:
                     completed_artifacts = all(
-                        (
-                            (args.output / f"cycle-{next_cycle:04d}" / name).is_file()
-                            for name in (
-                                "proposer_batch.json",
-                                "solver_batch.json",
-                                "snapshots.json",
-                            )
-                        )
+                        (args.output / f"cycle-{next_cycle:04d}" / name).is_file()
+                        for name in ("proposer_batch.json", "solver_batch.json", "snapshots.json")
                     )
                     if not completed_artifacts:
                         manager.start(service_spec)
@@ -2466,6 +2702,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                             behavior_update_index=behavior_index,
                             collection_mode="async_one_step_stale",
                             snapshots=frozen_snapshots,
+                            # A stale behavior cache cannot be reused as the
+                            # learner's current probabilities.  The immutable
+                            # reference is recomputed during this first rollout.
                             enable_probability_cache=False,
                         )
                     except BaseException as exc:
@@ -2490,15 +2729,16 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     return ready
 
                 next_cycle_future = pipeline_executor.submit(collect_next_cycle)
+
             warmup_executor = None
             warmup_future = None
             warmup_started = None
             if (
                 args.pipeline_next_cycle_warmup
-                and (not args.async_next_cycle_rollouts)
-                and (cycle + 1 < args.cycles)
-                and (fixed_components is not None)
-                and (frozen_proposer is None)
+                and not args.async_next_cycle_rollouts
+                and cycle + 1 < args.cycles
+                and fixed_components is not None
+                and frozen_proposer is None
             ):
                 warmup_started = time.monotonic()
                 warmup_executor = ThreadPoolExecutor(
@@ -2527,9 +2767,14 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             if manager:
 
                 def before_role(role: str) -> None:
+                    # On a deliberately co-located policy GPU, no serving process
+                    # may remain while either trainable role owns training memory.
+                    # The updated role is refreshed immediately after its checkpoint.
                     del role
                     for service_role in ("proposer", "solver"):
                         manager.stop(service_role)
+                    # Idle holders may reserve memory as soon as serving exits.
+                    # Hand it to training only after both service stops complete.
                     from .services import _release_project_gpu_reservations
 
                     _release_project_gpu_reservations(
@@ -2538,7 +2783,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
 
                 def checkpoint_callback(role: str, checkpoint: str) -> None:
                     if training_config.solver.data_parallel_gpu_ids:
-                        return
+                        return  # Avoid starting Proposer on a GPU needed by Solver next.
                     manager.refresh(_service_specs(config)[role], checkpoint)
 
             relation_credits = load_relation_credits(
@@ -2586,9 +2831,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     cycle_training_config,
                     trainer_factory=factory,
                     before_role_callback=before_role,
-                    checkpoint_callback=None
-                    if cycle_training_config.parallel_roles
-                    else checkpoint_callback,
+                    checkpoint_callback=(
+                        None if cycle_training_config.parallel_roles else checkpoint_callback
+                    ),
                 )
                 training_succeeded = False
                 try:
@@ -2611,11 +2856,15 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                         training_compute_elapsed_s = time.monotonic() - training_compute_started
                     training_succeeded = True
                 finally:
+                    # An active exception traceback retains the failed autograd graph.
+                    # Starting vLLM here can both OOM and mask the original training
+                    # exception.  The next resume starts services normally; successful
+                    # training still restores both services before returning.
                     if (
                         manager
                         and training_succeeded
-                        and (cycle + 1 < args.cycles)
-                        and (not args.async_next_cycle_rollouts)
+                        and cycle + 1 < args.cycles
+                        and not args.async_next_cycle_rollouts
                     ):
                         restore_started = time.monotonic()
                         _restore_managed_policy_services(
@@ -2626,9 +2875,11 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     cycle_dir,
                     updates,
                     cycle_training_config,
-                    manager=manager
-                    if cycle + 1 < args.cycles and (not args.async_next_cycle_rollouts)
-                    else None,
+                    manager=(
+                        manager
+                        if cycle + 1 < args.cycles and not args.async_next_cycle_rollouts
+                        else None
+                    ),
                     adaptive_config=config,
                 )
                 post_update_validation_elapsed_s = float(validation["duration_s"])
@@ -2669,14 +2920,17 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 updates=updates,
                 frontier_scores=rollout_result.frontier_scores,
                 relation_credits=relation_credits,
+                skillbank_path=config.skillbank_path,
                 mace_path=None,
                 context={
                     "config": str(args.config.resolve()),
                     "provenance_id": provenance_id,
                     "seed_data": str(args.seed_data.resolve()) if args.seed_data else None,
-                    "frozen_pool_selection": str(args.frozen_pool_selection.resolve())
-                    if args.frozen_pool_selection
-                    else None,
+                    "frozen_pool_selection": (
+                        str(args.frozen_pool_selection.resolve())
+                        if args.frozen_pool_selection
+                        else None
+                    ),
                     "task_pools": [str(path.resolve()) for path in args.task_pool],
                     "seed_count": len(seeds),
                     "rollouts_per_task": rollouts_per_task,
@@ -2693,7 +2947,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     "post_update_validation_elapsed_s": post_update_validation_elapsed_s,
                     "next_cycle_warmup_elapsed_s": next_cycle_warmup_elapsed_s,
                     "async_next_cycle_rollouts": args.async_next_cycle_rollouts,
-                    "async_collection_cycle": cycle + 1 if next_cycle_future is not None else None,
+                    "async_collection_cycle": (
+                        cycle + 1 if next_cycle_future is not None else None
+                    ),
                     "async_collection_wait_s": async_collection_wait_s,
                     "async_overlap_window_s": async_overlap_window_s,
                     "cycle_target_s": args.cycle_target_time_s,
@@ -2701,12 +2957,13 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                         args.cycle_target_time_s > 0
                         and time.monotonic() - cycle_started_monotonic > args.cycle_target_time_s
                     ),
-                    "curriculum_profile": asdict(curriculum_profile)
-                    if curriculum_profile is not None
-                    else None,
+                    "curriculum_profile": (
+                        asdict(curriculum_profile) if curriculum_profile is not None else None
+                    ),
                     "verifier": config.verifier,
+                    "skills_enabled": config.skillbank_enabled,
                     "model_selection_policy": "director_set_model_v1",
-                    "structural_exploration_policy": config.canvas.structural_exploration_policy,
+                    "structural_exploration_policy": (config.canvas.structural_exploration_policy),
                     "proposer_device": proposer_device,
                     "solver_device": solver_device,
                     "checkpoint_root": str(checkpoint_root),
@@ -2722,7 +2979,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                         "micro_batch_size": args.micro_batch_size,
                         "max_micro_batch_tokens": args.max_micro_batch_tokens,
                         "activation_cpu_offload": args.activation_cpu_offload,
-                        "activation_cpu_offload_min_tokens": args.activation_cpu_offload_min_tokens,
+                        "activation_cpu_offload_min_tokens": (
+                            args.activation_cpu_offload_min_tokens
+                        ),
                         "gradient_accumulation_steps": args.gradient_accumulation_steps,
                         "parallel_role_training": args.parallel_role_training,
                         "proposer_total_optimizer_steps": proposer_total_optimizer_steps,
@@ -2733,6 +2992,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     },
                 },
                 proposal_extraction=rollout_result.proposal_extraction,
+                skill_changes=skill_changes,
             )
             cycle_metrics["outcomes"] = outcomes
             from .research_metrics import update_diagnostics
@@ -2754,9 +3014,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     "tasks": len(rollout_result.tasks),
                     "mode": "collection_only"
                     if cycle_collection_only
-                    else "evaluation_only"
-                    if evaluation_only
-                    else "train",
+                    else ("evaluation_only" if evaluation_only else "train"),
                     "updates": [asdict(update) for update in updates],
                     "metrics": cycle_metrics,
                 }
@@ -2772,7 +3030,13 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 encoding="utf-8",
             )
             temporary.replace(progress_path)
-            if fixed_components is not None and (not args.async_next_cycle_rollouts):
+            if fixed_components is not None and not args.async_next_cycle_rollouts:
+                # A training-only resume can return a complete durable cycle without
+                # replaying its collection.  In that path the freshly constructed
+                # in-memory scheduler has not observed the completed tasks, even
+                # though the exact post-collection state is already on disk.  Reload
+                # it at every committed cycle boundary so the following cycle keeps
+                # cooldown/source de-duplication identical to an uninterrupted run.
                 curriculum_state_path = cycle_dir / "curriculum_state.json"
                 if curriculum_state_path.exists():
                     fixed_components[1].load_state_dict(
@@ -2796,6 +3060,8 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                         enable_probability_cache=args.async_solver_probability_cache,
                     )
     except Exception:
+        # Keep collecting the already running next batch, but expose the
+        # training failure before waiting for that collection to finish.
         import traceback
 
         traceback.print_exc()
@@ -2824,7 +3090,8 @@ def _policy_training_config(
         and args.gradient_accumulation_steps != effective_gradient_accumulation
     ):
         raise ValueError(
-            "gradient_accumulation_steps must equal ceil(mini_batch_size / micro_batch_size) for SESA-style mini-batch training"
+            "gradient_accumulation_steps must equal ceil(mini_batch_size / micro_batch_size) "
+            "for SESA-style mini-batch training"
         )
     return PolicyTrainingConfig(
         base_model_path,
@@ -2841,6 +3108,8 @@ def _policy_training_config(
         max_grad_norm=args.max_grad_norm,
         weight_decay=args.weight_decay,
         warmup_steps=args.warmup_steps,
+        warmup_start_factor=getattr(args, "warmup_start_factor", 0.0),
+        learning_rate_schedule=getattr(args, "learning_rate_schedule", "cosine"),
         total_optimizer_steps=total_optimizer_steps,
         max_sequence_length=args.max_sequence_length,
         device=device,
@@ -2870,7 +3139,7 @@ def _validate_rollout_policy_snapshots(
     current = create_selfplay_snapshots(adaptive)
     mismatches = [
         role
-        for (role, expected) in (
+        for role, expected in (
             ("proposer", current.proposer_snapshot),
             ("solver", current.solver_snapshot),
         )
@@ -2905,6 +3174,7 @@ class _FrozenPoolProposer:
 
     def rehydrate_private_payload(self, proposal: ProposedTask) -> ProposedTask:
         """Restore private data and pool attestation after public-log resume."""
+
         pool_id = str(proposal.metadata.get("pool_id", ""))
         try:
             template = self.proposals[pool_id]
@@ -2929,7 +3199,8 @@ class _FrozenPoolProposer:
 
 
 def _load_frozen_pool_selection(
-    path: Path, pool: FixedTaskPool
+    path: Path,
+    pool: FixedTaskPool,
 ) -> tuple[list[SeedInput], _FrozenPoolProposer]:
     rows = _read_jsonl(path)
     seeds: list[SeedInput] = []
@@ -2955,6 +3226,11 @@ def _load_frozen_pool_selection(
             raise ValueError(
                 f"frozen selection row {line_number} does not match current pool task {pool_id!r}"
             )
+        # The current validated pool is the authority for fixed-pool
+        # attestation.  Normal ADS+TSDS proposals carry these fields on both
+        # the TaskSpec and ProposedTask metadata; frozen replay must preserve
+        # the same contract so the final batch gate can fail closed without
+        # rejecting an otherwise valid paired evaluation.
         pool_attestation = {
             "validated_pool_entry": bool(selected.task.metadata.get("validated_pool_entry", False)),
             "validated_pool_manifest_sha256": selected.task.metadata.get(
@@ -2976,8 +3252,8 @@ def _load_frozen_pool_selection(
                 },
             ),
             response=str(row.get("response", "")),
-            token_ids=tuple((int(value) for value in row.get("token_ids", []))),
-            action_mask=tuple((int(value) for value in row.get("action_mask", []))),
+            token_ids=tuple(int(value) for value in row.get("token_ids", [])),
+            action_mask=tuple(int(value) for value in row.get("action_mask", [])),
             metadata={
                 **proposal_metadata,
                 **pool_attestation,
@@ -3003,7 +3279,7 @@ def _load_frozen_pool_selection(
         )
     if not seeds:
         raise ValueError("frozen pool selection is empty")
-    return (seeds, _FrozenPoolProposer(proposals))
+    return seeds, _FrozenPoolProposer(proposals)
 
 
 class _MockTaskEmbedder:
@@ -3014,17 +3290,17 @@ class _MockTaskEmbedder:
             values = [0.0] * 16
             for index, byte in enumerate(text.encode("utf-8")):
                 values[index % len(values)] += float(byte) / 255.0
-            norm = sum((value * value for value in values)) ** 0.5 or 1.0
-            vectors.append(tuple((value / norm for value in values)))
+            norm = sum(value * value for value in values) ** 0.5 or 1.0
+            vectors.append(tuple(value / norm for value in values))
         return vectors
 
 
 def _mock_fixed_pool_backend() -> MockBackend:
-
     def handler(messages, _role):
         payload = json.loads(messages[-1]["content"])
         return json.dumps(
-            {"candidate_id": payload["candidates"][0]["candidate_id"]}, ensure_ascii=False
+            {"candidate_id": payload["candidates"][0]["candidate_id"]},
+            ensure_ascii=False,
         )
 
     return MockBackend(handler=handler)
@@ -3040,33 +3316,41 @@ def _fixed_pool_components(
 ) -> tuple[FixedTaskPool, ADSBoundaryScheduler, TSDSRetriever, MockBackend | None]:
     embedder = _MockTaskEmbedder() if mock else None
     pool = FixedTaskPool.from_jsonl(
-        paths, embedder=embedder, require_ads_metadata=not mock, require_validation_manifest=True
+        paths,
+        embedder=embedder,
+        require_ads_metadata=not mock,
+        # Mock mode may replace embeddings and model calls, but it must not
+        # bypass the fixed-pool validity contract exercised by production.
+        require_validation_manifest=True,
     )
     scheduler = ADSBoundaryScheduler(
         pool,
-        active_clusters=profile.active_clusters_per_dataset if profile else 4,
-        mini_cluster_size=profile.mini_cluster_size if profile else 32,
-        boundary_eps=profile.boundary_eps if profile else 0.17,
-        alpha=profile.alpha if profile else 0.3,
-        cooldown=profile.cooldown_per_dataset if profile else 64,
+        active_clusters=(profile.active_clusters_per_dataset if profile else 4),
+        mini_cluster_size=(profile.mini_cluster_size if profile else 32),
+        boundary_eps=(profile.boundary_eps if profile else 0.17),
+        alpha=(profile.alpha if profile else 0.3),
+        cooldown=(profile.cooldown_per_dataset if profile else 64),
         seed=seed,
     )
-    if profile is not None and (not mock):
+    if profile is not None and not mock:
         if len(scheduler.dataset_cluster_ids) != profile.expected_datasets:
             raise ValueError(
-                f"curriculum profile {profile.name!r} expects {profile.expected_datasets} datasets, loaded {len(scheduler.dataset_cluster_ids)}"
+                f"curriculum profile {profile.name!r} expects "
+                f"{profile.expected_datasets} datasets, loaded "
+                f"{len(scheduler.dataset_cluster_ids)}"
             )
         mismatched = {
             dataset: len(cluster_ids)
-            for (dataset, cluster_ids) in scheduler.dataset_cluster_ids.items()
+            for dataset, cluster_ids in scheduler.dataset_cluster_ids.items()
             if len(cluster_ids) != profile.num_clusters_per_dataset
         }
         if mismatched:
             raise ValueError(
-                f"curriculum profile {profile.name!r} expects {profile.num_clusters_per_dataset} ADS clusters per dataset; got {mismatched}"
+                f"curriculum profile {profile.name!r} expects "
+                f"{profile.num_clusters_per_dataset} ADS clusters per dataset; got {mismatched}"
             )
     retriever = TSDSRetriever(pool)
-    return (pool, scheduler, retriever, _mock_fixed_pool_backend() if mock else None)
+    return pool, scheduler, retriever, _mock_fixed_pool_backend() if mock else None
 
 
 def _load_frontier_scores(path: Path) -> list[FrontierScore]:
@@ -3088,6 +3372,7 @@ def main(argv: list[str] | None = None) -> int:
         "build-graph": lambda: build_graph(args.path),
         "inspect-trace": lambda: inspect_trace(args.path, args.run_id),
         "replay": lambda: replay(args.path, args.run_id),
+        "inspect-skillbank": lambda: inspect_skillbank(args.path, args.query, args.task_type),
         "dry-run-selfplay": lambda: dry_run_selfplay(args.num_tasks, args.rollouts, args.output),
         "selfplay-rollout": lambda: selfplay_rollout(args),
         "train-cycle": lambda: train_cycle(args),

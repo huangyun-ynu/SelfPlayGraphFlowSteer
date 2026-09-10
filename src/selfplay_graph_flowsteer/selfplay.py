@@ -76,7 +76,7 @@ class TaskProposer(Protocol):
 
 
 class QwenTaskProposer:
-    """SESA-style answer-seed proposer isolated from Solver state."""
+    """SESA-style answer-seed proposer isolated from Solver skills/state."""
 
     def __init__(self, backend: ChatBackend, tokenizer: Tokenizer | None = None) -> None:
         self.backend = backend

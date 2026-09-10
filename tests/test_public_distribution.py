@@ -22,16 +22,18 @@ def test_public_config_keeps_outputs_inside_checkout():
     assert config.proposer_model.checkpoint_path.is_relative_to(ROOT)
     assert config.solver_model.checkpoint_path.is_relative_to(ROOT)
     assert config.healthbench_judge_audit_path.is_relative_to(ROOT)
-    assert config.graph_embedding_model_path == "intfloat/e5-base-v2"
-    assert config.support_runtime in config.runtime_pool()
+    assert config.skillbank_embedding_model_path == "intfloat/e5-base-v2"
+    assert config.skill_distiller_runtime in config.runtime_pool()
     assert SelfPlayRunConfig().proposer_baseline_mode == "ema"
 
 
-def test_removed_subsystem_is_not_importable_or_exposed():
-    assert importlib.util.find_spec("selfplay_graph_flowsteer.skills") is None
-    assert "inspect-skillbank" not in build_parser().format_help()
+def test_skill_subsystem_is_packaged_and_opt_in():
+    assert importlib.util.find_spec("selfplay_graph_flowsteer.skills") is not None
+    assert "inspect-skillbank" in build_parser().format_help()
     config = load_adaptive_config(ROOT / "configs/mock.toml")
-    assert not any("skill" in field for field in vars(config))
+    assert not config.skillbank_enabled
+    seeds = json.loads((ROOT / "src/selfplay_graph_flowsteer/director_seed_v2.json").read_text())
+    assert len(seeds) == 8
 
 
 def test_mock_application_runs_without_skill_context(tmp_path):
@@ -48,6 +50,25 @@ def test_mock_application_runs_without_skill_context(tmp_path):
         assert result.to_dict()["finished"]
         serialized = json.dumps(result.to_dict()).casefold()
         assert "skillbank" not in serialized
-        assert "skills_used" not in serialized
+        assert not result.skills_used
     finally:
         app.close()
+
+
+def test_skill_template_keeps_high_reasoning_separate_from_worker(monkeypatch):
+    from selfplay_graph_flowsteer.application import _runtime_gateway_config
+
+    monkeypatch.setenv("DEEPSEEK_SKILL_API_KEY", "offline-placeholder")
+    config = load_adaptive_config(ROOT / "configs/skillbank.example.toml")
+    assert config.skillbank_enabled
+    assert config.skillbank_mode == "director_skill_v2"
+    assert config.skillbank_activation_policy == "checked"
+    assert config.skill_distiller_runtime not in config.worker_runtime_routes
+    runtime = config.runtime_pool()[config.skill_distiller_runtime]
+    role = _runtime_gateway_config(
+        runtime, {"skill-distiller": 0}, route_name="deepseek_skill"
+    ).roles["skill-distiller"]
+    assert role.enable_thinking and role.reasoning_effort == "high"
+    assert runtime.max_concurrency == 20
+    assert role.max_tokens == 8192
+    assert config.skillbank_path.is_relative_to(ROOT)

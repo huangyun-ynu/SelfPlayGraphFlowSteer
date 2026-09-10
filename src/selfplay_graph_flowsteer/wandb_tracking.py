@@ -112,7 +112,13 @@ class WandbTracker:
             wandb = importlib.import_module("wandb")
             for name in ("NO_PROXY", "no_proxy"):
                 os.environ[name] = ",".join(
-                    filter(None, [os.environ.get(name), "api.wandb.ai,wandb.ai,.wandb.ai"])
+                    filter(
+                        None,
+                        [
+                            os.environ.get(name),
+                            "api.wandb.ai,wandb.ai,.wandb.ai,storage.googleapis.com,.storage.googleapis.com",
+                        ],
+                    )
                 )
             run_dir = self.root / "wandb"
             run_dir.mkdir(exist_ok=True)

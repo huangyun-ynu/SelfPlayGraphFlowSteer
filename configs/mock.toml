@@ -30,7 +30,7 @@ request_profile = "generic"
 
 [runtime_routing]
 worker_routes = ["default"]
-support = "default"
+skill_distiller = "default"
 
 [canvas]
 # Disable predicted-time rejection and early consolidation; actual deadlines remain active.
@@ -39,7 +39,10 @@ max_agents = 4
 max_rounds = 24
 relay_max_chars = 1000
 
-[graph_features]
+[solver_skillbank]
+enabled = false
+mode = "director_skill_v2"
+activation_policy = "checked"
 embedding_model_path = "intfloat/e5-base-v2"
 
 [trace]

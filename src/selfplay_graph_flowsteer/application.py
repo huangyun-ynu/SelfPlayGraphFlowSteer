@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import contextlib
 import copy
 import hashlib
 import json
@@ -11,6 +13,7 @@ import uuid
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
+
 from .adaptive import AdaptiveSolverResult, AdaptiveWorkflowSolver
 from .agent_tools import (
     FiniteSearchTool,
@@ -76,6 +79,13 @@ from .runtime import (
     artifact_backend_failure_records,
 )
 from .selfplay import AlternatingSnapshots, FixedPoolQwenProposer, QwenTaskProposer
+from .skills import (
+    E5SkillEmbedder,
+    SESASolverSkillDistiller,
+    SolverFailureCase,
+    SolverSkillBank,
+    SolverSkillLifecycle,
+)
 from .swebench import (
     CodeArtifactStore,
     SSHSWEHarnessBackend,
@@ -106,7 +116,7 @@ class GraphEvaluationBackendError(RuntimeError):
 
     def __init__(self, failure: dict[str, Any]) -> None:
         self.failure = dict(failure)
-        routes = ",".join((str(value) for value in failure.get("routes", ())))
+        routes = ",".join(str(value) for value in failure.get("routes", ()))
         super().__init__("graph evaluation Worker backend failed; routes=" + (routes or "unknown"))
 
 
@@ -115,12 +125,13 @@ REMOTE_RUNTIME_MAX_CONCURRENCY = 16
 
 def _allowed_physical_gpu_ids() -> set[int]:
     """Return the explicit per-run physical GPU allowlist (default: GPU 0)."""
+
     raw = os.environ.get("SPGFS_ALLOWED_PHYSICAL_GPUS", "0")
     try:
         allowed = {int(value.strip()) for value in raw.split(",") if value.strip()}
     except ValueError as exc:
         raise ValueError("SPGFS_ALLOWED_PHYSICAL_GPUS must contain integer GPU ids") from exc
-    if not allowed or any((gpu < 0 for gpu in allowed)):
+    if not allowed or any(gpu < 0 for gpu in allowed):
         raise ValueError("SPGFS_ALLOWED_PHYSICAL_GPUS must contain non-negative GPU ids")
     return allowed
 
@@ -146,7 +157,7 @@ class RoleModelConfig:
             raise ValueError(f"models.{name}.timeout_s must be positive")
 
     def identity(self) -> tuple[str, str]:
-        return (self.base_url.rstrip("/"), self.served_model)
+        return self.base_url.rstrip("/"), self.served_model
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -160,7 +171,7 @@ class RoleModelConfig:
 
 @dataclass(frozen=True)
 class FixedRuntimeConfig:
-    """Fixed inference environment used by workers, MANTA and answer formatting."""
+    """Fixed inference environment used by workers, MANTA and skill distillation."""
 
     base_url: str
     served_model: str
@@ -171,6 +182,8 @@ class FixedRuntimeConfig:
     request_profile: str = "qwen"
     healthbench_grader_reasoning_effort: str | None = None
     reasoning_effort: str | None = None
+    enable_thinking: bool = False
+    max_tokens: int = 2048
     api_surface: str = "chat_completions"
     user_agent: str | None = None
     network_path: str = "configured_proxy"
@@ -181,42 +194,42 @@ class FixedRuntimeConfig:
     frozen: bool = True
 
     def validate(self) -> None:
+        if self.max_tokens <= 0:
+            raise ValueError("runtime.max_tokens must be positive")
         if not self.base_url.strip() or not self.served_model.strip():
             raise ValueError("runtime endpoint and served_model cannot be empty")
         if self.user_agent is not None and (
-            not self.user_agent or any((ord(c) < 32 or ord(c) > 126 for c in self.user_agent))
+            not self.user_agent or any(ord(c) < 32 or ord(c) > 126 for c in self.user_agent)
         ):
             raise ValueError("runtime.user_agent must be nonempty printable ASCII")
         if self.timeout_s <= 0:
             raise ValueError("runtime.timeout_s must be positive")
         if any(
-            (
-                not canonical_dataset_name(dataset) or not str(api_key).strip()
-                for (dataset, api_key) in self.api_keys_by_dataset.items()
-            )
+            not canonical_dataset_name(dataset) or not str(api_key).strip()
+            for dataset, api_key in self.api_keys_by_dataset.items()
         ):
             raise ValueError("runtime dataset API-key overrides must be nonempty")
         if self.max_concurrency <= 0:
             raise ValueError("runtime.max_concurrency must be positive")
         if any(
-            (
-                not canonical_dataset_name(dataset) or int(limit) <= 0
-                for (dataset, limit) in self.max_concurrency_by_dataset.items()
-            )
+            not canonical_dataset_name(dataset) or int(limit) <= 0
+            for dataset, limit in self.max_concurrency_by_dataset.items()
         ):
             raise ValueError("runtime dataset concurrency overrides must be positive")
-        if not self.managed_locally and self.max_concurrency > REMOTE_RUNTIME_MAX_CONCURRENCY:
+        remote_limit = (
+            20
+            if self.served_model.casefold().startswith("deepseek")
+            else REMOTE_RUNTIME_MAX_CONCURRENCY
+        )
+        if not self.managed_locally and self.max_concurrency > remote_limit:
             raise ValueError(
-                f"externally managed runtime.max_concurrency must not exceed {REMOTE_RUNTIME_MAX_CONCURRENCY}"
+                f"externally managed runtime.max_concurrency must not exceed {remote_limit}"
             )
         if not self.managed_locally and any(
-            (
-                int(limit) > REMOTE_RUNTIME_MAX_CONCURRENCY
-                for limit in self.max_concurrency_by_dataset.values()
-            )
+            int(limit) > remote_limit for limit in self.max_concurrency_by_dataset.values()
         ):
             raise ValueError(
-                f"externally managed runtime dataset concurrency must not exceed {REMOTE_RUNTIME_MAX_CONCURRENCY}"
+                f"externally managed runtime dataset concurrency must not exceed {remote_limit}"
             )
         if self.network_path not in {"direct", "configured_proxy"}:
             raise ValueError("runtime.network_path must be direct or configured_proxy")
@@ -249,12 +262,14 @@ class FixedRuntimeConfig:
             "max_concurrency": self.max_concurrency,
             "dataset_concurrency_overrides": {
                 canonical_dataset_name(dataset): int(limit)
-                for (dataset, limit) in sorted(self.max_concurrency_by_dataset.items())
+                for dataset, limit in sorted(self.max_concurrency_by_dataset.items())
             },
             "managed_locally": self.managed_locally,
             "frozen": self.frozen,
-            "healthbench_grader_reasoning_effort": self.healthbench_grader_reasoning_effort,
+            "healthbench_grader_reasoning_effort": (self.healthbench_grader_reasoning_effort),
             "reasoning_effort": self.reasoning_effort,
+            "enable_thinking": self.enable_thinking,
+            "max_tokens": self.max_tokens,
             "api_surface": self.api_surface,
             "dataset_api_key_overrides": sorted(self.api_keys_by_dataset),
             "user_agent": self.user_agent,
@@ -309,7 +324,7 @@ class WebShopConfig:
     enabled: bool = False
     service_url: str = "http://127.0.0.1:8020"
     timeout_s: float = 10.0
-    max_observation_chars: int = 4000
+    max_observation_chars: int = 4_000
     max_query_chars: int = 500
     max_initial_calls: int = 12
     max_revision_calls: int = 4
@@ -335,14 +350,23 @@ class WebShopConfig:
             <= 0
         ):
             raise ValueError("webshop limits and timeout must be positive")
-        budgets = (self.max_initial_calls, self.max_revision_calls, self.max_total_calls)
+        budgets = (
+            self.max_initial_calls,
+            self.max_revision_calls,
+            self.max_total_calls,
+        )
         if min(budgets) < 0:
             raise ValueError("webshop call budgets must be non-negative")
         if budgets[0] + budgets[1] > budgets[2]:
             raise ValueError("webshop phase call budgets exceed max_total_calls")
-        if self.search_observation_mode not in {"legacy", "retain_page_text", "structured_only"}:
+        if self.search_observation_mode not in {
+            "legacy",
+            "retain_page_text",
+            "structured_only",
+        }:
             raise ValueError(
-                "webshop.search_observation_mode must be legacy, retain_page_text, or structured_only"
+                "webshop.search_observation_mode must be legacy, retain_page_text, "
+                "or structured_only"
             )
 
 
@@ -352,7 +376,7 @@ class ALFWorldConfig:
     data_root: Path = Path("datasets/alfworld/data_assets/json_2.1.1")
     max_episode_steps: int = 50
     max_rollout_steps: int = 400
-    max_observation_chars: int = 12000
+    max_observation_chars: int = 12_000
     max_initial_calls: int = 50
     max_revision_calls: int = 50
     max_total_calls: int = 100
@@ -365,15 +389,27 @@ class ALFWorldConfig:
             "legacy_full_v1",
         }:
             raise ValueError(
-                "alfworld.worker_guidance_policy must be 'factual_memory_v1', 'raw_state_v1', or 'legacy_full_v1'"
+                "alfworld.worker_guidance_policy must be 'factual_memory_v1', "
+                "'raw_state_v1', or 'legacy_full_v1'"
             )
         if not self.enabled:
             return
         if not self.data_root.is_dir():
             raise ValueError("alfworld.data_root must be an existing directory")
-        if min(self.max_episode_steps, self.max_rollout_steps, self.max_observation_chars) <= 0:
+        if (
+            min(
+                self.max_episode_steps,
+                self.max_rollout_steps,
+                self.max_observation_chars,
+            )
+            <= 0
+        ):
             raise ValueError("alfworld limits must be positive")
-        budgets = (self.max_initial_calls, self.max_revision_calls, self.max_total_calls)
+        budgets = (
+            self.max_initial_calls,
+            self.max_revision_calls,
+            self.max_total_calls,
+        )
         if min(budgets) < 0:
             raise ValueError("alfworld call budgets must be non-negative")
         if budgets[0] + budgets[1] > budgets[2]:
@@ -390,16 +426,18 @@ class SWEConfig:
     lifecycle_log_path: Path = Path("state/private/swe/lifecycle.jsonl")
     verifier_log_path: Path = Path("state/private/swe/verifier-client.jsonl")
     verifier_host: str = ""
-    verifier_user: str = "swe-user"
+    verifier_user: str = "sweeval"
     verifier_identity_file: Path = Path("config/private/swe_identity")
-    verifier_known_hosts_file: Path = Path("config/private/swe_known_hosts")
+    verifier_known_hosts_file: Path = Path(
+        "state/deployments/20260824-swe-verifier-tencent/known_hosts"
+    )
     dataset_revision: str = ""
     connect_timeout_s: float = 10.0
     request_timeout_s: float = 720.0
     local_test_timeout_s: float = 60.0
-    max_output_chars: int = 12000
-    max_file_chars: int = 200000
-    max_patch_bytes: int = 2000000
+    max_output_chars: int = 12_000
+    max_file_chars: int = 200_000
+    max_patch_bytes: int = 2_000_000
     max_initial_calls: int = 20
     max_revision_calls: int = 12
     max_total_calls: int = 32
@@ -416,7 +454,9 @@ class SWEConfig:
             )
         if not self.enabled:
             return
-        required_directories = {"repo_cache_root": self.repo_cache_root}
+        required_directories = {
+            "repo_cache_root": self.repo_cache_root,
+        }
         for name, path in required_directories.items():
             if not path.is_dir():
                 raise ValueError(f"swe.{name} must be an existing directory")
@@ -428,9 +468,9 @@ class SWEConfig:
         for name, path in required_files.items():
             if not path.is_file():
                 raise ValueError(f"swe.{name} must be an existing file")
-        if self.verifier_identity_file.stat().st_mode & 63:
+        if self.verifier_identity_file.stat().st_mode & 0o077:
             raise ValueError("swe.verifier_identity_file must not be group/world accessible")
-        if not re.fullmatch("[0-9a-f]{40,64}", self.dataset_revision):
+        if not re.fullmatch(r"[0-9a-f]{40,64}", self.dataset_revision):
             raise ValueError("swe.dataset_revision must be a pinned hexadecimal revision")
         if not self.verifier_host.strip() or not self.verifier_user.strip():
             raise ValueError("swe verifier host and user cannot be empty")
@@ -446,14 +486,16 @@ class SWEConfig:
             <= 0
         ):
             raise ValueError("swe timeouts and size limits must be positive")
-        budgets = (self.max_initial_calls, self.max_revision_calls, self.max_total_calls)
+        budgets = (
+            self.max_initial_calls,
+            self.max_revision_calls,
+            self.max_total_calls,
+        )
         if min(budgets) < 0 or budgets[0] + budgets[1] > budgets[2]:
             raise ValueError("swe phase call budgets are invalid")
         if not self.test_profiles or any(
-            (
-                not name.strip() or not command or any((not str(part) for part in command))
-                for (name, command) in self.test_profiles.items()
-            )
+            not name.strip() or not command or any(not str(part) for part in command)
+            for name, command in self.test_profiles.items()
         ):
             raise ValueError("swe.test_profiles must contain non-empty fixed argv lists")
         for path in (self.lifecycle_log_path, self.verifier_log_path):
@@ -486,23 +528,42 @@ class AdaptiveApplicationConfig:
     additional_runtimes: dict[str, FixedRuntimeConfig] = field(default_factory=dict)
     worker_runtime_routes: tuple[str, ...] = ("default",)
     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
-    support_runtime: str = "default"
+    skill_distiller_runtime: str = "default"
     route_health_path: Path = Path("state/route_health.json")
     route_health_cooldown_s: float = 3600.0
     canvas: CanvasConfig = field(default_factory=CanvasConfig)
     verifier: str = "none"
-    mace_enabled: bool = False
+    mace_enabled: bool = False  # Retired compatibility field; True is rejected.
     mace_alpha: float = 1.0
     mace_regularization: float = 1.0
     seed: int = 0
+    # Legacy input only: peer statistics are no longer loaded or written.
     mace_statistics_path: Path = Path("state/mace_statistics.json")
     mace_model_statistics_path: Path = Path("state/mace_model_statistics.json")
-    graph_embedding_model_path: str | Path | None = "intfloat/e5-base-v2"
+    skillbank_enabled: bool = True
+    skillbank_mode: str = "legacy"
+    skillbank_prompt_token_budget: int = 1024
+    skillbank_retrieval_min_score: float | None = None
+    skillbank_path: Path = Path("state/solver_skillbank.json")
+    skill_cases_path: Path = Path("state/solver_skill_cases.json")
+    skillbank_max_skills: int = 800
+    skillbank_dedup_threshold: float = 0.93
+    skillbank_dedup_review_threshold: float = 0.90
+    skillbank_retrieve_top_k: int = 3
+    skillbank_min_retrieved_for_evict: int = 3
+    skillbank_update_freq: int = 10
+    skillbank_pending_queue_max: int = 300
+    skillbank_min_pending: int = 20
+    skillbank_generate_per_update: int = 50
+    skillbank_distill_concurrency: int = 2
+    skillbank_activation_policy: str = "paired"
+    skillbank_embedding_model_path: str | Path | None = "intfloat/e5-base-v2"
     trace_path: Path = Path("state/traces.jsonl")
     healthbench_judge_audit_path: Path = Path("state/private/healthbench_judge_audit")
     healthbench_judge_input_cost_per_million: float | None = None
     healthbench_judge_output_cost_per_million: float | None = None
     healthbench_auto_grader_mode: str = "official"
+    # Provider attestation must report this stable model identity.
     healthbench_judge_expected_model: str = HEALTHBENCH_PROFESSIONAL_JUDGE_MODEL
     healthbench_judge_runtime_route: str | None = None
     persist_runtime_updates: bool = True
@@ -510,7 +571,7 @@ class AdaptiveApplicationConfig:
     proposer_gpu_id: int = 0
     solver_gpu_id: int = 0
     runtime_gpu_id: int = 0
-    proposer_service_gpu_memory_utilization: float = 0.3
+    proposer_service_gpu_memory_utilization: float = 0.30
     solver_service_gpu_memory_utilization: float = 0.35
     allow_policy_gpu_colocation: bool = True
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
@@ -533,7 +594,7 @@ class AdaptiveApplicationConfig:
             raise ValueError(
                 "HealthBench Judge input/output cost rates must be configured together"
             )
-        if any((value is not None and value < 0 for value in cost_rates)):
+        if any(value is not None and value < 0 for value in cost_rates):
             raise ValueError("HealthBench Judge cost rates must be non-negative")
         if "private" not in {part.casefold() for part in self.healthbench_judge_audit_path.parts}:
             raise ValueError("HealthBench Judge audit path must be private")
@@ -578,17 +639,19 @@ class AdaptiveApplicationConfig:
             raise ValueError(
                 f"unknown HealthBench judge runtime route: {self.healthbench_judge_runtime_route}"
             )
-        if self.support_runtime not in runtime_pool:
-            raise ValueError(f"unknown support runtime route: {self.support_runtime}")
+        if self.skill_distiller_runtime not in runtime_pool:
+            raise ValueError(
+                f"unknown skill distiller runtime route: {self.skill_distiller_runtime}"
+            )
         if (
             self.answer_submission.enabled
             and self.answer_submission.qa_model_enabled
-            and (self.answer_submission.runtime_route not in runtime_pool)
+            and self.answer_submission.runtime_route not in runtime_pool
         ):
             raise ValueError(
                 f"unknown answer submission runtime route: {self.answer_submission.runtime_route}"
             )
-        if any((runtime.managed_locally for runtime in self.additional_runtimes.values())):
+        if any(runtime.managed_locally for runtime in self.additional_runtimes.values()):
             raise ValueError("additional runtimes must be externally managed")
         if self.proposer_model.identity() == self.solver_model.identity():
             raise ValueError("Proposer and Solver must use independent served model instances")
@@ -602,42 +665,51 @@ class AdaptiveApplicationConfig:
             self.canvas.max_total_tokens <= 0
             or self.canvas.relay_max_chars <= 0
             or self.canvas.feedback_max_chars <= 0
-            or (self.canvas.artifact_summary_max_chars <= 0)
+            or self.canvas.artifact_summary_max_chars <= 0
         ):
             raise ValueError("canvas token and context budgets must be positive")
         dataset_token_budgets = {
             canonical_dataset_name(dataset): int(limit)
-            for (dataset, limit) in self.canvas.max_total_tokens_by_dataset.items()
+            for dataset, limit in self.canvas.max_total_tokens_by_dataset.items()
         }
-        if any((not dataset or limit <= 0 for (dataset, limit) in dataset_token_budgets.items())):
+        if any(not dataset or limit <= 0 for dataset, limit in dataset_token_budgets.items()):
             raise ValueError(
-                "canvas.max_total_tokens_by_dataset requires non-empty dataset keys and positive limits"
+                "canvas.max_total_tokens_by_dataset requires non-empty dataset keys "
+                "and positive limits"
             )
         minimum_canvas_token_budget = min(
             (self.canvas.max_total_tokens, *dataset_token_budgets.values())
         )
         if not 0 <= self.canvas.graph_growth_token_reserve < minimum_canvas_token_budget:
             raise ValueError(
-                "canvas graph_growth_token_reserve must be non-negative and below every configured max_total_tokens budget"
+                "canvas graph_growth_token_reserve must be non-negative and below "
+                "every configured max_total_tokens budget"
             )
         if not 0 < self.canvas.worker_latency_quantile <= 1:
             raise ValueError("canvas.worker_latency_quantile must be in (0, 1]")
-        if min(self.canvas.worker_latency_window, self.canvas.worker_latency_min_samples) <= 0:
+        if (
+            min(
+                self.canvas.worker_latency_window,
+                self.canvas.worker_latency_min_samples,
+            )
+            <= 0
+        ):
             raise ValueError("canvas Worker latency sample limits must be positive")
         if self.canvas.worker_latency_min_samples > self.canvas.worker_latency_window:
             raise ValueError(
                 "canvas.worker_latency_min_samples cannot exceed worker_latency_window"
             )
         if (
-            min(self.canvas.worker_latency_cold_start_s, self.canvas.finalization_time_reserve_s)
+            min(
+                self.canvas.worker_latency_cold_start_s,
+                self.canvas.finalization_time_reserve_s,
+            )
             <= 0
         ):
             raise ValueError("canvas Worker latency and finalization reserves must be positive")
         if any(
-            (
-                not math.isfinite(value) or value <= 0
-                for value in self.canvas.finalization_time_reserve_by_dataset.values()
-            )
+            not math.isfinite(value) or value <= 0
+            for value in self.canvas.finalization_time_reserve_by_dataset.values()
         ):
             raise ValueError("dataset finalization reserves must be finite and positive")
         if not 0 < self.canvas.worker_token_quantile <= 1:
@@ -656,7 +728,8 @@ class AdaptiveApplicationConfig:
             raise ValueError("canvas.worker_token_min_samples cannot exceed worker_token_window")
         if self.canvas.finalization_token_reserve >= minimum_canvas_token_budget:
             raise ValueError(
-                "canvas.finalization_token_reserve must be below every configured max_total_tokens budget"
+                "canvas.finalization_token_reserve must be below every configured "
+                "max_total_tokens budget"
             )
         if (
             min(
@@ -671,7 +744,10 @@ class AdaptiveApplicationConfig:
             )
         if self.canvas.structural_exploration_policy not in {"off", "stratified"}:
             raise ValueError("canvas.structural_exploration_policy must be 'off' or 'stratified'")
-        if self.canvas.bidirectional_revision_policy not in {"always", "evidence_gated"}:
+        if self.canvas.bidirectional_revision_policy not in {
+            "always",
+            "evidence_gated",
+        }:
             raise ValueError(
                 "canvas.bidirectional_revision_policy must be 'always' or 'evidence_gated'"
             )
@@ -693,36 +769,67 @@ class AdaptiveApplicationConfig:
             raise ValueError("enabled SWE execution requires strict outcome verifier mode")
         if self.mace_enabled:
             raise ValueError("MACE is retired; remove [mace] and use Director SET_MODEL")
+        if self.skillbank_mode not in {"legacy", "director_skill_v2"}:
+            raise ValueError("unknown skillbank mode")
+        if self.skillbank_prompt_token_budget <= 0:
+            raise ValueError("skill prompt token budget must be positive")
+        if self.skillbank_activation_policy not in {"paired", "checked"}:
+            raise ValueError("skill activation policy must be paired or checked")
+        if self.skillbank_distill_concurrency <= 0:
+            raise ValueError("skill distillation concurrency must be positive")
+        if (
+            self.skillbank_retrieval_min_score is not None
+            and not -1 <= self.skillbank_retrieval_min_score <= 1
+        ):
+            raise ValueError("skill retrieval cutoff must be in [-1,1]")
+        if self.skillbank_max_skills <= 0 or self.skillbank_retrieve_top_k <= 0:
+            raise ValueError("solver_skillbank size and retrieval limits must be positive")
+        if not 0.0 <= self.skillbank_dedup_threshold <= 1.0:
+            raise ValueError("solver_skillbank.dedup_threshold must be in [0, 1]")
+        if not 0.0 <= self.skillbank_dedup_review_threshold <= self.skillbank_dedup_threshold:
+            raise ValueError("solver_skillbank.dedup_review_threshold must be <= dedup_threshold")
+        if (
+            min(
+                self.skillbank_min_retrieved_for_evict,
+                self.skillbank_update_freq,
+                self.skillbank_pending_queue_max,
+                self.skillbank_min_pending,
+                self.skillbank_generate_per_update,
+            )
+            <= 0
+        ):
+            raise ValueError("solver_skillbank lifecycle limits must be positive")
         service_memory = (
             self.proposer_service_gpu_memory_utilization,
             self.solver_service_gpu_memory_utilization,
         )
         allowed_physical_gpus = _allowed_physical_gpu_ids()
         if not self.allocated_gpu_ids or any(
-            (gpu not in allowed_physical_gpus for gpu in self.allocated_gpu_ids)
+            gpu not in allowed_physical_gpus for gpu in self.allocated_gpu_ids
         ):
             raise ValueError(
-                "resources.allocated_gpu_ids must be a subset of SPGFS_ALLOWED_PHYSICAL_GPUS="
-                + ",".join((str(gpu) for gpu in sorted(allowed_physical_gpus)))
+                "resources.allocated_gpu_ids must be a subset of "
+                "SPGFS_ALLOWED_PHYSICAL_GPUS="
+                + ",".join(str(gpu) for gpu in sorted(allowed_physical_gpus))
             )
-        if any((not 0.0 < value <= 1.0 for value in service_memory)):
+        if any(not 0.0 < value <= 1.0 for value in service_memory):
             raise ValueError("service GPU memory utilization must be in (0, 1]")
         policy_gpus = (self.proposer_gpu_id, self.solver_gpu_id)
         if self.proposer_gpu_id == self.solver_gpu_id:
             if not self.allow_policy_gpu_colocation:
                 raise ValueError("locally managed policy GPU assignments must be distinct")
-            if sum(service_memory) > 0.7:
+            if sum(service_memory) > 0.70:
                 raise ValueError(
                     "co-located policy service GPU memory utilization must sum to <= 0.70"
                 )
         assigned = policy_gpus
         if self.runtime.managed_locally:
-            if self.runtime_gpu_id in policy_gpus and (not self.allow_policy_gpu_colocation):
+            if self.runtime_gpu_id in policy_gpus and not self.allow_policy_gpu_colocation:
                 raise ValueError(
                     "locally managed runtime GPU overlap requires explicit GPU colocation"
                 )
             assigned = (*assigned, self.runtime_gpu_id)
-        if any((gpu not in self.allocated_gpu_ids for gpu in assigned)):
+        if any(gpu not in self.allocated_gpu_ids for gpu in assigned):
             raise ValueError("all service GPUs must be included in resources.allocated_gpu_ids")
 
     def model_manifest(self) -> dict[str, Any]:
@@ -734,7 +841,7 @@ class AdaptiveApplicationConfig:
             },
             "runtime_environment": self.runtime.to_dict(),
             "runtime_environments": {
-                name: runtime.to_dict() for (name, runtime) in runtime_pool.items()
+                name: runtime.to_dict() for name, runtime in runtime_pool.items()
             },
             "runtime_routing": {
                 "peer_selection_policy": "removed_direct_neighbors_v1",
@@ -743,9 +850,9 @@ class AdaptiveApplicationConfig:
                 "counterfactual_execution": "full_graph_v1",
                 "worker_routes": list(self.worker_runtime_routes),
                 "endpoint_pools": {
-                    key: list(value) for (key, value) in self.runtime_endpoint_pools.items()
+                    key: list(value) for key, value in self.runtime_endpoint_pools.items()
                 },
-                "support": self.support_runtime,
+                "skill_distiller": self.skill_distiller_runtime,
                 "health_state_path": str(self.route_health_path),
                 "health_cooldown_s": self.route_health_cooldown_s,
             },
@@ -754,17 +861,22 @@ class AdaptiveApplicationConfig:
                 "fallback_max_total_tokens": self.canvas.max_total_tokens,
                 "max_total_tokens_by_dataset": {
                     canonical_dataset_name(dataset): int(limit)
-                    for (dataset, limit) in sorted(self.canvas.max_total_tokens_by_dataset.items())
+                    for dataset, limit in sorted(self.canvas.max_total_tokens_by_dataset.items())
                 },
-                "structural_exploration_policy": self.canvas.structural_exploration_policy,
-                "bidirectional_revision_policy": self.canvas.bidirectional_revision_policy,
-                "bidirectional_revision_confidence_threshold": self.canvas.bidirectional_revision_confidence_threshold,
+                "structural_exploration_policy": (self.canvas.structural_exploration_policy),
+                "bidirectional_revision_policy": (self.canvas.bidirectional_revision_policy),
+                "bidirectional_revision_confidence_threshold": (
+                    self.canvas.bidirectional_revision_confidence_threshold
+                ),
                 "bidirectional_revision_wave_budget": 1,
             },
             "retrieval": asdict(self.retrieval),
             "aime_actions": asdict(self.aime_actions),
             "webshop": asdict(self.webshop),
-            "alfworld": {**asdict(self.alfworld), "data_root": str(self.alfworld.data_root)},
+            "alfworld": {
+                **asdict(self.alfworld),
+                "data_root": str(self.alfworld.data_root),
+            },
             "swe_bench": {
                 "enabled": self.swe.enabled,
                 "environment_state": "stateful",
@@ -774,7 +886,7 @@ class AdaptiveApplicationConfig:
                 "max_initial_calls": self.swe.max_initial_calls,
                 "max_revision_calls": self.swe.max_revision_calls,
                 "max_total_calls": self.swe.max_total_calls,
-                "duplicate_responsibility_policy": self.swe.duplicate_responsibility_policy,
+                "duplicate_responsibility_policy": (self.swe.duplicate_responsibility_policy),
                 "test_profiles": sorted(self.swe.test_profiles),
             },
             "answer_submission": asdict(self.answer_submission),
@@ -785,8 +897,8 @@ class AdaptiveApplicationConfig:
                 "path": str(self.healthbench_judge_audit_path),
                 "auto_grader_mode": self.healthbench_auto_grader_mode,
                 "expected_model": self.healthbench_judge_expected_model,
-                "input_cost_per_million": self.healthbench_judge_input_cost_per_million,
-                "output_cost_per_million": self.healthbench_judge_output_cost_per_million,
+                "input_cost_per_million": (self.healthbench_judge_input_cost_per_million),
+                "output_cost_per_million": (self.healthbench_judge_output_cost_per_million),
             },
         }
 
@@ -815,13 +927,15 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
     if not isinstance(canvas, dict):
         raise ValueError("canvas must be a TOML table")
     raw_dataset_token_budgets = canvas.get(
-        "max_total_tokens_by_dataset", DEFAULT_DATASET_MAX_TOTAL_TOKENS
+        "max_total_tokens_by_dataset",
+        DEFAULT_DATASET_MAX_TOTAL_TOKENS,
     )
     if not isinstance(raw_dataset_token_budgets, dict):
         raise ValueError("canvas.max_total_tokens_by_dataset must be a TOML table")
     if bool(canvas.get("enforce_flowsteer_structure", False)):
         raise ValueError(
-            "canvas.enforce_flowsteer_structure is deprecated: fixed role/topology gates are incompatible with the generic-Agent protocol"
+            "canvas.enforce_flowsteer_structure is deprecated: fixed role/topology gates "
+            "are incompatible with the generic-Agent protocol"
         )
     obsolete_execution_keys = {
         "initial_build_rounds",
@@ -830,11 +944,11 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
     } & set(canvas)
     if obsolete_execution_keys:
         raise ValueError(
-            "incremental dirty-subgraph execution is mandatory and is no longer configurable with: "
-            + ", ".join(sorted(obsolete_execution_keys))
+            "incremental dirty-subgraph execution is mandatory and is no longer "
+            "configurable with: " + ", ".join(sorted(obsolete_execution_keys))
         )
     mace = payload.get("mace", {})
-    graph_features = payload.get("graph_features", {})
+    skills = payload.get("solver_skillbank", {})
     trace = payload.get("trace", {})
     healthbench_audit = payload.get("healthbench_judge_audit", {})
     verifier = payload.get("verifier", {})
@@ -851,13 +965,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
     )
     if not isinstance(raw_swe_test_profiles, dict):
         raise ValueError("swe.test_profiles must be a TOML table")
-    if any((not isinstance(command, list) for command in raw_swe_test_profiles.values())):
+    if any(not isinstance(command, list) for command in raw_swe_test_profiles.values()):
         raise ValueError("each swe.test_profiles entry must be an argv array")
     answer_submission = payload.get("answer_submission", {})
     if not isinstance(answer_submission, dict):
         raise ValueError("answer_submission must be a TOML table")
     director_reward = payload.get("director_reward")
-    if director_reward is not None and (not isinstance(director_reward, dict)):
+    if director_reward is not None and not isinstance(director_reward, dict):
         raise ValueError("director_reward must be a TOML table")
     director = payload.get("director", {})
     if not isinstance(director, dict):
@@ -879,16 +993,16 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         runtime_name=runtime_name,
         additional_runtimes={
             str(name): _fixed_runtime(value, root)
-            for (name, value) in additional_runtime_payload.items()
+            for name, value in additional_runtime_payload.items()
         },
         worker_runtime_routes=tuple(
-            (str(value) for value in runtime_routing.get("worker_routes", [runtime_name]))
+            str(value) for value in runtime_routing.get("worker_routes", [runtime_name])
         ),
         runtime_endpoint_pools={
-            str(key): tuple((str(member) for member in value))
-            for (key, value) in runtime_routing.get("endpoint_pools", {}).items()
+            str(key): tuple(str(member) for member in value)
+            for key, value in runtime_routing.get("endpoint_pools", {}).items()
         },
-        support_runtime=str(runtime_routing.get("support", runtime_name)),
+        skill_distiller_runtime=str(runtime_routing.get("skill_distiller", runtime_name)),
         route_health_path=_path(
             runtime_routing.get("health_state_path"), root, "state/route_health.json"
         ),
@@ -896,10 +1010,10 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         canvas=CanvasConfig(
             max_agents=int(canvas.get("max_agents", 8)),
             max_rounds=int(canvas.get("max_rounds", 20)),
-            max_total_tokens=int(canvas.get("max_total_tokens", 32768)),
+            max_total_tokens=int(canvas.get("max_total_tokens", 32_768)),
             max_total_tokens_by_dataset={
                 canonical_dataset_name(dataset): int(limit)
-                for (dataset, limit) in raw_dataset_token_budgets.items()
+                for dataset, limit in raw_dataset_token_budgets.items()
             },
             relay_max_chars=int(canvas.get("relay_max_chars", 4000)),
             feedback_max_chars=int(canvas.get("feedback_max_chars", 6000)),
@@ -916,9 +1030,12 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             finalization_time_reserve_s=float(canvas.get("finalization_time_reserve_s", 20.0)),
             finalization_time_reserve_by_dataset={
                 str(key): float(value)
-                for (key, value) in canvas.get(
+                for key, value in canvas.get(
                     "finalization_time_reserve_by_dataset",
-                    {"healthbench_professional": 180.0, "swe_bench": 120.0},
+                    {
+                        "healthbench_professional": 180.0,
+                        "swe_bench": 120.0,
+                    },
                 ).items()
             },
             remaining_token_admission_enabled=bool(
@@ -951,36 +1068,61 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         mace_model_statistics_path=_path(
             mace.get("model_statistics_path"), root, "state/mace_model_statistics.json"
         ),
-        graph_embedding_model_path=_model_reference(
-            graph_features.get("embedding_model_path", "intfloat/e5-base-v2"), root
+        skillbank_enabled=bool(skills.get("enabled", True)),
+        skillbank_mode=str(skills.get("mode", "legacy")),
+        skillbank_prompt_token_budget=int(skills.get("prompt_token_budget", 1024)),
+        skillbank_retrieval_min_score=(
+            float(skills["retrieval_min_score"]) if "retrieval_min_score" in skills else None
+        ),
+        skillbank_path=_path(skills.get("path"), root, "state/solver_skillbank.json"),
+        skill_cases_path=_path(skills.get("cases_path"), root, "state/solver_skill_cases.json"),
+        skillbank_max_skills=int(skills.get("max_skills", 800)),
+        skillbank_dedup_threshold=float(skills.get("dedup_threshold", 0.93)),
+        skillbank_dedup_review_threshold=float(skills.get("dedup_review_threshold", 0.90)),
+        skillbank_retrieve_top_k=int(skills.get("retrieve_top_k", 3)),
+        skillbank_min_retrieved_for_evict=int(skills.get("min_retrieved_for_evict", 3)),
+        skillbank_update_freq=int(skills.get("update_freq", 10)),
+        skillbank_pending_queue_max=int(skills.get("pending_queue_max", 300)),
+        skillbank_min_pending=int(skills.get("min_pending", 20)),
+        skillbank_generate_per_update=int(skills.get("generate_per_update", 50)),
+        skillbank_distill_concurrency=int(skills.get("distill_concurrency", 2)),
+        skillbank_activation_policy=str(skills.get("activation_policy", "paired")),
+        skillbank_embedding_model_path=_model_reference(
+            skills.get("embedding_model_path", "intfloat/e5-base-v2"), root
         ),
         trace_path=_path(trace.get("path"), root, "state/traces.jsonl"),
         healthbench_judge_audit_path=_path(
-            healthbench_audit.get("path"), root, "state/private/healthbench_judge_audit"
+            healthbench_audit.get("path"),
+            root,
+            "state/private/healthbench_judge_audit",
         ),
-        healthbench_judge_input_cost_per_million=float(healthbench_audit["input_cost_per_million"])
-        if healthbench_audit.get("input_cost_per_million") is not None
-        else None,
-        healthbench_judge_output_cost_per_million=float(
-            healthbench_audit["output_cost_per_million"]
-        )
-        if healthbench_audit.get("output_cost_per_million") is not None
-        else None,
+        healthbench_judge_input_cost_per_million=(
+            float(healthbench_audit["input_cost_per_million"])
+            if healthbench_audit.get("input_cost_per_million") is not None
+            else None
+        ),
+        healthbench_judge_output_cost_per_million=(
+            float(healthbench_audit["output_cost_per_million"])
+            if healthbench_audit.get("output_cost_per_million") is not None
+            else None
+        ),
         healthbench_auto_grader_mode=str(healthbench_audit.get("auto_grader_mode", "official"))
         .strip()
         .casefold(),
-        healthbench_judge_runtime_route=str(healthbench_audit["runtime_route"]).strip()
-        if healthbench_audit.get("runtime_route") is not None
-        else None,
+        healthbench_judge_runtime_route=(
+            str(healthbench_audit["runtime_route"]).strip()
+            if healthbench_audit.get("runtime_route") is not None
+            else None
+        ),
         healthbench_judge_expected_model=str(
             healthbench_audit.get("expected_model", HEALTHBENCH_PROFESSIONAL_JUDGE_MODEL)
         ).strip(),
-        allocated_gpu_ids=tuple((int(value) for value in resources.get("allocated_gpu_ids", [0]))),
+        allocated_gpu_ids=tuple(int(value) for value in resources.get("allocated_gpu_ids", [0])),
         proposer_gpu_id=int(resources.get("proposer_gpu_id", 0)),
         solver_gpu_id=int(resources.get("solver_gpu_id", 0)),
         runtime_gpu_id=int(resources.get("runtime_gpu_id", 0)),
         proposer_service_gpu_memory_utilization=float(
-            resources.get("proposer_service_gpu_memory_utilization", 0.3)
+            resources.get("proposer_service_gpu_memory_utilization", 0.30)
         ),
         solver_service_gpu_memory_utilization=float(
             resources.get("solver_service_gpu_memory_utilization", 0.35)
@@ -1007,7 +1149,7 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             enabled=bool(webshop.get("enabled", False)),
             service_url=str(webshop.get("service_url", "http://127.0.0.1:8020")),
             timeout_s=float(webshop.get("timeout_s", 10.0)),
-            max_observation_chars=int(webshop.get("max_observation_chars", 12000)),
+            max_observation_chars=int(webshop.get("max_observation_chars", 12_000)),
             max_query_chars=int(webshop.get("max_query_chars", 500)),
             max_initial_calls=int(webshop.get("max_initial_calls", 12)),
             max_revision_calls=int(webshop.get("max_revision_calls", 4)),
@@ -1020,11 +1162,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         alfworld=ALFWorldConfig(
             enabled=bool(alfworld.get("enabled", False)),
             data_root=_path(
-                alfworld.get("data_root"), root, "datasets/alfworld/data_assets/json_2.1.1"
+                alfworld.get("data_root"),
+                root,
+                "datasets/alfworld/data_assets/json_2.1.1",
             ),
             max_episode_steps=int(alfworld.get("max_episode_steps", 50)),
             max_rollout_steps=int(alfworld.get("max_rollout_steps", 400)),
-            max_observation_chars=int(alfworld.get("max_observation_chars", 12000)),
+            max_observation_chars=int(alfworld.get("max_observation_chars", 12_000)),
             max_initial_calls=int(alfworld.get("max_initial_calls", 50)),
             max_revision_calls=int(alfworld.get("max_revision_calls", 50)),
             max_total_calls=int(alfworld.get("max_total_calls", 100)),
@@ -1038,31 +1182,39 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             workspace_root=_path(swe.get("workspace_root"), root, "state/swe/workspaces"),
             artifact_store_root=_path(swe.get("artifact_store_root"), root, "state/swe/artifacts"),
             verifier_registry_path=_path(
-                swe.get("verifier_registry_path"), root, "state/private/swe/verifier-registry.json"
+                swe.get("verifier_registry_path"),
+                root,
+                "state/private/swe/verifier-registry.json",
             ),
             lifecycle_log_path=_path(
-                swe.get("lifecycle_log_path"), root, "state/private/swe/lifecycle.jsonl"
+                swe.get("lifecycle_log_path"),
+                root,
+                "state/private/swe/lifecycle.jsonl",
             ),
             verifier_log_path=_path(
-                swe.get("verifier_log_path"), root, "state/private/swe/verifier-client.jsonl"
+                swe.get("verifier_log_path"),
+                root,
+                "state/private/swe/verifier-client.jsonl",
             ),
             verifier_host=str(swe.get("verifier_host", "")),
-            verifier_user=str(swe.get("verifier_user", "swe-user")),
+            verifier_user=str(swe.get("verifier_user", "sweeval")),
             verifier_identity_file=_path(
-                swe.get("verifier_identity_file"), root, "config/private/swe_identity"
+                swe.get("verifier_identity_file"),
+                root,
+                "config/private/swe_identity",
             ),
             verifier_known_hosts_file=_path(
                 swe.get("verifier_known_hosts_file"),
                 root,
-                "config/private/swe_known_hosts",
+                "state/deployments/20260824-swe-verifier-tencent/known_hosts",
             ),
             dataset_revision=str(swe.get("dataset_revision", "")),
             connect_timeout_s=float(swe.get("connect_timeout_s", 10.0)),
             request_timeout_s=float(swe.get("request_timeout_s", 720.0)),
             local_test_timeout_s=float(swe.get("local_test_timeout_s", 60.0)),
-            max_output_chars=int(swe.get("max_output_chars", 12000)),
-            max_file_chars=int(swe.get("max_file_chars", 200000)),
-            max_patch_bytes=int(swe.get("max_patch_bytes", 2000000)),
+            max_output_chars=int(swe.get("max_output_chars", 12_000)),
+            max_file_chars=int(swe.get("max_file_chars", 200_000)),
+            max_patch_bytes=int(swe.get("max_patch_bytes", 2_000_000)),
             max_initial_calls=int(swe.get("max_initial_calls", 20)),
             max_revision_calls=int(swe.get("max_revision_calls", 12)),
             max_total_calls=int(swe.get("max_total_calls", 32)),
@@ -1072,8 +1224,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             .strip()
             .casefold(),
             test_profiles={
-                str(name): tuple((str(part) for part in command))
-                for (name, command) in raw_swe_test_profiles.items()
+                str(name): tuple(str(part) for part in command)
+                for name, command in raw_swe_test_profiles.items()
             },
         ),
         answer_submission=AnswerSubmissionConfig(
@@ -1083,6 +1235,9 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             max_tokens=int(answer_submission.get("max_tokens", 128)),
             require_source_span=bool(answer_submission.get("require_source_span", True)),
         ),
+        # Config files created before protocol_gate_v1 remain replayable. New
+        # experiment configs must opt in explicitly so a resumed rollout group
+        # can never change reward semantics silently.
         director_reward=DirectorRewardConfig(
             version=str((director_reward or {}).get("version", LEGACY_REWARD_VERSION))
         ),
@@ -1093,7 +1248,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
     return config
 
 
-def _role_model(payload: object, root: Path, name: str, *, trainable: bool) -> RoleModelConfig:
+def _role_model(
+    payload: object,
+    root: Path,
+    name: str,
+    *,
+    trainable: bool,
+) -> RoleModelConfig:
     if not isinstance(payload, dict):
         raise ValueError(f"models.{name} must be a TOML table")
     default_port = {"proposer": 8001, "solver": 8002}[name]
@@ -1131,18 +1292,22 @@ def _fixed_runtime(payload: object, root: Path) -> FixedRuntimeConfig:
         user_agent=payload.get("user_agent"),
         network_path=str(payload.get("network_path", "configured_proxy")),
         stream=bool(payload.get("stream", False)),
-        reasoning_effort=str(payload["reasoning_effort"]).strip().lower()
-        if payload.get("reasoning_effort") is not None
-        else None,
-        healthbench_grader_reasoning_effort=str(payload["healthbench_grader_reasoning_effort"])
-        .strip()
-        .lower()
-        if payload.get("healthbench_grader_reasoning_effort") is not None
-        else None,
+        enable_thinking=bool(payload.get("enable_thinking", False)),
+        max_tokens=int(payload.get("max_tokens", 2048)),
+        reasoning_effort=(
+            str(payload["reasoning_effort"]).strip().lower()
+            if payload.get("reasoning_effort") is not None
+            else None
+        ),
+        healthbench_grader_reasoning_effort=(
+            str(payload["healthbench_grader_reasoning_effort"]).strip().lower()
+            if payload.get("healthbench_grader_reasoning_effort") is not None
+            else None
+        ),
         max_concurrency=int(payload.get("max_concurrency", default_max_concurrency)),
         max_concurrency_by_dataset={
             canonical_dataset_name(dataset): int(limit)
-            for (dataset, limit) in payload.get("max_concurrency_by_dataset", {}).items()
+            for dataset, limit in payload.get("max_concurrency_by_dataset", {}).items()
         },
         managed_locally=managed_locally,
         frozen=bool(payload.get("frozen", True)),
@@ -1151,6 +1316,7 @@ def _fixed_runtime(payload: object, root: Path) -> FixedRuntimeConfig:
 
 def _api_key(payload: dict[str, Any]) -> str:
     """Resolve API credentials without requiring secrets in TOML files."""
+
     env_name = str(payload.get("api_key_env", "")).strip()
     if env_name:
         value = os.environ.get(env_name, "").strip()
@@ -1178,8 +1344,10 @@ def _api_keys_by_dataset(payload: dict[str, Any]) -> dict[str, str]:
 
 def _load_project_env(config_path: Path) -> None:
     """Load the nearest project .env without overriding the caller environment."""
+
     env_path = next(
-        (parent / ".env" for parent in config_path.parents if (parent / ".env").is_file()), None
+        (parent / ".env" for parent in config_path.parents if (parent / ".env").is_file()),
+        None,
     )
     if env_path is None:
         return
@@ -1191,9 +1359,9 @@ def _load_project_env(config_path: Path) -> None:
             line = line[7:].lstrip()
         if "=" not in line:
             raise ValueError(f"invalid .env entry at {env_path}:{line_number}")
-        (name, raw_value) = line.split("=", 1)
+        name, raw_value = line.split("=", 1)
         name = name.strip()
-        if not re.fullmatch("[A-Za-z_][A-Za-z0-9_]*", name):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
             raise ValueError(f"invalid .env variable name at {env_path}:{line_number}")
         try:
             parsed = shlex.split(raw_value, comments=False, posix=True)
@@ -1225,27 +1393,32 @@ class AdaptiveApplicationResult:
     run_id: str
     task: TaskSpec
     solver_result: AdaptiveSolverResult
+    skills_used: tuple[str, ...]
     mace_statistics_path: str | None
     trace_store_path: str
 
     def to_dict(self) -> dict[str, Any]:
         result = self.solver_result.to_dict()
         submission = self.solver_result.answer_submission
-        (worker_token_in, worker_token_out) = _unique_worker_token_totals(
-            self.solver_result.trace.events, run_id=self.run_id
+        worker_token_in, worker_token_out = _unique_worker_token_totals(
+            self.solver_result.trace.events,
+            run_id=self.run_id,
         )
         return {
             "run_id": self.run_id,
             "task": task_to_public_dict(self.task),
-            "answer": submission.submitted_answer
-            if submission
-            else self.solver_result.director_run.output,
+            "answer": (
+                submission.submitted_answer
+                if submission
+                else self.solver_result.director_run.output
+            ),
             "raw_answer": self.solver_result.director_run.output,
             "answer_submission": submission.to_dict() if submission else None,
             "finished": self.solver_result.director_run.finished,
             "verification": result["verification"],
             "flowsteer_structure": result["flowsteer_structure"],
             "final_graph": self.solver_result.director_run.graph,
+            "skills_used": list(self.skills_used),
             "trace_run_id": self.solver_result.trace.run_id,
             "trace_store_path": self.trace_store_path,
             "mace_statistics_path": self.mace_statistics_path,
@@ -1264,6 +1437,7 @@ def _unique_worker_token_totals(trace_events: list[Any], *, run_id: str) -> tupl
     report-level token fields are intentionally not used because they include
     the reused artifact again.
     """
+
     seen_artifacts: set[str] = set()
     token_in = token_out = 0
     for event_index, event in enumerate(trace_events):
@@ -1275,6 +1449,8 @@ def _unique_worker_token_totals(trace_events: list[Any], *, run_id: str) -> tupl
             continue
         artifacts = execution.get("artifacts", {})
         if not isinstance(artifacts, dict) or not artifacts:
+            # Error-only reports normally have zero token usage. Preserve any
+            # non-zero legacy report without pretending that it is deduplicable.
             token_in += int(execution.get("token_in", 0) or 0)
             token_out += int(execution.get("token_out", 0) or 0)
             continue
@@ -1292,7 +1468,7 @@ def _unique_worker_token_totals(trace_events: list[Any], *, run_id: str) -> tupl
             seen_artifacts.add(identity)
             token_in += int(artifact.get("token_in", 0) or 0)
             token_out += int(artifact.get("token_out", 0) or 0)
-    return (token_in, token_out)
+    return token_in, token_out
 
 
 class AdaptiveSolverApplication:
@@ -1304,6 +1480,8 @@ class AdaptiveSolverApplication:
         config: AdaptiveApplicationConfig,
         solver: AdaptiveWorkflowSolver,
         runtime: MultiAgentRuntime,
+        skillbank: SolverSkillBank | None,
+        skill_lifecycle: SolverSkillLifecycle | None,
         mace_selector: None = None,
         model_router: None = None,
         owned_backends: tuple[ChatBackend, ...] = (),
@@ -1311,6 +1489,8 @@ class AdaptiveSolverApplication:
         self.config = config
         self.solver = solver
         self.runtime = runtime
+        self.skillbank = skillbank
+        self.skill_lifecycle = skill_lifecycle
         if mace_selector is not None:
             raise ValueError("peer selector has been removed")
         self.mace_selector = None
@@ -1330,6 +1510,7 @@ class AdaptiveSolverApplication:
 
     def set_rollout_deadline(self, deadline: RolloutDeadline | None) -> None:
         """Install one deadline across Director, Canvas, Worker, and API gates."""
+
         self.solver.rollout_deadline = deadline
         set_executor_deadline = getattr(self.runtime.executor, "set_deadline_context", None)
         if callable(set_executor_deadline):
@@ -1343,12 +1524,16 @@ class AdaptiveSolverApplication:
         self, *, dataset: str, request_role: str = "primary"
     ) -> dict[str, Any]:
         """Apply an early route circuit for one new plain-text primary rollout."""
+
         dataset_key = canonical_dataset_name(dataset)
         store = RouteHealthStore(
-            self.config.route_health_path, cooldown_s=self.config.route_health_cooldown_s
+            self.config.route_health_path,
+            cooldown_s=self.config.route_health_cooldown_s,
         )
-        (available, blocked) = store.available_scoped_routes(
-            self.config.worker_runtime_routes, dataset=dataset_key, request_role=request_role
+        available, blocked = store.available_scoped_routes(
+            self.config.worker_runtime_routes,
+            dataset=dataset_key,
+            request_role=request_role,
         )
         diagnostics = {
             "dataset": dataset_key,
@@ -1358,10 +1543,11 @@ class AdaptiveSolverApplication:
         }
         if not available:
             blocked_summary = ", ".join(
-                (f"{route}({state['block_reason']})" for (route, state) in sorted(blocked.items()))
+                f"{route}({state['block_reason']})" for route, state in sorted(blocked.items())
             )
             raise PersistentRouteCircuitOpenError(
-                f"all Worker routes are blocked for scoped primary admission {dataset_key}/{request_role}: {blocked_summary}"
+                "all Worker routes are blocked for scoped primary admission "
+                f"{dataset_key}/{request_role}: {blocked_summary}"
             )
         self.solver.runtime_routes = available
         return diagnostics
@@ -1399,6 +1585,7 @@ class AdaptiveSolverApplication:
         if needs_reference and reference is None:
             raise ValueError(f"{self.config.verifier} verifier requires a reference answer")
         self.runtime.reset()
+
         task = TaskSpec(
             task_id,
             prompt,
@@ -1407,6 +1594,7 @@ class AdaptiveSolverApplication:
             metadata={
                 **dict(metadata or {}),
                 "model_roles": self.config.model_manifest(),
+                "skills_enabled": self.config.skillbank_enabled,
                 "action_protocol": "director_model_v1",
             },
             private_verifier_payload=dict(private_verifier_payload or {}),
@@ -1418,6 +1606,9 @@ class AdaptiveSolverApplication:
             try:
                 self.solver.rollout_deadline.check("application_solve_complete")
             except WorkerWallClockLimitExceeded as exc:
+                # The solver has already returned and persisted a verifier result.
+                # Preserve that evidence and the policy record; downstream reward
+                # and training admission still decide whether either is usable.
                 verification = result.trace.verification
                 if verification is None or not math.isfinite(verification.score):
                     raise
@@ -1430,6 +1621,7 @@ class AdaptiveSolverApplication:
             run_id=resolved_run_id,
             task=task,
             solver_result=result,
+            skills_used=result.skills_used,
             mace_statistics_path=None,
             trace_store_path=str(self.config.trace_path),
         )
@@ -1451,9 +1643,7 @@ class AdaptiveSolverApplication:
             lifecycles = required[dataset](tools)
             if adapter is None or not lifecycles:
                 return {"supported": False, "reason": f"{dataset}_isolated_lifecycle_missing"}
-            if dataset == "swe_bench" and any(
-                (item.harness_backend is None for item in lifecycles)
-            ):
+            if dataset == "swe_bench" and any(item.harness_backend is None for item in lifecycles):
                 return {"supported": False, "reason": "swe_final_harness_missing"}
         return {"supported": True, "reason": "final_verifier_and_isolated_lifecycle_configured"}
 
@@ -1507,7 +1697,7 @@ class AdaptiveSolverApplication:
             ).hexdigest()
         )
         graph = graph.clone()
-        if not graph.output_agent or any((not node.configured for node in graph.nodes.values())):
+        if not graph.output_agent or any(not node.configured for node in graph.nodes.values()):
             raise ValueError(
                 "full graph evaluation requires output and complete node configuration"
             )
@@ -1598,13 +1788,16 @@ class AdaptiveSolverApplication:
                             self.config.canvas.finalization_token_reserve
                         )
                 else:
+                    # Environment branches must obey admission before a request,
+                    # not just reject an already over-budget graph afterwards.
                     node.metadata["_runtime_budget_kind"] = "full_graph_request_credit_v1"
             with request_dataset(task.metadata.get("dataset", task.task_type)):
                 report = self.runtime.execute(
                     task=solver_task_text(
                         task,
-                        include_submission_contract=getattr(self.solver, "answer_finalizer", None)
-                        is not None,
+                        include_submission_contract=(
+                            getattr(self.solver, "answer_finalizer", None) is not None
+                        ),
                     ),
                     graph=graph,
                     dirty_agents=None,
@@ -1636,20 +1829,16 @@ class AdaptiveSolverApplication:
                     "full graph branch has incomplete bidirectional execution; no counterfactual credit"
                 )
             if any(
-                (
-                    artifact.model == "runtime-budget-boundary"
-                    or (
-                        artifact.token_in + artifact.token_out == 0
-                        and any(
-                            (
-                                item.get("no_request_dispatched")
-                                and "credit_exhausted" in str(item.get("stage", ""))
-                                for item in artifact.protocol_diagnostics
-                            )
-                        )
+                artifact.model == "runtime-budget-boundary"
+                or (
+                    artifact.token_in + artifact.token_out == 0
+                    and any(
+                        item.get("no_request_dispatched")
+                        and "credit_exhausted" in str(item.get("stage", ""))
+                        for item in artifact.protocol_diagnostics
                     )
-                    for artifact in report.artifacts.values()
                 )
+                for artifact in report.artifacts.values()
             ):
                 raise RuntimeError(
                     "full graph branch could not admit Worker execution; no counterfactual credit"
@@ -1700,10 +1889,7 @@ class AdaptiveSolverApplication:
                     in {"agent_never_executed", "missing_output_agent", "environment_error"}
                     or outcome.get("error")
                     or outcome.get("infrastructure_failure")
-                    or (
-                        "environment_completed" in outcome
-                        and (not outcome["environment_completed"])
-                    )
+                    or ("environment_completed" in outcome and not outcome["environment_completed"])
                 ):
                     raise RuntimeError(
                         f"{key}: incomplete/infrastructure outcome, no counterfactual credit"
@@ -1728,7 +1914,7 @@ class AdaptiveSolverApplication:
                 raise GraphEvaluationBackendError(
                     {
                         "count": len(backend_failures),
-                        "agents": sorted((artifact.agent_id for artifact in backend_failures)),
+                        "agents": sorted(artifact.agent_id for artifact in backend_failures),
                         "routes": sorted(
                             {artifact.model_route or "unassigned" for artifact in backend_failures}
                         ),
@@ -1738,16 +1924,14 @@ class AdaptiveSolverApplication:
                         "failure_details": failure_details,
                         "request_events": request_events,
                         "retryable": any(
-                            (bool(record.get("retryable")) for record in failure_details)
+                            bool(record.get("retryable")) for record in failure_details
                         ),
                         "counts_toward_route_circuit": any(
-                            (
-                                bool(record.get("counts_toward_route_circuit"))
-                                for record in failure_details
-                            )
+                            bool(record.get("counts_toward_route_circuit"))
+                            for record in failure_details
                         ),
                         "disable_route": any(
-                            (bool(record.get("disable_route")) for record in failure_details)
+                            bool(record.get("disable_route")) for record in failure_details
                         ),
                     }
                 )
@@ -1766,8 +1950,8 @@ class AdaptiveSolverApplication:
                     f"invalid_answer_submission:{submission.detail}",
                 )
                 if submission is not None
-                and (not submission.valid)
-                and (submission.method == "aime_strict_submission_v1")
+                and not submission.valid
+                and submission.method == "aime_strict_submission_v1"
                 else self.solver.verifier.verify(task, prediction)
             )
             task_score = float(verification.score)
@@ -1783,7 +1967,11 @@ class AdaptiveSolverApplication:
                         "HealthBench graph evaluation lacks normalized training reward"
                     ) from exc
             if return_verification:
-                return {"score": task_score, "prediction": prediction, "verification": verification}
+                return {
+                    "score": task_score,
+                    "prediction": prediction,
+                    "verification": verification,
+                }
             return task_score
         finally:
             for lifecycle in (
@@ -1802,7 +1990,7 @@ def create_adaptive_application(
     mock: bool = False,
     director_backend: ChatBackend | None = None,
     worker_backend: ChatBackend | None = None,
-    support_backend: ChatBackend | None = None,
+    distiller_backend: ChatBackend | None = None,
     verifier: Verifier | None = None,
     route_latency_tracker: RouteLatencyTracker | None = None,
     route_token_tracker: RouteTokenTracker | None = None,
@@ -1813,13 +2001,10 @@ def create_adaptive_application(
     route_health = RouteHealthStore(
         config.route_health_path, cooldown_s=config.route_health_cooldown_s
     )
-    (active_routes, blocked_routes) = route_health.available_routes(config.worker_runtime_routes)
+    active_routes, blocked_routes = route_health.available_routes(config.worker_runtime_routes)
     if not active_routes:
         blocked_summary = ", ".join(
-            (
-                f"{route}({state['block_reason']})"
-                for (route, state) in sorted(blocked_routes.items())
-            )
+            f"{route}({state['block_reason']})" for route, state in sorted(blocked_routes.items())
         )
         raise PersistentRouteCircuitOpenError(
             "all configured Worker routes are blocked by persisted health state: " + blocked_summary
@@ -1854,7 +2039,10 @@ def create_adaptive_application(
     webshop_lifecycle = None
     if config.webshop.enabled:
         webshop_lifecycle = WebShopSessionLifecycle(
-            WebShopHTTPClient(config.webshop.service_url, timeout_s=config.webshop.timeout_s),
+            WebShopHTTPClient(
+                config.webshop.service_url,
+                timeout_s=config.webshop.timeout_s,
+            ),
             max_observation_chars=config.webshop.max_observation_chars,
             max_pending_sessions=config.webshop.max_pending_sessions,
             pending_ttl_s=config.webshop.pending_ttl_s,
@@ -1862,7 +2050,8 @@ def create_adaptive_application(
             search_observation_mode=config.webshop.search_observation_mode,
         )
         tools["webshop_search"] = WebShopSearchTool(
-            webshop_lifecycle, max_query_chars=config.webshop.max_query_chars
+            webshop_lifecycle,
+            max_query_chars=config.webshop.max_query_chars,
         )
         tools["webshop_click"] = WebShopClickTool(webshop_lifecycle)
     alfworld_lifecycle = None
@@ -1937,26 +2126,28 @@ def create_adaptive_application(
         )
         director_backend = director_backend or defaults[0]
         worker_backend = worker_backend or defaults[1]
-        support_backend = support_backend or defaults[2]
+        distiller_backend = distiller_backend or defaults[2]
         worker_executor = ModelAgentExecutor(
             worker_backend,
             tools=tools,
             action_registry=action_registry,
             max_tool_rounds=config.retrieval.max_tool_rounds,
-            alfworld_worker_guidance_policy=config.alfworld.worker_guidance_policy,
+            alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
         )
     else:
         if director_backend is None:
             director_backend = OpenAICompatibleBackend(
                 _gateway_config(
-                    config.solver_model, {"graph-director": 0.6}, sampling_seed=config.seed
+                    config.solver_model,
+                    {"graph-director": 0.6},
+                    sampling_seed=config.seed,
                 )
             )
             owned_backends.append(director_backend)
-        if worker_backend is None or support_backend is None:
+        if worker_backend is None or distiller_backend is None:
             runtime_backends = {
                 name: _create_runtime_backend(runtime, route_name=name)
-                for (name, runtime) in config.runtime_pool().items()
+                for name, runtime in config.runtime_pool().items()
             }
             owned_backends.extend(runtime_backends.values())
             from .endpoint_pool import EndpointPoolBackend
@@ -1968,6 +2159,8 @@ def create_adaptive_application(
                     {name: physical_backends[name] for name in members},
                     config.route_health_path.parent / "endpoint_pools",
                 )
+                # Install the shared rollout clock on the pool wrapper too,
+                # not only on its physical clients.
                 owned_backends.append(runtime_backends[logical])
         if worker_backend is None:
             worker_executor = RoutedModelAgentExecutor(
@@ -1976,7 +2169,7 @@ def create_adaptive_application(
                 tools=tools,
                 action_registry=action_registry,
                 max_tool_rounds=config.retrieval.max_tool_rounds,
-                alfworld_worker_guidance_policy=config.alfworld.worker_guidance_policy,
+                alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
             )
         else:
             worker_executor = ModelAgentExecutor(
@@ -1984,17 +2177,18 @@ def create_adaptive_application(
                 tools=tools,
                 action_registry=action_registry,
                 max_tool_rounds=config.retrieval.max_tool_rounds,
-                alfworld_worker_guidance_policy=config.alfworld.worker_guidance_policy,
+                alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
             )
-        if support_backend is None:
-            support_backend = runtime_backends[config.support_runtime]
-    assert director_backend and support_backend
-    fixed_backends = [support_backend]
+        if distiller_backend is None:
+            distiller_backend = runtime_backends[config.skill_distiller_runtime]
+    assert director_backend and distiller_backend
+    fixed_backends = [distiller_backend]
     if worker_backend is not None:
         fixed_backends.append(worker_backend)
-    if any((director_backend is fixed_backend for fixed_backend in fixed_backends)):
+    if any(director_backend is fixed_backend for fixed_backend in fixed_backends):
         raise ValueError("Solver policy backend cannot be shared with fixed runtime")
-    mace_selector = None
+
+    mace_selector = None  # Legacy constructor rejects any active selector.
     model_router = None
     runtime = MultiAgentRuntime(
         worker_executor,
@@ -2002,21 +2196,67 @@ def create_adaptive_application(
         seed=config.seed,
         peer_selector=mace_selector,
         exploration_horizon=config.canvas.max_rounds,
-        bidirectional_revision_policy=config.canvas.bidirectional_revision_policy,
-        bidirectional_revision_confidence_threshold=config.canvas.bidirectional_revision_confidence_threshold,
-        route_latency_tracker=route_latency_tracker
-        or RouteLatencyTracker(window_size=config.canvas.worker_latency_window),
-        route_token_tracker=route_token_tracker
-        or RouteTokenTracker(window_size=config.canvas.worker_token_window),
+        bidirectional_revision_policy=(config.canvas.bidirectional_revision_policy),
+        bidirectional_revision_confidence_threshold=(
+            config.canvas.bidirectional_revision_confidence_threshold
+        ),
+        route_latency_tracker=(
+            route_latency_tracker
+            or RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
+        ),
+        route_token_tracker=(
+            route_token_tracker or RouteTokenTracker(window_size=config.canvas.worker_token_window)
+        ),
     )
+    skillbank = (
+        SolverSkillBank(
+            config.skillbank_path,
+            max_skills=config.skillbank_max_skills,
+            dedup_threshold=config.skillbank_dedup_threshold,
+            retrieve_top_k=config.skillbank_retrieve_top_k,
+            min_retrieved_for_evict=config.skillbank_min_retrieved_for_evict,
+            embedder=(
+                E5SkillEmbedder(config.skillbank_embedding_model_path)
+                if config.skillbank_embedding_model_path and not mock
+                else None
+            ),
+        )
+        if config.skillbank_enabled and config.skillbank_mode == "legacy"
+        else None
+    )
+    if config.skillbank_enabled and config.skillbank_mode == "director_skill_v2":
+        from .skill_evolution_v2 import load_bank
+
+        skillbank = load_bank(
+            config,
+            embedder=(
+                E5SkillEmbedder(config.skillbank_embedding_model_path)
+                if config.skillbank_embedding_model_path and not mock
+                else None
+            ),
+        )
+    lifecycle = (
+        SolverSkillLifecycle(
+            skillbank,
+            SESASolverSkillDistiller(distiller_backend),
+            update_freq=config.skillbank_update_freq,
+            pending_queue_max=config.skillbank_pending_queue_max,
+            min_pending=config.skillbank_min_pending,
+            generate_per_update=config.skillbank_generate_per_update,
+        )
+        if skillbank and config.skillbank_mode == "legacy"
+        else None
+    )
+    if lifecycle:
+        lifecycle.load_pending(config.skill_cases_path)
     grader_backend = (
         (
             runtime_backends[config.healthbench_judge_runtime_route]
             if config.healthbench_judge_runtime_route is not None
-            else runtime_backends.get("gpt", support_backend)
+            else runtime_backends.get("gpt", distiller_backend)
         )
         if not mock
-        else support_backend
+        else distiller_backend
     )
     selected_verifier = verifier or _verifier(
         config.verifier,
@@ -2027,49 +2267,55 @@ def create_adaptive_application(
                 require_judge_attestation=not mock,
                 expected_judge_model=config.healthbench_judge_expected_model,
                 audit_store=HealthBenchJudgeAuditStore(config.healthbench_judge_audit_path),
-                input_cost_per_million=config.healthbench_judge_input_cost_per_million,
-                output_cost_per_million=config.healthbench_judge_output_cost_per_million,
+                input_cost_per_million=(config.healthbench_judge_input_cost_per_million),
+                output_cost_per_million=(config.healthbench_judge_output_cost_per_million),
             ),
             "healthbench_rubric_low_cost": HealthBenchRubricVerifier(
                 grader_backend,
                 audit_store=HealthBenchJudgeAuditStore(config.healthbench_judge_audit_path),
-                input_cost_per_million=config.healthbench_judge_input_cost_per_million,
-                output_cost_per_million=config.healthbench_judge_output_cost_per_million,
+                input_cost_per_million=(config.healthbench_judge_input_cost_per_million),
+                output_cost_per_million=(config.healthbench_judge_output_cost_per_million),
             ),
             "webshop_environment": WebShopEnvironmentVerifier(),
             "alfworld_environment": ALFWorldEnvironmentVerifier(),
             "swe_outcome": SWEOutcomeVerifier(),
         },
-        aliases={"healthbench_rubric": "healthbench_rubric_low_cost"}
-        if config.healthbench_auto_grader_mode == "low_cost"
-        else None,
+        aliases=(
+            {"healthbench_rubric": "healthbench_rubric_low_cost"}
+            if config.healthbench_auto_grader_mode == "low_cost"
+            else None
+        ),
     )
     answer_finalizer = None
     if config.answer_submission.enabled:
         formatter_backend = None
         if config.answer_submission.qa_model_enabled:
             formatter_backend = (
-                support_backend
+                distiller_backend
                 if mock
                 else runtime_backends.get(config.answer_submission.runtime_route)
             )
             if (
                 formatter_backend is None
-                and config.answer_submission.runtime_route == config.support_runtime
+                and config.answer_submission.runtime_route == config.skill_distiller_runtime
             ):
-                formatter_backend = support_backend
-        answer_finalizer = AnswerFinalizer(config.answer_submission, qa_backend=formatter_backend)
+                formatter_backend = distiller_backend
+        answer_finalizer = AnswerFinalizer(
+            config.answer_submission,
+            qa_backend=formatter_backend,
+        )
     solver = AdaptiveWorkflowSolver(
         director_backend=director_backend,
         runtime=runtime,
         verifier=selected_verifier,
+        skillbank=skillbank,
         trace_store=JSONLTraceStore(config.trace_path),
         canvas_config=config.canvas,
         runtime_routes=config.worker_runtime_routes,
         model_router=model_router,
         action_registry=action_registry,
         answer_finalizer=answer_finalizer,
-        swe_duplicate_responsibility_policy=config.swe.duplicate_responsibility_policy,
+        swe_duplicate_responsibility_policy=(config.swe.duplicate_responsibility_policy),
         director_prompt_variant=config.director_prompt_variant,
         director_tokenizer=director_tokenizer,
     )
@@ -2077,6 +2323,8 @@ def create_adaptive_application(
         config=config,
         solver=solver,
         runtime=runtime,
+        skillbank=skillbank,
+        skill_lifecycle=lifecycle,
         mace_selector=mace_selector,
         model_router=model_router,
         owned_backends=tuple(owned_backends),
@@ -2084,7 +2332,10 @@ def create_adaptive_application(
 
 
 def _gateway_config(
-    model: RoleModelConfig, temperatures: dict[str, float], *, sampling_seed: int | None = None
+    model: RoleModelConfig,
+    temperatures: dict[str, float],
+    *,
+    sampling_seed: int | None = None,
 ) -> ModelGatewayConfig:
     return ModelGatewayConfig(
         base_url=model.base_url,
@@ -2099,13 +2350,16 @@ def _gateway_config(
                 top_k=20 if role == "graph-director" else None,
                 enable_thinking=role == "graph-director",
             )
-            for (role, temperature) in temperatures.items()
+            for role, temperature in temperatures.items()
         },
     )
 
 
 def _runtime_gateway_config(
-    runtime: FixedRuntimeConfig, temperatures: dict[str, float], *, route_name: str = ""
+    runtime: FixedRuntimeConfig,
+    temperatures: dict[str, float],
+    *,
+    route_name: str = "",
 ) -> ModelGatewayConfig:
     return ModelGatewayConfig(
         base_url=runtime.base_url,
@@ -2123,13 +2377,17 @@ def _runtime_gateway_config(
             role: ModelRoleConfig(
                 model=runtime.served_model,
                 temperature=temperature,
-                reasoning_effort=runtime.healthbench_grader_reasoning_effort
-                if role in {"healthbench-grader", "healthbench-grader-chat"}
-                and runtime.healthbench_grader_reasoning_effort is not None
-                else runtime.reasoning_effort,
-                api_surface="responses" if role == "healthbench-grader" else runtime.api_surface,
+                enable_thinking=runtime.enable_thinking,
+                max_tokens=runtime.max_tokens,
+                reasoning_effort=(
+                    runtime.healthbench_grader_reasoning_effort
+                    if role in {"healthbench-grader", "healthbench-grader-chat"}
+                    and runtime.healthbench_grader_reasoning_effort is not None
+                    else runtime.reasoning_effort
+                ),
+                api_surface=("responses" if role == "healthbench-grader" else runtime.api_surface),
             )
-            for (role, temperature) in temperatures.items()
+            for role, temperature in temperatures.items()
         },
     )
 
@@ -2138,7 +2396,7 @@ def _create_runtime_backend(runtime: FixedRuntimeConfig, *, route_name: str = ""
     gateway = _runtime_gateway_config(
         runtime,
         {
-            "support": 0.0,
+            "skill-distiller": 0.0,
             "worker": 0.0,
             "healthbench-grader": 0.0,
             "healthbench-grader-chat": 0.0,
@@ -2158,9 +2416,14 @@ def create_qwen_task_proposer(
     tokenizer: Tokenizer | None = None,
 ) -> QwenTaskProposer:
     """Create the Proposer only from its own independently served model role."""
+
     config.validate()
     proposer_backend = backend or OpenAICompatibleBackend(
-        _gateway_config(config.proposer_model, {"proposer": 0.8}, sampling_seed=config.seed)
+        _gateway_config(
+            config.proposer_model,
+            {"proposer": 0.8},
+            sampling_seed=config.seed,
+        )
     )
     return QwenTaskProposer(proposer_backend, tokenizer)
 
@@ -2175,18 +2438,29 @@ def create_fixed_pool_proposer(
     tokenizer: Tokenizer | None = None,
     candidate_count: int = 8,
 ) -> FixedPoolQwenProposer:
-    """Create the trainable selector without exposing Solver state."""
+    """Create the trainable selector without exposing Solver or SkillBank state."""
+
     config.validate()
     proposer_backend = backend or OpenAICompatibleBackend(
-        _gateway_config(config.proposer_model, {"proposer": 0.8}, sampling_seed=config.seed)
+        _gateway_config(
+            config.proposer_model,
+            {"proposer": 0.8},
+            sampling_seed=config.seed,
+        )
     )
     return FixedPoolQwenProposer(
-        proposer_backend, pool, scheduler, retriever, tokenizer, candidate_count=candidate_count
+        proposer_backend,
+        pool,
+        scheduler,
+        retriever,
+        tokenizer,
+        candidate_count=candidate_count,
     )
 
 
 def create_selfplay_snapshots(config: AdaptiveApplicationConfig) -> AlternatingSnapshots:
     """Bind self-play state to distinct Proposer and Solver checkpoint roots."""
+
     config.validate()
     return AlternatingSnapshots(
         proposer_snapshot=_current_policy_snapshot(
@@ -2196,6 +2470,89 @@ def create_selfplay_snapshots(config: AdaptiveApplicationConfig) -> AlternatingS
             config.solver_model.checkpoint_path, config.solver_model.base_model_path
         ),
     )
+
+
+def consolidate_selfplay_skills(
+    config: AdaptiveApplicationConfig,
+    result: Any,
+    *,
+    mock: bool,
+    step: int,
+    cycle_dir: Path | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Apply SESA's frontier-failure gate to Solver Director skill evolution."""
+
+    if not config.skillbank_enabled:
+        return ()
+    if config.skillbank_mode == "director_skill_v2":
+        from .skill_evolution_v2 import atomic_json, consolidate
+
+        try:
+            return consolidate(config, result, step=step, mock=mock, cycle_dir=cycle_dir)
+        except Exception as exc:
+            # Raw rollout evidence remains authoritative and can be re-ingested.
+            # Skill maintenance must not cancel an otherwise valid PPO update.
+            import warnings
+
+            warnings.warn(
+                f"SkillBank v2 evidence maintenance failed: {type(exc).__name__}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            if cycle_dir is not None:
+                with contextlib.suppress(OSError):
+                    atomic_json(
+                        cycle_dir / "skillbank_v2_maintenance_error.json",
+                        {
+                            "step": step,
+                            "error_type": type(exc).__name__,
+                            "raw_rollouts_preserved": True,
+                        },
+                    )
+            return (("skill_v2", f"maintenance_failed:{type(exc).__name__}"),)
+    application = create_adaptive_application(config, mock=mock)
+    lifecycle = application.skill_lifecycle
+    if lifecycle is None:
+        return ()
+    tasks = {task.task_id: task for task in result.tasks}
+    frontiers = {frontier.task_id: frontier for frontier in result.frontier_scores}
+    for sample in result.solver_batch.samples:
+        if sample.metadata.get("failure_mode") == "director_protocol_failure":
+            continue
+        for skill_id in sample.metadata.get("skills_used", ()):
+            if skill_id in lifecycle.bank.skills:
+                lifecycle.bank.record_outcome(
+                    skill_id,
+                    step=step,
+                    helpful=sample.reward > 0.0,
+                    hurt=sample.reward <= 0.0,
+                )
+        frontier = frontiers[sample.task_id]
+        success_rate = sum(float(value) > 0.0 for value in frontier.rewards) / max(
+            1, len(frontier.rewards)
+        )
+        if sample.reward > 0.0 or not 0.0 < success_rate < 1.0:
+            continue
+        task = tasks[sample.task_id]
+        lifecycle.collect_failure(
+            SolverFailureCase(
+                task=task.prompt,
+                task_type=task.task_type,
+                failure_trace=json.dumps(
+                    sample.metadata.get("solver_trace", {}), ensure_ascii=False
+                ),
+                failure_mode=str(sample.metadata.get("failure_mode", "task_verification_failure")),
+                reference=str(task.reference or ""),
+                solver_answer=str(sample.metadata.get("solver_answer", "")),
+                used_skill_ids=tuple(sample.metadata.get("skills_used", ())),
+                frontier_score=success_rate,
+                uid=sample.rollout_id,
+            )
+        )
+    changes = tuple(lifecycle.evolve(step=step))
+    lifecycle.save_pending(config.skill_cases_path)
+    lifecycle.bank.save()
+    return changes
 
 
 def _current_policy_snapshot(checkpoint_root: Path, base_model_path: Path) -> str:
@@ -2208,7 +2565,10 @@ def _current_policy_snapshot(checkpoint_root: Path, base_model_path: Path) -> st
 
 
 def _verifier(
-    name: str, *, adapters: dict[str, Verifier] | None = None, aliases: dict[str, str] | None = None
+    name: str,
+    *,
+    adapters: dict[str, Verifier] | None = None,
+    aliases: dict[str, str] | None = None,
 ) -> Verifier | None:
     builtins: dict[str, Verifier | None] = {
         "none": None,
@@ -2233,12 +2593,20 @@ def _mock_adaptive_backends(
     director = MockBackend(
         [
             '{"action":"add_agent","agent_id":"analyst"}',
-            '{"action":"set_prompt","target":"analyst","role":"Independent analyst","objective":"Solve the assigned task independently.","scope":"Develop and verify a candidate result.","expected_output":"Return a concise answer with essential justification."}',
+            '{"action":"set_prompt","target":"analyst",'
+            '"role":"Independent analyst",'
+            '"objective":"Solve the assigned task independently.",'
+            '"scope":"Develop and verify a candidate result.",'
+            '"expected_output":"Return a concise answer with essential justification."}',
             json.dumps(
                 {"action": "set_model", "target": "analyst", "runtime_route": runtime_route}
             ),
             '{"action":"add_agent","agent_id":"verifier"}',
-            '{"action":"set_prompt","target":"verifier","role":"Independent verifier","objective":"Check the assigned task and produce the best answer.","scope":"Verify correctness independently.","expected_output":"Return the corrected direct final answer."}',
+            '{"action":"set_prompt","target":"verifier",'
+            '"role":"Independent verifier",'
+            '"objective":"Check the assigned task and produce the best answer.",'
+            '"scope":"Verify correctness independently.",'
+            '"expected_output":"Return the corrected direct final answer."}',
             json.dumps(
                 {"action": "set_model", "target": "verifier", "runtime_route": runtime_route}
             ),
@@ -2251,7 +2619,11 @@ def _mock_adaptive_backends(
                 }
             ),
             '{"action":"add_agent","agent_id":"formatter"}',
-            '{"action":"set_prompt","target":"formatter","role":"Final formatter","objective":"Synthesize visible artifacts into the requested final form.","scope":"Resolve disagreement using only visible artifacts.","expected_output":"Return one concise direct final answer."}',
+            '{"action":"set_prompt","target":"formatter",'
+            '"role":"Final formatter",'
+            '"objective":"Synthesize visible artifacts into the requested final form.",'
+            '"scope":"Resolve disagreement using only visible artifacts.",'
+            '"expected_output":"Return one concise direct final answer."}',
             json.dumps(
                 {"action": "set_model", "target": "formatter", "runtime_route": runtime_route}
             ),
@@ -2300,5 +2672,17 @@ def _mock_adaptive_backends(
             }
         )
     )
-    support = MockBackend(handler=lambda _messages, _role: "The final answer is 42.")
-    return (director, worker, support)
+    distiller = MockBackend(
+        handler=lambda _messages, _role: json.dumps(
+            {
+                "name": "Verify before finalizing",
+                "description": "Add an explicit verification pass after a failed workflow.",
+                "trigger": "A prior workflow of the same task type failed verification.",
+                "plan": "Compare the failed trace with a successful trace and verify the output.",
+                "pitfall": "Do not copy an answer without checking it.",
+                "constraint": "Workflow Solver only.",
+                "kind": "verification",
+            }
+        )
+    )
+    return director, worker, distiller

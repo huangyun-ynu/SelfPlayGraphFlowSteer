@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import csv
 import json
 import os
@@ -9,6 +10,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
 from .counterfactual import RelationCredit
 from .features import structural_features
 from .graph import MultiAgentGraph
@@ -56,10 +58,13 @@ CORE_COLUMNS = (
     "runtime_error_count",
     "total_token_in",
     "total_token_out",
+    "skillbank_size",
     "mace_total_selections",
     "relation_counterfactuals",
     "problem_extraction_success_rate",
+    "active_skill_count",
 )
+
 STEP_COLUMNS = (
     "training_step",
     "cycle",
@@ -83,6 +88,7 @@ STEP_COLUMNS = (
     "gpu_memory_reserved_mb",
     "timestamp_utc",
     "problem_extraction_success_rate",
+    "active_skill_count",
 )
 
 
@@ -101,6 +107,7 @@ class TrainingMetricsStore:
     def append(self, record: dict[str, Any]) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         previous = self._latest()
+        _add_skillbank_delta(record, previous)
         self._append_steps(record)
         with self.jsonl_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -139,6 +146,7 @@ class TrainingMetricsStore:
                         "problem_extraction_success_rate": record.get("rollout", {})
                         .get("proposal_extraction", {})
                         .get("success_rate"),
+                        "active_skill_count": record.get("skillbank", {}).get("active_skill_count"),
                     }
                 )
         if not rows:
@@ -163,13 +171,23 @@ def collect_cycle_metrics(
     updates: Iterable[PolicyUpdateResult],
     frontier_scores: Iterable[FrontierScore] = (),
     relation_credits: Iterable[RelationCredit] = (),
+    skillbank_path: str | Path | None = None,
     mace_path: str | Path | None = None,
     context: dict[str, Any] | None = None,
     proposal_extraction: dict[str, Any] | None = None,
+    skill_changes: Iterable[tuple[str, str]] = (),
 ) -> dict[str, Any]:
     update_map = {update.role: asdict(update) for update in updates}
     frontiers = list(frontier_scores)
     credits = list(relation_credits)
+    active_skill_ids = sorted(
+        {
+            str(skill_id)
+            for sample in solver_batch.samples
+            for skill_id in sample.metadata.get("skills_used", [])
+        }
+    )
+    observed_skill_changes = [tuple(change) for change in skill_changes]
     experiment_context = dict(context or {})
     structural_exploration_policy = str(
         experiment_context.get("structural_exploration_policy", "off")
@@ -181,7 +199,10 @@ def collect_cycle_metrics(
         "timestamp_utc": datetime.now(UTC).isoformat(),
         "experiment": experiment_context,
         "policies": update_map,
-        "batches": {"proposer": summarize_training_batch(proposer_batch), "solver": solver_summary},
+        "batches": {
+            "proposer": summarize_training_batch(proposer_batch),
+            "solver": solver_summary,
+        },
         "rollout": {
             "task_count": len({sample.task_id for sample in solver_batch.samples}),
             "answer_correctness": _answer_correctness(solver_batch),
@@ -208,6 +229,11 @@ def collect_cycle_metrics(
         "protocol_reward": _protocol_reward_summary(solver_batch),
         "runtime": _runtime_summary(solver_batch),
         "relation_counterfactual": _relation_summary(credits),
+        "skillbank": _skillbank_snapshot(
+            skillbank_path,
+            active_skill_ids=active_skill_ids,
+            skill_changes=observed_skill_changes,
+        ),
         "mace": _mace_snapshot(mace_path),
     }
 
@@ -240,9 +266,9 @@ def summarize_training_batch(batch: TrainingBatch) -> dict[str, Any]:
         "action_token_ratio": sum(action_lengths) / max(1, sum(token_lengths)),
         "unique_graphs": len(set(graph_keys)),
         "unique_graph_ratio": len(set(graph_keys)) / max(1, len(graph_keys)),
-        "within_task_unique_graph_ratio": statistics.fmean(within_task_ratios)
-        if within_task_ratios
-        else None,
+        "within_task_unique_graph_ratio": (
+            statistics.fmean(within_task_ratios) if within_task_ratios else None
+        ),
         "within_task_unique_graph_ratio_distribution": _describe(within_task_ratios),
     }
 
@@ -259,12 +285,18 @@ def _graph_summary(batch: TrainingBatch) -> dict[str, Any]:
     ]
     feature_names = structural_features(MultiAgentGraph()).names
     if set(dimensions) != {len(feature_names)}:
+        # Semantic graph vectors can contain thousands of coordinates.  They do
+        # not share the 15 names of the structure-only ablation, and emitting a
+        # metric per embedding coordinate would both mislabel the data and make
+        # the telemetry needlessly huge.  Record their schema, dimension, and
+        # norm instead; topology statistics are recovered from the canonical
+        # graph key below and therefore remain interpretable.
         return {
             "sample_count": len(rows),
             "schema_ids": dict(sorted(Counter(schemas).items())),
             "dimensions": _describe(dimensions),
             "vector_l2_norm": _describe(
-                [sum((value * value for value in row)) ** 0.5 for row in rows]
+                [sum(value * value for value in row) ** 0.5 for row in rows]
             ),
             "features": {},
         }
@@ -275,7 +307,7 @@ def _graph_summary(batch: TrainingBatch) -> dict[str, Any]:
         "dimensions": _describe(dimensions),
         "features": {
             name: _describe(list(values))
-            for (name, values) in zip(feature_names, columns, strict=True)
+            for name, values in zip(feature_names, columns, strict=True)
         },
     }
 
@@ -303,24 +335,22 @@ def _topology_policy_summary(
     relation_counts = [shape[1] + shape[2] for shape in graph_shapes]
     disconnected_multi_agent_rate = (
         statistics.fmean(
-            (
-                float(agent_count > 1.0 and relation_count == 0.0)
-                for (agent_count, relation_count) in zip(agent_counts, relation_counts, strict=True)
-            )
+            float(agent_count > 1.0 and relation_count == 0.0)
+            for agent_count, relation_count in zip(agent_counts, relation_counts, strict=True)
         )
         if agent_counts
         else None
     )
     summary = solver_summary or summarize_training_batch(batch)
     single_agent_rate = (
-        statistics.fmean((float(value == 1.0) for value in agent_counts)) if agent_counts else None
+        statistics.fmean(float(value == 1.0) for value in agent_counts) if agent_counts else None
     )
     within_unique = summary.get("within_task_unique_graph_ratio")
     legacy_low_diversity_observed = bool(
         single_agent_rate is not None
         and single_agent_rate >= 0.8
-        and (within_unique is not None)
-        and (float(within_unique) <= 0.4)
+        and within_unique is not None
+        and float(within_unique) <= 0.4
     )
     legacy_collapse_alert = bool(
         structural_exploration_policy == "stratified" and legacy_low_diversity_observed
@@ -337,15 +367,15 @@ def _topology_policy_summary(
         "bidirectional_edge_count": _describe(bidirectional_counts),
         "graph_depth": _describe(graph_depths),
         "single_agent_rate": single_agent_rate,
-        "relation_graph_rate": statistics.fmean((float(value > 0.0) for value in relation_counts))
-        if relation_counts
-        else None,
+        "relation_graph_rate": (
+            statistics.fmean(float(value > 0.0) for value in relation_counts)
+            if relation_counts
+            else None
+        ),
         "disconnected_multi_agent_rate": disconnected_multi_agent_rate,
         "counterfactual_eligible_rate": statistics.fmean(
-            (
-                float(int(sample.metadata.get("relation_counterfactual_candidate_count", 0)) > 0)
-                for sample in batch.samples
-            )
+            float(int(sample.metadata.get("relation_counterfactual_candidate_count", 0)) > 0)
+            for sample in batch.samples
         )
         if batch.samples
         else None,
@@ -421,7 +451,7 @@ def _topology_policy_summary(
         "collapse_alert": collapse_alert,
         "collapse_alert_reasons": [
             reason
-            for (active, reason) in (
+            for active, reason in (
                 (legacy_collapse_alert, "legacy_low_diversity"),
                 (disconnected_collapse_alert, "disconnected_multi_agent"),
             )
@@ -443,14 +473,20 @@ def _canonical_graph_shape(key: str) -> tuple[float, float, float, float] | None
     and semantic feature schemas.  Metrics must not interpret normalized E5
     coordinates as raw graph counts.
     """
+
     try:
-        (nodes, directed, bidirectional) = json.loads(key)
+        nodes, directed, bidirectional = json.loads(key)
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
-    if not all((isinstance(value, list) for value in (nodes, directed, bidirectional))):
+    if not all(isinstance(value, list) for value in (nodes, directed, bidirectional)):
         return None
     layers = {item[0] for item in nodes if isinstance(item, list) and item}
-    return (float(len(nodes)), float(len(directed)), float(len(bidirectional)), float(len(layers)))
+    return (
+        float(len(nodes)),
+        float(len(directed)),
+        float(len(bidirectional)),
+        float(len(layers)),
+    )
 
 
 def _flowsteer_summary(batch: TrainingBatch) -> dict[str, Any]:
@@ -469,11 +505,9 @@ def _flowsteer_summary(batch: TrainingBatch) -> dict[str, Any]:
         if isinstance(nodes, list):
             pattern = tuple(
                 sorted(
-                    (
-                        str(node.get("structural_operator", ""))
-                        for node in nodes
-                        if isinstance(node, dict) and node.get("structural_operator")
-                    )
+                    str(node.get("structural_operator", ""))
+                    for node in nodes
+                    if isinstance(node, dict) and node.get("structural_operator")
                 )
             )
             operator_patterns.append(pattern)
@@ -485,36 +519,40 @@ def _flowsteer_summary(batch: TrainingBatch) -> dict[str, Any]:
     ]
     return {
         "sample_count": len(structures),
-        "structure_score": _describe((float(item.get("score", 0.0)) for item in structures)),
-        "structure_pass_rate": statistics.fmean(
-            (float(bool(item.get("complete"))) for item in structures)
-        )
-        if structures
-        else None,
+        "structure_score": _describe(float(item.get("score", 0.0)) for item in structures),
+        "structure_pass_rate": (
+            statistics.fmean(float(bool(item.get("complete"))) for item in structures)
+            if structures
+            else None
+        ),
         "answer_reward_release_rate": _metadata_boolean_rate(batch, "answer_reward_released"),
-        "checker_rate": statistics.fmean((float(bool(item.get("checker"))) for item in structures))
-        if structures
-        else None,
-        "formatter_rate": statistics.fmean(
-            (float(bool(item.get("formatter"))) for item in structures)
-        )
-        if structures
-        else None,
-        "operator_diversity_rate": statistics.fmean(
-            (float(bool(item.get("operator_diversity"))) for item in structures)
-        )
-        if structures
-        else None,
-        "control_rate": statistics.fmean((float(bool(item.get("control"))) for item in structures))
-        if structures
-        else None,
+        "checker_rate": (
+            statistics.fmean(float(bool(item.get("checker"))) for item in structures)
+            if structures
+            else None
+        ),
+        "formatter_rate": (
+            statistics.fmean(float(bool(item.get("formatter"))) for item in structures)
+            if structures
+            else None
+        ),
+        "operator_diversity_rate": (
+            statistics.fmean(float(bool(item.get("operator_diversity"))) for item in structures)
+            if structures
+            else None
+        ),
+        "control_rate": (
+            statistics.fmean(float(bool(item.get("control"))) for item in structures)
+            if structures
+            else None
+        ),
         "unique_operator_patterns": len(set(operator_patterns)),
-        "unique_operator_pattern_ratio": len(set(operator_patterns)) / len(operator_patterns)
-        if operator_patterns
-        else None,
-        "within_task_unique_operator_pattern_ratio": statistics.fmean(within_task_operator_ratios)
-        if within_task_operator_ratios
-        else None,
+        "unique_operator_pattern_ratio": (
+            len(set(operator_patterns)) / len(operator_patterns) if operator_patterns else None
+        ),
+        "within_task_unique_operator_pattern_ratio": (
+            statistics.fmean(within_task_operator_ratios) if within_task_operator_ratios else None
+        ),
     }
 
 
@@ -531,7 +569,7 @@ def _protocol_reward_summary(batch: TrainingBatch) -> dict[str, Any]:
     return {
         "sample_count": len(rows),
         "versions": versions,
-        "protocol_score": _describe((float(row.get("protocol_score", 0.0)) for row in rows)),
+        "protocol_score": _describe(float(row.get("protocol_score", 0.0)) for row in rows),
         "delegation_complete_rate": _mapping_boolean_rate(rows, "delegation_complete"),
         "delegation_fidelity_rate": _mapping_boolean_rate(rows, "delegation_fidelity"),
         "graph_complete_rate": _mapping_boolean_rate(rows, "graph_complete"),
@@ -559,11 +597,12 @@ def _answer_correctness(batch: TrainingBatch) -> float | None:
             passed.append(float(bool(verification["passed"])))
     if passed:
         return statistics.fmean(passed)
-    return None
+    return None  # Continuous reward is not a binary accuracy fallback.
 
 
 def _runtime_summary(batch: TrainingBatch) -> dict[str, Any]:
     """Aggregate Worker/ReAct telemetry retained in each Solver rollout trace."""
+
     route_counts: dict[str, int] = {}
     model_counts: dict[str, int] = {}
     action_counts: dict[str, int] = {}
@@ -594,6 +633,7 @@ def _runtime_summary(batch: TrainingBatch) -> dict[str, Any]:
     recovered_rollout_count = 0
     artifact_count = 0
     seen_artifacts: set[tuple[str, str]] = set()
+
     for sample in batch.samples:
         metadata = sample.metadata
         duration = metadata.get("duration_s")
@@ -629,11 +669,9 @@ def _runtime_summary(batch: TrainingBatch) -> dict[str, Any]:
             )
             duplicate_read_only_pairs += int(read_overlap_audit.get("flagged_pair_count", 0) or 0)
             shared_exact_read_count += sum(
-                (
-                    int(pair.get("shared_exact_read_count", 0) or 0)
-                    for pair in read_overlap_audit.get("pairs", ())
-                    if isinstance(pair, dict)
-                )
+                int(pair.get("shared_exact_read_count", 0) or 0)
+                for pair in read_overlap_audit.get("pairs", ())
+                if isinstance(pair, dict)
             )
         director_action_repairs += int(metadata.get("director_action_repairs", 0) or 0)
         director_action_repair_successes += int(
@@ -710,6 +748,7 @@ def _runtime_summary(batch: TrainingBatch) -> dict[str, Any]:
                     if isinstance(error, dict):
                         code = str(error.get("code", "unknown")).strip() or "unknown"
                         action_error_codes[code] = action_error_codes.get(code, 0) + 1
+
     total_actions = sum(action_status_counts.values())
     successful_actions = action_status_counts.get("ok", 0)
     return {
@@ -733,18 +772,20 @@ def _runtime_summary(batch: TrainingBatch) -> dict[str, Any]:
         "protocol_failure_count": protocol_failure_count,
         "responsibility_protocol": {
             "violation_count": responsibility_violations,
-            "violation_rate_per_director_turn": responsibility_violations / interactive_turn_count
-            if interactive_turn_count
-            else None,
+            "violation_rate_per_director_turn": (
+                responsibility_violations / interactive_turn_count
+                if interactive_turn_count
+                else None
+            ),
             "protocol_recovery_steps": protocol_recoveries,
             "recovered_rollout_count": recovered_rollout_count,
-            "recovery_rate_per_rollout": recovered_rollout_count / len(batch.samples)
-            if batch.samples
-            else None,
+            "recovery_rate_per_rollout": (
+                recovered_rollout_count / len(batch.samples) if batch.samples else None
+            ),
         },
         "responsibility_overlap_audit": {
-            "duplicate_responsibility_detection_count": duplicate_responsibility_detections,
-            "duplicate_responsibility_rejection_count": duplicate_responsibility_rejections,
+            "duplicate_responsibility_detection_count": (duplicate_responsibility_detections),
+            "duplicate_responsibility_rejection_count": (duplicate_responsibility_rejections),
             "duplicate_responsibility_decision_counts": dict(
                 sorted(duplicate_responsibility_decisions.items())
             ),
@@ -753,24 +794,28 @@ def _runtime_summary(batch: TrainingBatch) -> dict[str, Any]:
             ),
             "read_overlap_audited_rollout_count": read_overlap_audited_rollouts,
             "duplicate_read_only_rollout_count": duplicate_read_only_rollouts,
-            "duplicate_read_only_rollout_rate": duplicate_read_only_rollouts
-            / read_overlap_audited_rollouts
-            if read_overlap_audited_rollouts
-            else None,
+            "duplicate_read_only_rollout_rate": (
+                duplicate_read_only_rollouts / read_overlap_audited_rollouts
+                if read_overlap_audited_rollouts
+                else None
+            ),
             "duplicate_read_only_pair_count": duplicate_read_only_pairs,
             "shared_exact_read_count": shared_exact_read_count,
         },
         "director_action_protocol": {
             "repair_attempts": director_action_repairs,
             "repair_successes": director_action_repair_successes,
-            "repair_success_rate": director_action_repair_successes / director_action_repairs
-            if director_action_repairs
-            else None,
+            "repair_success_rate": (
+                director_action_repair_successes / director_action_repairs
+                if director_action_repairs
+                else None
+            ),
             "discarded_output_chars": director_discarded_output_chars,
-            "discarded_output_chars_per_turn": director_discarded_output_chars
-            / interactive_turn_count
-            if interactive_turn_count
-            else None,
+            "discarded_output_chars_per_turn": (
+                director_discarded_output_chars / interactive_turn_count
+                if interactive_turn_count
+                else None
+            ),
         },
     }
 
@@ -787,11 +832,9 @@ def _interactive_turns(metadata: dict[str, Any]) -> float:
 
 def _metadata_distribution(batch: TrainingBatch, key: str) -> dict[str, float | int | None]:
     return _describe(
-        (
-            float(sample.metadata[key])
-            for sample in batch.samples
-            if sample.metadata.get(key) is not None
-        )
+        float(sample.metadata[key])
+        for sample in batch.samples
+        if sample.metadata.get(key) is not None
     )
 
 
@@ -812,12 +855,43 @@ def _mapping_boolean_rate(rows: list[dict[str, Any]], key: str) -> float | None:
 def _relation_summary(credits: list[RelationCredit]) -> dict[str, Any]:
     return {
         "count": len(credits),
-        "chosen_present": sum((int(item.chosen_present) for item in credits)),
-        "chosen_absent": sum((int(not item.chosen_present) for item in credits)),
+        "chosen_present": sum(int(item.chosen_present) for item in credits),
+        "chosen_absent": sum(int(not item.chosen_present) for item in credits),
         "q_present": _describe([item.q_present for item in credits]),
         "q_absent": _describe([item.q_absent for item in credits]),
         "advantage_present": _describe([item.advantage_present for item in credits]),
         "advantage_absent": _describe([item.advantage_absent for item in credits]),
+    }
+
+
+def _skillbank_snapshot(
+    path: str | Path | None,
+    *,
+    active_skill_ids: list[str],
+    skill_changes: list[tuple[Any, ...]],
+) -> dict[str, Any]:
+    source = Path(path) if path else None
+    if source is None or not source.exists():
+        return {
+            "available": False,
+            "size": 0,
+            "skill_ids": [],
+            "active_skill_ids_this_cycle": active_skill_ids,
+            "active_skills_this_cycle": len(active_skill_ids),
+        }
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    skills = list(payload.get("skills", []))
+    stats = [item.get("stats", {}) for item in skills]
+    return {
+        "available": True,
+        "size": len(skills),
+        "skill_ids": [str(item.get("skill_id", "")) for item in skills],
+        "active_skill_ids_this_cycle": active_skill_ids,
+        "active_skills_this_cycle": len(active_skill_ids),
+        "total_usage": sum(int(item.get("usage_count", 0)) for item in stats),
+        "total_helpful": sum(int(item.get("helpful_count", 0)) for item in stats),
+        "total_hurt": sum(int(item.get("hurt_count", 0)) for item in stats),
+        "lifecycle_events": _skill_lifecycle_events(skill_changes),
     }
 
 
@@ -827,8 +901,8 @@ def _mace_snapshot(path: str | Path | None) -> dict[str, Any]:
         return {"available": False, "pair_count": 0, "total_selections": 0}
     payload = json.loads(source.read_text(encoding="utf-8"))
     states = list(payload.get("states", {}).values())
-    total_selections = sum((int(item.get("selections", 0)) for item in states))
-    total_reward = sum((float(item.get("reward_sum", 0.0)) for item in states))
+    total_selections = sum(int(item.get("selections", 0)) for item in states)
+    total_reward = sum(float(item.get("reward_sum", 0.0)) for item in states)
     return {
         "available": True,
         "pair_count": len(states),
@@ -836,6 +910,25 @@ def _mace_snapshot(path: str | Path | None) -> dict[str, Any]:
         "total_reward": total_reward,
         "mean_reward_per_selection": total_reward / max(1, total_selections),
     }
+
+
+def _skill_lifecycle_events(changes: list[tuple[Any, ...]]) -> dict[str, int]:
+    counts = {
+        "retained": 0,
+        "deduplicated": 0,
+        "rejected_capacity": 0,
+        "negative_utility_evicted": 0,
+    }
+    for _skill_id, status in changes:
+        if status == "retained":
+            counts["retained"] += 1
+        elif status == "deduplicated":
+            counts["deduplicated"] += 1
+        elif status == "rejected_capacity":
+            counts["rejected_capacity"] += 1
+        elif status in {"pruned", "negative_utility_evicted"}:
+            counts["negative_utility_evicted"] += 1
+    return counts
 
 
 def _describe(values: Iterable[float | int]) -> dict[str, float | int | None]:
@@ -855,14 +948,14 @@ def _describe(values: Iterable[float | int]) -> dict[str, float | int | None]:
         "mean": statistics.fmean(numbers),
         "std": statistics.pstdev(numbers) if len(numbers) > 1 else 0.0,
         "min": min(numbers),
-        "p50": _percentile(numbers, 0.5),
+        "p50": _percentile(numbers, 0.50),
         "p95": _percentile(numbers, 0.95),
         "max": max(numbers),
     }
 
 
 def _percentile(values: Iterable[float | int], quantile: float) -> float:
-    ordered = sorted((float(value) for value in values))
+    ordered = sorted(float(value) for value in values)
     if not ordered:
         raise ValueError("percentile requires at least one value")
     position = (len(ordered) - 1) * quantile
@@ -870,6 +963,20 @@ def _percentile(values: Iterable[float | int], quantile: float) -> float:
     upper = min(lower + 1, len(ordered) - 1)
     fraction = position - lower
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+
+
+def _add_skillbank_delta(record: dict[str, Any], previous: dict[str, Any] | None) -> None:
+    current = record.get("skillbank", {})
+    current_ids = set(current.get("skill_ids", []))
+    old_ids = set((previous or {}).get("skillbank", {}).get("skill_ids", []))
+    current["created_since_previous"] = sorted(current_ids - old_ids)
+    current["removed_since_previous"] = sorted(old_ids - current_ids)
+    current["size_delta"] = len(current_ids) - len(old_ids)
+    previously_active = set((previous or {}).get("skillbank", {}).get("active_skill_ids", []))
+    active_this_cycle = set(current.get("active_skill_ids_this_cycle", []))
+    active = (previously_active | active_this_cycle) & current_ids
+    current["active_skill_ids"] = sorted(active)
+    current["active_skill_count"] = len(active)
 
 
 def _core_row(record: dict[str, Any]) -> dict[str, Any]:
@@ -903,18 +1010,26 @@ def _core_row(record: dict[str, Any]) -> dict[str, Any]:
         .get("mean"),
         "mean_trajectory_tokens": solver_batch.get("trajectory_tokens", {}).get("mean"),
         "mean_action_tokens": solver_batch.get("action_tokens", {}).get("mean"),
-        "mean_agent_count": graph.get("agent_count", {}).get("mean")
-        if graph.get("agent_count")
-        else topology.get("agent_count", {}).get("mean"),
-        "mean_directed_edges": graph.get("directed_edge_count", {}).get("mean")
-        if graph.get("directed_edge_count")
-        else topology.get("directed_edge_count", {}).get("mean"),
-        "mean_bidirectional_edges": graph.get("bidirectional_edge_count", {}).get("mean")
-        if graph.get("bidirectional_edge_count")
-        else topology.get("bidirectional_edge_count", {}).get("mean"),
-        "mean_graph_depth": graph.get("graph_depth", {}).get("mean")
-        if graph.get("graph_depth")
-        else topology.get("graph_depth", {}).get("mean"),
+        "mean_agent_count": (
+            graph.get("agent_count", {}).get("mean")
+            if graph.get("agent_count")
+            else topology.get("agent_count", {}).get("mean")
+        ),
+        "mean_directed_edges": (
+            graph.get("directed_edge_count", {}).get("mean")
+            if graph.get("directed_edge_count")
+            else topology.get("directed_edge_count", {}).get("mean")
+        ),
+        "mean_bidirectional_edges": (
+            graph.get("bidirectional_edge_count", {}).get("mean")
+            if graph.get("bidirectional_edge_count")
+            else topology.get("bidirectional_edge_count", {}).get("mean")
+        ),
+        "mean_graph_depth": (
+            graph.get("graph_depth", {}).get("mean")
+            if graph.get("graph_depth")
+            else topology.get("graph_depth", {}).get("mean")
+        ),
         "mean_graph_local_frontier": frontier.get("mean"),
         "unique_graph_ratio": solver_batch.get("unique_graph_ratio"),
         "within_task_unique_graph_ratio": solver_batch.get("within_task_unique_graph_ratio"),
@@ -934,11 +1049,13 @@ def _core_row(record: dict[str, Any]) -> dict[str, Any]:
         "runtime_error_count": runtime.get("execution_error_count"),
         "total_token_in": runtime.get("token_in", {}).get("total"),
         "total_token_out": runtime.get("token_out", {}).get("total"),
+        "skillbank_size": record.get("skillbank", {}).get("size"),
         "mace_total_selections": record.get("mace", {}).get("total_selections"),
         "relation_counterfactuals": record.get("relation_counterfactual", {}).get("count"),
         "problem_extraction_success_rate": record.get("rollout", {})
         .get("proposal_extraction", {})
         .get("success_rate"),
+        "active_skill_count": record.get("skillbank", {}).get("active_skill_count"),
     }
 
 

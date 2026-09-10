@@ -1,5 +1,19 @@
 # Offline release validation
 
+## SkillBank restoration (2026-09-10)
+
+The public distribution now includes the current Director SkillBank implementation and eight packaged seed cards. Private runtime state, routes and credentials were not copied.
+
+- Skill lifecycle/integration and release-boundary checks: 41 passed (including the separate distiller-route configuration probe).
+- Wheel build: passed; the seed JSON and all three Skill modules are included.
+- Source compilation and undefined-name/unused-import checks: passed.
+- Public mock collection followed by mock Proposer/Solver updates: passed.
+- Private credential value scan: no matches in distributable files.
+
+The broader suite exposed two stale test assumptions: a resume test did not remove the completed-trajectory spool when simulating data loss, and a concurrent abort test assumed a primary log existed even when zero trajectories completed. These test fixtures were corrected; no production behavior was changed to satisfy them. The interrupted broad run completed 523 passing cases and 7 skips before fixture diagnosis. A subsequent 232-case run completed 224 passes, 4 skips and 4 instances of the same stale-spool fixture issue. After correcting all affected fixtures, the focused rerun passed all 6 affected cases (including the earlier two). Thus the latter 232-case coverage is 228 passing cases and 4 optional-dependency skips after corrections; these overlapping runs are not added together. A single fresh full-suite run was not repeated after the fixture-only corrections.
+
+No paid API calls, real GPU training or model updates were run.
+
 ## Frontier/EMA and predicted-time admission update (2026-09-10)
 
 The updated copy was checked in the same isolated public-checkout environment:
@@ -8,7 +22,7 @@ The updated copy was checked in the same isolated public-checkout environment:
 - Source compilation, Ruff formatting for source and changed tests, and unused-import/undefined-name checks for source and changed tests: passed.
 - All three supplied runtime configurations load with predicted-time admission disabled. Offline probes attach an actual deadline and make either time-estimation function raise if invoked: both prediction paths are bypassed, while an expired real deadline still raises the normal deadline exception. The generic API template used a dummy credential and declared GPU IDs for configuration validation only.
 
-No inference API, real trajectory collection, GPU allocation or parameter update was performed during this synchronization. SkillBank remains removed. These results do not establish benchmark accuracy. The complete historical portable suite was not rerun for this update.
+No inference API, real trajectory collection, GPU allocation or parameter update was performed during this synchronization. At that revision, SkillBank was still removed (restored in the update above). These results do not establish benchmark accuracy. The complete historical portable suite was not rerun for this update.
 
 ## Initial distribution preparation
 

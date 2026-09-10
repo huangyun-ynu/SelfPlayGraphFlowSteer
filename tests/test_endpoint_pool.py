@@ -266,7 +266,7 @@ def test_application_installs_deadline_on_pool_wrapper(monkeypatch, tmp_path):
         lambda runtime, **kwargs: Backend(kwargs.get("route_name", "test")),
     )
     app = app_module.create_adaptive_application(
-        config, director_backend=Backend("director"), support_backend=Backend("support")
+        config, director_backend=Backend("director"), distiller_backend=Backend("support")
     )
     try:
         deadline = RolloutDeadline(900, 300, 120, exclude_failed_request_time=True)

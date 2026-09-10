@@ -1,0 +1,210 @@
+[
+  {
+    "card": {
+      "skill_id": "director_seed_stagnation",
+      "name": "执行停滞后的问题定位",
+      "description": "Diagnose repeated actions without progress, missing evidence or execution preconditions.",
+      "trigger": "连续动作没有新增证据、产物或环境状态变化。",
+      "plan": "定位缺少的具体信息或执行前提；给负责的Agent明确子目标和可检查的产物，再根据实际反馈决定下一步。",
+      "pitfall": "不要重复原目标、只说继续尝试，或创建职责相同的Agent重复探索。",
+      "constraint": "不能自动把停滞归因于模型能力；基础设施失败交给运行时恢复，不能编造成编排经验。",
+      "kind": "bug-repair",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_state",
+      "name": "有状态任务的连续执行",
+      "description": "Preserve session and workspace state in shopping, environment actions and code changes.",
+      "trigger": "任务已建立购物会话、环境状态、代码工作区或中间产物。",
+      "plan": "确认哪个Agent持有有效状态；其他Agent提供建议，由有权限且持有该状态的执行者操作。删除Agent或切换输出前检查状态是否能继续使用。",
+      "pitfall": "不要删除唯一状态持有者、无故重置会话，或把建议当作已执行操作。",
+      "constraint": "只有运行时明确支持状态转移时才能转移；不得绕过环境权限和提交规则。",
+      "kind": "tool-use",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_closure",
+      "name": "实际产物驱动的收尾",
+      "description": "Check actual artifacts and completion before final answer, purchase or patch submission.",
+      "trigger": "已有候选方案或产物，准备结束任务。",
+      "plan": "检查实际产物、已执行动作和公开环境完成状态；若缺少执行或提交，明确缺口并在权限与预算内完成。",
+      "pitfall": "找到商品不等于已购买；提出补丁不等于已修改文件；声称成功不等于已完成验证。",
+      "constraint": "只能使用公开反馈；不能读取隐藏评测信息，未完成时如实说明。",
+      "kind": "verification",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_revision",
+      "name": "基于新证据的局部修订",
+      "description": "Use new feedback to repair a specific workflow, dependency or agent instruction.",
+      "trigger": "新反馈指出具体职责、输入、依赖或产物存在问题。",
+      "plan": "修改受影响的职责和依赖，保留仍有效的工作；明确哪些结果因修改失效、哪些动作必须重新执行，再检查修订效果。",
+      "pitfall": "不要无依据地改写提示词、因局部问题全图重做，或沿用已经失效的结果。",
+      "constraint": "必要时可以扩大修改范围；不能为了复用缓存保留错误结果。",
+      "kind": "bug-repair",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_target",
+      "name": "最终答案与原始目标对齐",
+      "description": "Ensure the final answer addresses the requested target rather than an intermediate research result.",
+      "trigger": "题目被分成多个步骤，已经得到中间结果并准备选择最终输出。",
+      "plan": "对照原始请求，区分中间实体、诊断信息和最终所需答案或产物；确认剩余步骤已完成，最终输出覆盖原始目标。",
+      "pitfall": "不要把中间查到的人物当作最终所问人物，或只给诊断而没有完成要求的修复。",
+      "constraint": "原目标已满足时不添加无必要推理；不能使用隐藏答案辅助选择。",
+      "kind": "verification",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_communication",
+      "name": "多Agent结果的传递与汇合",
+      "description": "Connect necessary agent results through directed communication and final synthesis.",
+      "trigger": "多个Agent分别产生了完成原始目标所必需的结果。",
+      "plan": "如果Agent B执行时需要Agent A的结果，建立合法的A到B传递路径。如果A和B独立执行但两个结果都必要，让最终负责汇总的Agent获得这两个结果。结束前检查每个必要结果已被实际使用。",
+      "pitfall": "不要创建Agent后让其结果无人使用、只选一个输出遗漏其他必要结果，或仅为满足图结构检查删除必要Agent。",
+      "constraint": "不要求每个Agent连接所有其他Agent；只有双方确实需要对方反馈时才使用双向关系。删除冗余节点前确认其有效结果已被接收和保留。",
+      "kind": "communication",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_output",
+      "name": "根据可用产物选择输出Agent",
+      "description": "Select an output agent using actual complete artifacts, not model names or confident claims.",
+      "trigger": "有多个输出候选，或当前输出Agent没有有效产物。",
+      "plan": "比较候选的实际产物是否完整、相关并有公开证据支持；另一个候选更合适且允许切换时再切换。如果所有候选都无效，先修复具体缺口。",
+      "pitfall": "不要仅凭角色名、模型名或自信程度选择；不要在无效候选之间反复切换。",
+      "constraint": "遵守会话、工作区、状态持有者和提交约束；不为形式上的切换重复执行已完成任务。",
+      "kind": "orchestration",
+      "task_types": [],
+      "evidence": [
+        "human-reviewed historical orchestration patterns; docs/implementation/director-skill-evolution-v2-proposal.md"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  },
+  {
+    "card": {
+      "skill_id": "director_seed_critical_review",
+      "name": "关键细节的定向复核",
+      "description": "Verify high-impact details selectively before finalizing, without restarting valid work.",
+      "trigger": "最终答案或产物包含数字、单位、条件、否定、权限、配置或其他错误会改变结论的关键细节。",
+      "plan": "保留现有草稿和已验证结果；指定一个独立且范围窄的检查，核对具体关键细节及其公开证据；只整合确认的修正，再执行受影响的局部步骤。",
+      "pitfall": "不要因低风险措辞差异全面重做，也不要让复核者泛泛给出第二意见或覆盖全部任务。",
+      "constraint": "复核必须有明确检查项和公开证据；没有独立标准时不强制复核；基础设施失败交给运行时恢复。",
+      "kind": "verification",
+      "task_types": [],
+      "evidence": [
+        "distilled from historical healthcare/code/webshop verification failures; candidate dedup review 2026-09-10"
+      ],
+      "stats": {
+        "usage_count": 0,
+        "helpful_count": 0,
+        "hurt_count": 0,
+        "last_used_step": -1,
+        "creation_step": 0,
+        "is_seed": true
+      }
+    },
+    "required_tools": [],
+    "excluded_task_types": []
+  }
+]

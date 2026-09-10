@@ -1041,6 +1041,9 @@ def test_runner_rejects_exact_resume_of_an_incomplete_task_by_default(tmp_path) 
     runner.run(["seed"])
     lines = (output / "solver_rollouts.jsonl").read_text().splitlines()
     (output / "solver_rollouts.jsonl").write_text(lines[0] + "\n")
+    _discard_spool_for_missing_primary_rows(output)
+    # Simulate a genuinely missing trajectory, including the durable spool.
+    # Otherwise the current runtime correctly recovers it without recollection.
     factory_calls: list[int] = []
     runner = SelfPlayRolloutRunner(
         proposer=_MockProposer(),
@@ -1781,7 +1784,10 @@ def test_non_trainable_attempts_are_audited_but_never_persisted_as_primary(
     with pytest.raises(CollectionInfrastructureIncidentError):
         runner.run(["first", "second"])
 
-    assert 0 <= len((output / "solver_rollouts.jsonl").read_text().splitlines()) <= 3
+    primary_path = output / "solver_rollouts.jsonl"
+    primary_rows = primary_path.read_text().splitlines() if primary_path.exists() else []
+    assert len(primary_rows) <= 3
+    assert all(json.loads(row)["task_id"] != "task-1" for row in primary_rows)
     attempts = [
         json.loads(line) for line in (output / "rollout_attempts.jsonl").read_text().splitlines()
     ]
@@ -3065,6 +3071,7 @@ def test_runner_resumes_only_the_exact_missing_rollout_id(
     (output / "solver_rollouts.jsonl").write_text(
         "\n".join(json.dumps(row) for row in kept) + "\n", encoding="utf-8"
     )
+    _discard_spool_for_missing_primary_rows(output)
     (output / "quarantined_groups.jsonl").write_text(
         json.dumps(
             {
@@ -3141,6 +3148,7 @@ def test_runner_allows_attested_attribution_classifier_repair_resume(tmp_path) -
         json.loads(line) for line in (output / "solver_rollouts.jsonl").read_text().splitlines()
     ]
     (output / "solver_rollouts.jsonl").write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
+    _discard_spool_for_missing_primary_rows(output)
     (output / "collection_abort.json").write_text(
         json.dumps({"incident_class": "attribution_uncertain_recovery_exhausted"}) + "\n",
         encoding="utf-8",
@@ -3318,6 +3326,7 @@ def test_runner_allows_attested_infrastructure_exact_missing_resume(tmp_path) ->
         json.loads(line) for line in (output / "solver_rollouts.jsonl").read_text().splitlines()
     ]
     (output / "solver_rollouts.jsonl").write_text(json.dumps(rows[0]) + "\n", encoding="utf-8")
+    _discard_spool_for_missing_primary_rows(output)
     (output / "collection_abort.json").write_text(
         json.dumps({"incident_class": "infrastructure", "rollout_id": "task-1-r1"}) + "\n",
         encoding="utf-8",
@@ -3364,6 +3373,7 @@ def test_runner_recollects_every_missing_sibling_after_uncertain_group_abort(tmp
         config=SelfPlayRunConfig(2, workers=1),
     ).run(["seed"])
     (output / "solver_rollouts.jsonl").write_text("", encoding="utf-8")
+    _discard_spool_for_missing_primary_rows(output)
     (output / "collection_abort.json").write_text(
         json.dumps(
             {
@@ -5265,3 +5275,12 @@ def test_relation_replay_preserves_recorded_output_pruning_on_both_branches():
         _replay_relation_branch(
             replace(decision, suffix_events=({**event, "graph": forged.to_dict()},)), present=True
         )
+
+
+def _discard_spool_for_missing_primary_rows(output):
+    """Model loss of a completion, not recoverable loss of its JSONL copy."""
+    rows = (output / "solver_rollouts.jsonl").read_text().splitlines()
+    retained = {json.loads(row)["rollout_id"] for row in rows if row.strip()}
+    for path in (output / "completed_primary_spool").glob("*.json"):
+        if json.loads(path.read_text())["rollout_id"] not in retained:
+            path.unlink()
