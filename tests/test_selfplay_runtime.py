@@ -1603,6 +1603,7 @@ def test_rollouts_are_persisted_in_completion_order_without_group_barrier(tmp_pa
     import time
 
     config = load_adaptive_config(write_config(tmp_path))
+    output = tmp_path / "rolling-completion"
 
     class DelayedApplication:
         def __init__(self, seed: int) -> None:
@@ -1614,13 +1615,19 @@ def test_rollouts_are_persisted_in_completion_order_without_group_barrier(tmp_pa
             return self.delegate.solver
 
         def solve(self, *args, **kwargs):
-            time.sleep(0.15 if self.seed == 0 else 0.01)
+            if self.seed == 0:
+                # Keep r0 running until r1 is durably saved, independent of CPU speed.
+                deadline = time.monotonic() + 15
+                path = output / "solver_rollouts.jsonl"
+                while not path.exists() or '"task-1-r1"' not in path.read_text():
+                    if time.monotonic() >= deadline:
+                        raise AssertionError("r1 was not persisted while r0 was running")
+                    time.sleep(0.01)
             return self.delegate.solve(*args, **kwargs)
 
         def close(self) -> None:
             self.delegate.close()
 
-    output = tmp_path / "rolling-completion"
     result = SelfPlayRolloutRunner(
         proposer=_MockProposer(),
         application_factory=DelayedApplication,
