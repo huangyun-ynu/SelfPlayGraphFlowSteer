@@ -1,0 +1,46 @@
+{
+  "created_at_utc": "2026-09-15T04:41:24.039560+00:00",
+  "schema": "spgfs-healthbench-professional-derived-split-v1",
+  "selection": {
+    "algorithm": "per-difficulty deterministic shuffle; 64 test rows per stratum; retain every remaining source once and randomly repeat within stratum until 256 train rows per stratum",
+    "difficulty_values": [
+      "difficult",
+      "typical"
+    ],
+    "official_train_split_used": false,
+    "seed": 20260915,
+    "test_source_overlap_with_train": false
+  },
+  "source": {
+    "dataset": "openai/healthbench-professional",
+    "path": "huggingface://openai/healthbench-professional/test",
+    "revision": "349962fd46dd02343a0d8a606491baf59154ea1a",
+    "rows": 525,
+    "sha256": "d44b08e6e952e04c945e2c406f02533d9e7a989a84e35820ee7efdff20c9e4e2",
+    "split": "test"
+  },
+  "test": {
+    "difficulty_counts": {
+      "difficult": 64,
+      "typical": 64
+    },
+    "path": "test.jsonl",
+    "rows": 128,
+    "sha256": "447d57b42c740f112009b65dc8eddf1be65d8816520ea563c2715a186d7f7144",
+    "size_bytes": 749655,
+    "unique_source_rows": 128
+  },
+  "train": {
+    "difficulty_counts": {
+      "difficult": 256,
+      "typical": 256
+    },
+    "path": "train.jsonl",
+    "repeated_rows": 115,
+    "rows": 512,
+    "sha256": "6861f4f6740f1826e38c59701d49471824c45f3310364aca1f6bd3bc7c878f57",
+    "size_bytes": 2826467,
+    "unique_derived_ids": 512,
+    "unique_source_rows": 397
+  }
+}

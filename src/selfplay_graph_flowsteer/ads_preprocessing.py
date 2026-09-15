@@ -220,13 +220,29 @@ def extract_base_policy_embeddings(
     return np.concatenate(chunks, axis=0).astype(np.float32, copy=False)
 
 
+def _mean_token_nll(logits: Any, targets: Any, *, chunk_size: int = 256) -> float:
+    import torch.nn.functional as functional
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if logits.shape[0] != targets.shape[0] or targets.shape[0] == 0:
+        raise ValueError("logits and targets must contain the same nonzero token count")
+    nll_sum = 0.0
+    for start in range(0, targets.shape[0], chunk_size):
+        end = min(start + chunk_size, targets.shape[0])
+        chunk_nll = functional.cross_entropy(
+            logits[start:end].float(), targets[start:end], reduction="sum"
+        )
+        nll_sum += float(chunk_nll.item())
+    return nll_sum / targets.shape[0]
+
+
 def compute_base_policy_nll(
     rows: Sequence[dict[str, Any]], config: ADSPreprocessingConfig
 ) -> tuple[np.ndarray, list[str]]:
     """Compute mean target-token NLL, following ADS phase 4."""
 
     import torch
-    import torch.nn.functional as functional
 
     from .qwen_compat import load_training_model
 
@@ -252,10 +268,8 @@ def compute_base_policy_nll(
                 logits = model(input_ids=input_ids, use_cache=False).logits
             answer_logits = logits[0, prompt_length - 1 : prompt_length + answer_length - 1, :]
             answer_targets = input_ids[0, prompt_length : prompt_length + answer_length]
-            token_nll = functional.cross_entropy(
-                answer_logits.float(), answer_targets, reduction="none"
-            )
-            scores.append(float(token_nll.mean().item()))
+            # Avoid a full float32 [tokens, vocabulary] copy for long patches.
+            scores.append(_mean_token_nll(answer_logits, answer_targets))
             sources.append(source)
     finally:
         del model
@@ -352,6 +366,9 @@ def build_ads_records(
                 },
             }
         )
+        # Explicit ADS targets are offline-only supervision. Dataset runtimes
+        # either use their trusted verifier payload or own environment state.
+        record.pop("ads_target", None)
         if str(row.get("dataset", "")).strip().casefold() in {
             "swe_bench",
             "swe-bench",
@@ -360,7 +377,6 @@ def build_ads_records(
             # SWE ADS targets are private gold patches used only for offline
             # representation/NLL extraction. Never serialize them into the
             # public fixed pool consumed by Proposer/Solver.
-            record.pop("ads_target", None)
             record.pop("target_answers", None)
             record.pop("reference", None)
             ads_metadata = dict(record["metadata"]["ads_preprocessing"])

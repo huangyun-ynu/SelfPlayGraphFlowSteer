@@ -1,10 +1,14 @@
 # SelfPlayGraphFlowSteer + PATS 项目进度与交接
 
-更新日期：2026-09-14（Asia/Shanghai）。本文件依据当前代码、实验状态文件和进程检查整理；主要实验产物生成于 2026-09-12。
+更新日期：2026-09-15（Asia/Shanghai）。本文件依据当前代码、正式配置、数据产物和环境检查整理；历史实验主体生成于 2026-09-12。
 
 ## 1. 当前结论
 
-**PATS 主体集成代码已落地，七数据集正式训练配置已建立，但正式任务池尚未就绪，当前没有本项目的训练进程运行。**
+**PATS 主体集成代码、七数据集正式池和正式训练配置均已落地；SWE Verified 本地源码缓存与腾讯云官方验证端已接入。当前没有训练进程运行，正式 `route_report.json` 尚未生成，因此仍需路由预检和一轮 canary 后再开始长训练。**
+
+当前正式池为 7 个数据集各 512 条，共 3584 条，每个数据集 16 个 ADS 簇。WebShop 已按官方 goal index 边界重建：训练只来自 `1500–12086`，128 条测试只来自 `0–499`，零重叠。SWE 使用 Verified 500 的内部无交叉划分：128 条保留测试，剩余 372 个唯一问题全部保留并按难度均衡重复到 512 条训练数据。旧普通 SWE train 及其 ADS 已删除。
+
+最新迁移清单见 [MIGRATION_MANIFEST_2026-09-15.md](/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/MIGRATION_MANIFEST_2026-09-15.md)。含明文密钥的私密备份位于 `/home/bedicloud/sharestore2/iclr-users/2/SelfPlayGraphFlowSteer_PRIVATE_CONFIG_2026-09-15.md`，权限为 `0600`，不得提交 Git。
 
 第二轮已完成采样、反事实评估、训练批次构建和 PATS 审查；Solver 在训练前的概率一致性检查中失败，所以这一轮没有完整提交。数值修复已有真实样本上的正向诊断结果，但尚未正式接入训练代码。新技能的独立语义检查也仍有误拒问题。
 
@@ -31,6 +35,13 @@
 | 正式课程 / 选题配置 | [formal_3500.toml](/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/configs/curriculum/formal_3500.toml) |
 | 正式启动脚本 | [run_experiment.sh](/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/pats-formal-20260912/run_experiment.sh) |
 | 正式环境变量脚本 | [environment.sh](/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/pats-formal-20260912/environment.sh) |
+| 迁移清单 | [MIGRATION_MANIFEST_2026-09-15.md](/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/MIGRATION_MANIFEST_2026-09-15.md) |
+| 正式七数据集 ADS 池 | `/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/pats-formal-20260912/private/datasets/ads/validated/validated_task_pool.jsonl` |
+| SWE Verified 128 条保留测试 | `/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/datasets/swe-bench-verified/78f471bf655a3137b2e8a75af1501690ec009ec3/derived/stratified-128-test-balanced-512-train-seed-20260915/spgfs_test_public.jsonl` |
+| HealthBench Professional 128 条保留测试 | `/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/datasets/healthbench-professional/349962fd46dd02343a0d8a606491baf59154ea1a/derived/stratified-128-test-balanced-512-train-seed-20260915/test.jsonl` |
+| WebShop 官方 test 中的 128 条保留测试 | `data/formal/eval/webshop_official_test_128.jsonl` |
+| Git 可拉取的加密正式数据包 | `data/formal/private/formal_data.tar.gz.enc` |
+| SWE 本地源码缓存 | `/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/pats-formal-20260912/swe/repo-cache` |
 | 历史三数据集架构验证产物 | `/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/pats-real-architecture-20260912` |
 | 本地服务管理 | [manage_local.py](/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/pats-real-architecture-20260912/manage_local.py) |
 | 数据预处理目录 | `/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/codex-pats-formal-preflight` |
@@ -129,9 +140,9 @@ PATS 作为 Director 的训练期技能组件：根据可信轨迹估计各任�
 - 原始抽样数据：`/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/codex-pats-formal-preflight/sources/raw_qa_train_96.jsonl`
 - 验证器检查：`/home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer/state/codex-pats-formal-preflight/sources/verifier_validation.json`
 
-完整 NQ-open train（87,925 条）及 SWE train（19,008 条）已在此前数据补齐工作中下载核验。SWE 因缺少可运行的可信本地评估环境，本轮按用户要求排除；ALFWorld、WebShop 未纳入旧三类 QA 实验，HealthBench 最终评测集未用作训练集。这不是原项目全部七数据集的完整训练。
+正式七数据集任务池已经生成并绑定到 `SPGFS_FORMAL_TASK_POOL`：AIME、NQ-open、HotpotQA、WebShop、ALFWorld、HealthBench Professional、SWE-bench Verified 各 512 条，共 3584 条。池已通过逐行 JSON、公开字段和 16 簇 ADS 审计。WebShop 训练/测试已按官方 split 修复并确认零重叠；AIME 按最新决定维持当前 1983–2024 的 512 条唯一训练题。
 
-正式入口要求显式设置 `SPGFS_FORMAL_TASK_POOL`，且文件必须存在；当前服务器尚未找到覆盖七数据集的已验证合并任务池，因此正式训练仍处于 fail-closed 状态，不会回退到上述 96 题旧池。
+SWE 本地缓存包含 11 个完整 Git mirror，共约 4.1 GB；训练需要的 372/372 个 base commit 均可解析。运行时在本地隔离工作区生成 patch，再通过 SSH 交给腾讯云服务器中的官方 SWE-bench Docker 镜像验证。`swe.enabled = true`；未部署的通用 retrieval 服务保持关闭。
 
 主轨迹与关系反事实轨迹支持按各自的历史数据集平均耗时做长任务优先调度。该机制通过 `--historical-duration-priority` 开启，每轮只使用此前轮次的持久化记录并冻结排序快照；正式启动脚本当前显式使用 `--no-historical-duration-priority`，尚未开启。
 
@@ -147,20 +158,22 @@ GPU 环境记录版本：Python 3.11、PyTorch 2.13.0+cu130、Transformers 5.15.
 
 ## 7. 测试结论应如何理解
 
+- 2026-09-15 最新完整回归：843 passed、6 skipped；使用本机 `/tmp` 作为 pytest basetemp，避免 NFS `nobody` 所有权映射触发 pytest 安全拒绝。
+- WebShop 官方 split 重建审计：训练 512 条全部来自 `goal_index >= 1500`，测试 128 条全部来自 `goal_index < 500`，source ID 交集为 0；WebShop embedding 与 NLL 均按新样本 ID 重算。
+- 便携部署验证：`configs/formal_training.toml` 完整校验通过，加密正式数据包成功回读并由 bootstrap 加载 3584 条任务。
 - 历史全量回归：737 passed、11 skipped、1 failed；失败为旧后台线程测试未在时限内结束，之后单测与所在模块重跑通过。不能将该次全量记录写成全绿。
 - PATS 集成和使用统计的两次重叠针对回归，共 129 个去重用例通过，见 `state/codex-pats-validation/latest-targeted-summary.json`。
 - 新增 CLI 语义审查接线测试：7 passed，见 `state/codex-pats-validation/cli-semantic-tests.xml`。
 - 不完整终态图反事实修复：相关 15 项测试通过，日志在 `state/codex-pats-validation/cf-terminal-precondition-3e_maywp/pytest.log`。
-- 后续语义模块与冻结测试有针对验证；最新整套代码尚未重新跑完全量回归。不同批次测试重叠，不应相加作为总测试数。
+- 后续语义模块与冻结测试已有针对验证；以本节第一条的 843 passed、6 skipped 作为当前整套代码的最新完整结果。不同批次测试重叠，不应相加作为总测试数。
 
 ## 8. 下一步接手顺序
 
-1. 构建并验证覆盖七数据集的正式 JSONL 任务池，将其绝对路径赋给 `SPGFS_FORMAL_TASK_POOL`；不得使用旧 96 题池替代。
-2. 将已验证的 Q/K 归一化精度修复以可维护方式接入训练，补数值及梯度检查，再检查全部真实调用；保持原行为概率和门限。
-3. 修正语义 checker 对“可选动作”与“强制接口规则”的混淆，使用固定正负卡验证，保留所有原始判定。
-4. 核验 GPU 1、5、远程路由和新鲜 route report；确认所有外部路由保持 `network_path = "direct"`。
-5. 使用正式入口做一轮可审计 canary，验证七数据集平衡选题、35 个共享主/反事实槽、主轨迹优先、8 个异步图复验槽及按数据集流水线。
-6. canary 通过后从新的正式状态目录启动训练，不恢复旧三数据集检查点或进度指针。
-7. 完成后整理正式实验报告；若要宣称效果提升，还需同数据、同预算的无 PATS 对照实验。
+1. 迁移项目、私密配置和所需共享依赖，按迁移清单替换所有旧绝对路径并重建 Python 环境或验证复制环境。
+2. 在新账号直连探测全部物理 API 端点并生成新鲜 `state/pats-formal-20260912/route_report.json`；模型 API 不得走代理。
+3. 检查腾讯云实例已开机、SSH Host Key 未变化，并用空 patch 做一次官方验证端探测；自动开关机仍需要腾讯云 CAM API 凭据。
+4. 使用正式入口做一轮可审计 canary，验证七数据集平衡选题、35 个共享主/反事实槽、主轨迹优先、8 个异步图复验槽及按数据集流水线。
+5. canary 通过后从新的正式状态目录启动训练，不恢复旧三数据集检查点或进度指针。
+6. 继续处理历史实验暴露的 Q/K 归一化概率一致性和技能语义误拒问题；不要用放宽门限掩盖差异。
 
 旧目录中的 `audit_completed_experiment.py` 只适用于历史架构验证产物，不能作为七数据集正式训练的完成证明。

@@ -805,6 +805,7 @@ class SWEWorkspaceLifecycle:
                 ],
                 cwd=self.workspace_root,
                 timeout_s=60.0,
+                safe_directories=(source,),
             )
             self._run_git(
                 ["checkout", "--quiet", "--detach", canonical_commit],
@@ -1189,7 +1190,17 @@ class SWEWorkspaceLifecycle:
             if canonical_commit:
                 return canonical_commit
             completed = subprocess.run(
-                ["git", "-C", str(source), "fetch", "--no-tags", "origin", commit],
+                [
+                    "git",
+                    "-c",
+                    f"safe.directory={source}",
+                    "-C",
+                    str(source),
+                    "fetch",
+                    "--no-tags",
+                    "origin",
+                    commit,
+                ],
                 capture_output=True,
                 text=True,
                 timeout=120.0,
@@ -1206,7 +1217,16 @@ class SWEWorkspaceLifecycle:
     @staticmethod
     def _resolve_cached_commit(source: Path, commit: str) -> str:
         completed = subprocess.run(
-            ["git", "-C", str(source), "rev-parse", "--verify", f"{commit}^{{commit}}"],
+            [
+                "git",
+                "-c",
+                f"safe.directory={source}",
+                "-C",
+                str(source),
+                "rev-parse",
+                "--verify",
+                f"{commit}^{{commit}}",
+            ],
             capture_output=True,
             text=True,
             timeout=10.0,
@@ -1310,16 +1330,51 @@ class SWEWorkspaceLifecycle:
     def orphan_workspaces(self) -> tuple[str, ...]:
         return tuple(sorted(str(path) for path in self.workspace_root.iterdir() if path.is_dir()))
 
-    def _run_git(self, arguments: list[str], *, cwd: Path, timeout_s: float) -> None:
-        returncode, _stdout, stderr, timed_out = self._run_process(
-            ["git", *arguments], cwd=cwd, timeout_s=timeout_s
-        )
+    def _run_git(
+        self,
+        arguments: list[str],
+        *,
+        cwd: Path,
+        timeout_s: float,
+        safe_directories: tuple[Path, ...] = (),
+    ) -> None:
+        trusted_paths = (cwd.resolve(), *(path.resolve() for path in safe_directories))
+        git_environment = {
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "safe.directory",
+            "GIT_CONFIG_VALUE_0": str(trusted_paths[0]),
+        }
+        temporary_global_config: Path | None = None
+        if safe_directories:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                prefix="spgfs-git-safe-",
+                suffix=".config",
+                dir=self.workspace_root,
+                delete=False,
+            ) as handle:
+                handle.write("[safe]\n")
+                for path in trusted_paths:
+                    handle.write(f"\tdirectory = {json.dumps(str(path))}\n")
+                temporary_global_config = Path(handle.name)
+            git_environment["GIT_CONFIG_GLOBAL"] = str(temporary_global_config)
+        try:
+            returncode, _stdout, stderr, timed_out = self._run_process(
+                ["git", *arguments],
+                cwd=cwd,
+                timeout_s=timeout_s,
+                environment_overrides=git_environment,
+            )
+        finally:
+            if temporary_global_config is not None:
+                temporary_global_config.unlink(missing_ok=True)
         if timed_out or returncode != 0:
             raise RuntimeError(f"git operation failed: {stderr[:1000]}")
 
     def _git_bytes(self, arguments: list[str], cwd: Path) -> bytes:
         completed = subprocess.run(
-            ["git", *arguments],
+            ["git", "-c", f"safe.directory={cwd.resolve()}", *arguments],
             cwd=cwd,
             capture_output=True,
             timeout=20.0,
@@ -1336,6 +1391,7 @@ class SWEWorkspaceLifecycle:
         cwd: Path,
         timeout_s: float,
         input_bytes: bytes | None = None,
+        environment_overrides: dict[str, str] | None = None,
     ) -> tuple[int, str, str, bool]:
         environment = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -1345,6 +1401,7 @@ class SWEWorkspaceLifecycle:
             "HTTP_PROXY": "http://127.0.0.1:9",
             "HTTPS_PROXY": "http://127.0.0.1:9",
         }
+        environment.update(environment_overrides or {})
         process = subprocess.Popen(
             command,
             cwd=cwd,

@@ -1,0 +1,28 @@
+{
+  "schema": "spgfs-webshop-official-split-v1",
+  "source": {
+    "official_goal_index_ranges": {
+      "eval": [
+        500,
+        1499
+      ],
+      "test": [
+        0,
+        499
+      ],
+      "train": [
+        1500,
+        12086
+      ]
+    },
+    "path": "assets/webshop/prepared/goals.jsonl",
+    "rows": 12087
+  },
+  "test": {
+    "path": "data/formal/eval/webshop_official_test_128.jsonl",
+    "rows": 128,
+    "selection_seed": "spgfs-webshop-official-test-128-v1",
+    "sha256": "4f91ed8ae2e6214b163c44e8d7ecdc3509a3f6d83bfb477299b75a11ad4de8f5",
+    "unique_source_rows": 128
+  }
+}

@@ -11,6 +11,7 @@ config/private/
 state/
 logs/
 models/
+assets/
 datasets/
 checkpoints/
 *.safetensors

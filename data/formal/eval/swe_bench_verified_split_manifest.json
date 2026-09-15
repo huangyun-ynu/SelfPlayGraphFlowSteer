@@ -1,0 +1,69 @@
+{
+  "manifest_id": "spgfs-swe-verified-128-test-512-train-20260915-v1",
+  "schema": "spgfs-swe-verified-derived-split-v1",
+  "selection": {
+    "difficulty_buckets": {
+      "easy": [
+        "<15 min fix"
+      ],
+      "hard": [
+        "1-4 hours",
+        ">4 hours"
+      ],
+      "medium": [
+        "15 min - 1 hour"
+      ]
+    },
+    "seed": 20260915,
+    "test_exact_difficulty_quota": {
+      "1-4 hours": 10,
+      "15 min - 1 hour": 67,
+      "<15 min fix": 50,
+      ">4 hours": 1
+    },
+    "training_repeat_policy": "retain every non-test source once, then uniformly repeat from the currently smallest operational difficulty bucket"
+  },
+  "source": {
+    "dataset": "SWE-bench/SWE-bench_Verified",
+    "official_split": "test",
+    "revision": "78f471bf655a3137b2e8a75af1501690ec009ec3",
+    "rows": 500,
+    "sha256": "1824581edd0ad23f6a18ad2329c5be21ff01fabdfd8a76f6656a6761e50ca910"
+  },
+  "test": {
+    "difficulty_counts": {
+      "easy": 50,
+      "hard": 11,
+      "medium": 67
+    },
+    "exact_difficulty_counts": {
+      "1-4 hours": 10,
+      "15 min - 1 hour": 67,
+      "<15 min fix": 50,
+      ">4 hours": 1
+    },
+    "path": "spgfs_test_public.jsonl",
+    "rows": 128,
+    "sha256": "a12f989c80641d266b619bba8b62b57d8ae64798ae3e126b880a36aac1c24cd5",
+    "unique_source_rows": 128
+  },
+  "train": {
+    "difficulty_counts": {
+      "easy": 159,
+      "hard": 159,
+      "medium": 194
+    },
+    "exact_difficulty_counts": {
+      "1-4 hours": 149,
+      "15 min - 1 hour": 194,
+      "<15 min fix": 159,
+      ">4 hours": 10
+    },
+    "path": "spgfs_train_raw.jsonl",
+    "repeated_rows": 140,
+    "rows": 512,
+    "sha256": "024ab427014d91f10372eb0d0aba2d80029f928c9c84ce096031a2599092affb",
+    "unique_source_rows": 372
+  },
+  "train_test_source_overlap": 0
+}

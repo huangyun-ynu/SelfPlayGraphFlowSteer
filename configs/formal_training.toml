@@ -1,0 +1,334 @@
+# Canonical deployment configuration for the seven-dataset formal PATS run.
+# Credentials are loaded from the repository .env and are never stored here.
+[models.proposer]
+base_url = "http://127.0.0.1:18601/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+base_model_path = "models/Qwen3.5-9B"
+checkpoint_path = "state/formal-training/checkpoints/proposer"
+trainable = true
+
+[models.solver]
+base_url = "http://127.0.0.1:18602/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+base_model_path = "models/Qwen3.5-9B"
+checkpoint_path = "state/formal-training/checkpoints/solver"
+trainable = true
+
+[runtime]
+name = "default"
+base_url = "http://127.0.0.1:18603/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+timeout_s = 120.0
+max_concurrency = 12
+managed_locally = false
+frozen = true
+network_path = "direct"
+request_profile = "qwen"
+
+[runtime_routing]
+# Director sees five logical model choices. Physical endpoints are pooled below.
+worker_routes = ["gpt", "grok", "gemini", "deepseek", "minimax"]
+skill_distiller = "skill_refiner"
+health_cooldown_s = 600.0
+pool_retry_attempts = 2
+pool_retry_backoff_s = 1.0
+
+[runtime_routing.endpoint_pools]
+gpt = ["gpt", "gpt_eco"]
+grok = ["grok", "grok45"]
+gemini = ["gemini", "gemini2"]
+gpt_judge = ["gpt_judge", "gpt_judge_eco"]
+
+[canvas]
+# Predictive admission protection is disabled; hard token and wall-clock limits remain.
+remaining_time_admission_enabled = false
+remaining_token_admission_enabled = false
+max_agents = 4
+max_rounds = 24
+relay_max_chars = 1000
+
+[canvas.max_total_tokens_by_dataset]
+aime = 65536
+nq_open = 65536
+hotpotqa = 65536
+webshop = 350000
+alfworld = 350000
+healthbench_professional = 65536
+swe_bench = 350000
+
+[solver_skillbank]
+path = "state/formal-training/runtime_state/director_skillbank.v2.json"
+cases_path = "state/formal-training/runtime_state/director_skill_cases.json"
+usage = "training_only"
+prompt_token_budget = 1024
+retrieve_top_k = 3
+enabled = true
+mode = "director_skill_v2"
+activation_policy = "checked"
+embedding_model_path = "models/e5-base-v2"
+
+[solver_skillbank.pats]
+enabled = true
+ema_alpha = 0.1
+revise_threshold = 0.3
+compress_threshold = 0.85
+max_skills = 30
+max_tokens = 2000
+min_groups = 2
+min_evidence_cards = 2
+review_interval = 1
+max_edits = 4
+max_reviews_per_cycle = 3
+max_evidence_groups = 32
+max_policy_lag = 1
+max_review_input_tokens = 20480
+
+[trace]
+path = "state/formal-training/runtime_state/traces.jsonl"
+
+[verifier]
+mode = "auto"
+
+# Pure-local Python execution support for AIME Workers.
+[aime_actions]
+enabled = true
+timeout_s = 5.0
+max_output_chars = 8000
+max_code_chars = 12000
+memory_limit_mb = 1024
+max_initial_calls = 3
+max_revision_calls = 1
+max_total_calls = 4
+
+# Closed until a compatible local retrieval service is deployed on port 8010.
+[retrieval]
+enabled = false
+service_url = "http://127.0.0.1:8010/retrieve"
+top_k = 3
+timeout_s = 120.0
+max_tool_rounds = 3
+
+# The formal launcher owns the pinned official WebShop sidecar on port 8020.
+[webshop]
+enabled = true
+service_url = "http://127.0.0.1:8020"
+timeout_s = 240.0
+max_observation_chars = 4000
+max_query_chars = 500
+max_initial_calls = 12
+max_revision_calls = 4
+max_total_calls = 16
+staged_commit_enabled = true
+max_pending_sessions = 8
+pending_ttl_s = 900.0
+search_observation_mode = "structured_only"
+
+# Local assets are present; the formal environment installs the alfworld extra.
+[alfworld]
+enabled = true
+data_root = "assets/alfworld-data/json_2.1.1"
+max_episode_steps = 50
+max_rollout_steps = 400
+max_observation_chars = 12000
+max_initial_calls = 50
+max_revision_calls = 50
+max_total_calls = 100
+worker_guidance_policy = "factual_memory_v1"
+
+# Local execution storage, trusted remote verifier identity, registry, and
+# pinned dataset revision are provisioned for the formal run.
+[swe]
+enabled = true
+repo_cache_root = "state/formal-training/swe/repo-cache"
+workspace_root = "state/formal-training/swe/workspaces"
+artifact_store_root = "state/formal-training/private/swe/artifacts"
+verifier_registry_path = "state/formal-training/private/swe/verifier-registry.json"
+lifecycle_log_path = "state/formal-training/private/swe/lifecycle.jsonl"
+verifier_log_path = "state/formal-training/private/swe/verifier-client.jsonl"
+verifier_host = "43.134.20.27"
+verifier_user = "sweeval"
+verifier_identity_file = "state/formal-training/private/swe/identity"
+verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
+dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
+local_test_timeout_s = 60.0
+max_output_chars = 12000
+max_file_chars = 200000
+max_patch_bytes = 2000000
+max_initial_calls = 20
+max_revision_calls = 12
+max_total_calls = 32
+duplicate_responsibility_policy = "record_only"
+
+[swe.test_profiles]
+python_syntax = ["python", "-m", "py_compile"]
+
+[healthbench_judge_audit]
+path = "state/formal-training/private/healthbench_judge"
+runtime_route = "gpt_judge"
+expected_model = "gpt-5.5"
+
+[resources]
+proposer_gpu_id = 0
+solver_gpu_id = 1
+allocated_gpu_ids = [0, 1]
+allow_policy_gpu_colocation = false
+proposer_service_gpu_memory_utilization = 0.38
+solver_service_gpu_memory_utilization = 0.80
+
+# Dedicated between-cycle Skill Distiller route.
+[runtimes.skill_refiner]
+base_url = "https://nexus.itssx.com/api/codex/codex_pro/v1"
+api_key_env = "NEXUS_PRO_API_KEY"
+served_model = "gpt-6-astra"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 20
+timeout_s = 240.0
+max_tokens = 4096
+managed_locally = false
+frozen = true
+
+[runtimes.gpt]
+base_url = "https://nexus.itssx.com/api/codex/codex/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 16
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gpt_eco]
+base_url = "https://nexus.itssx.com/api/codex_eco/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 16
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.grok]
+base_url = "https://nexus.itssx.com/api/grok/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "grok-4.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.grok45]
+base_url = "https://nexus.itssx.com/api/grok45/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "grok-4.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gemini]
+base_url = "https://uuapi.io/v1"
+api_key_env = "UUAPI_API_KEY"
+served_model = "gemini-3.6-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gemini2]
+base_url = "https://uuapi.io/v1"
+api_key_env = "UUAPI_API_KEY_2"
+served_model = "gemini-3.6-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.deepseek]
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+served_model = "deepseek-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+enable_thinking = true
+reasoning_effort = "low"
+max_concurrency = 30
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.minimax]
+base_url = "https://api.minimaxi.com/v1"
+api_key_env = "MINIMAX_API_KEY"
+served_model = "MiniMax-M2.7"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 30
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+# HealthBench Judge shares the same physical GPT endpoint gates and credentials
+# as GPT Worker traffic; only the API surface and request role differ.
+[runtimes.gpt_judge]
+base_url = "https://nexus.itssx.com/api/codex/codex/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "responses"
+network_path = "direct"
+reasoning_effort = "low"
+healthbench_grader_reasoning_effort = "low"
+max_concurrency = 16
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gpt_judge_eco]
+base_url = "https://nexus.itssx.com/api/codex_eco/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "responses"
+network_path = "direct"
+reasoning_effort = "low"
+healthbench_grader_reasoning_effort = "low"
+max_concurrency = 16
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true

@@ -1188,11 +1188,11 @@ def webshop_lifecycles(tools: dict[str, Any]) -> tuple[WebShopSessionLifecycle, 
 
 
 def _trusted_goal_id(task: TaskSpec) -> str:
-    value = task.metadata.get("goal_id")
-    if value is not None:
-        return str(value).strip()
-    source_id = str(task.metadata.get("source_id", "")).strip()
-    return source_id if source_id.startswith("goal:") else ""
+    for key in ("goal_id", "source_id", "source_task_id"):
+        value = str(task.metadata.get(key, "")).strip()
+        if re.fullmatch(r"(?:webshop/)?goal[-/:]\d+", value, re.IGNORECASE):
+            return value
+    return ""
 
 
 def _empty_result(reason: str) -> dict[str, Any]:

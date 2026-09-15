@@ -2,7 +2,7 @@
 
 Separate Proposer and Solver policies for multi-agent graph self-play. The Proposer selects tasks; the Solver's Director builds and executes a graph of workers. Verified rollouts feed Frontier scoring and policy updates.
 
-This distribution includes Director SkillBank generation, retrieval, usage accounting and retirement. It retains graph execution, ADS/TSDS task selection, dataset adapters, relation counterfactuals, Frontier rewards, partial-group training, and the training orchestration code. No credentials, private experiment results, datasets, model weights, or machine-specific launch scripts are included.
+This distribution includes Director SkillBank generation, retrieval, usage accounting and retirement. It retains graph execution, ADS/TSDS task selection, dataset adapters, relation counterfactuals, Frontier rewards, partial-group training, and the training orchestration code. The formal dataset package is encrypted because HealthBench Professional asks users not to republish its examples; credentials, decryption keys, private experiment results, model weights and SSH identities are never included.
 
 ## Offline quick start
 
@@ -42,6 +42,11 @@ spgfs selfplay-experiment --help
 Collection writes durable trajectories and training batches. `train-cycle --run-dir ...` consumes a collected batch; `selfplay-experiment` orchestrates multiple cycles. Use `--config` explicitly for real runs. `configs/adaptive.toml` is a credential-free local example, not the original production deployment configuration.
 
 The dataset adapters cover AIME, NQ Open, HotpotQA, HealthBench, ALFWorld, WebShop and SWE-Bench. Stateful environments and official validators must be supplied separately. This repository does not bundle the original SWE cloud account or automatically provision it.
+
+For the current seven-dataset deployment, see
+[`docs/REMOTE_GPU_SETUP.zh-CN.md`](docs/REMOTE_GPU_SETUP.zh-CN.md). It uses a
+portable credential-free TOML, an encrypted formal ADS pool and explicit
+provisioning checks for model and stateful-environment assets.
 
 ## Layout
 
