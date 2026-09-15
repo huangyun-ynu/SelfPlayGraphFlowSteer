@@ -25,4 +25,4 @@ export SPGFS_WEBSHOP_WORKER="${SPGFS_WEBSHOP_WORKER:-$ROOT/assets/webshop/privat
 export SPGFS_WEBSHOP_STORE="${SPGFS_WEBSHOP_STORE:-$ROOT/assets/webshop/prepared/products.sqlite3}"
 export SPGFS_WEBSHOP_GOALS="${SPGFS_WEBSHOP_GOALS:-$ROOT/assets/webshop/prepared/goals.jsonl}"
 export SPGFS_WEBSHOP_INDEX=$SPGFS_WEBSHOP_SOURCE_ROOT/search_engine/indexes_100k
-export SPGFS_WEBSHOP_JAVA_HOME="${SPGFS_WEBSHOP_JAVA_HOME:-${JAVA_HOME:-/usr/lib/jvm/java-11-openjdk-amd64}}"
+export SPGFS_WEBSHOP_JAVA_HOME="${SPGFS_WEBSHOP_JAVA_HOME:-${JAVA_HOME:-$ROOT/assets/java/jdk-11.0.32.1+1}}"

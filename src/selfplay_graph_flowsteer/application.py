@@ -2032,6 +2032,7 @@ def create_adaptive_application(
     route_token_tracker: RouteTokenTracker | None = None,
     swe_lifecycle: SWEWorkspaceLifecycle | None = None,
     director_tokenizer: Tokenizer | None = None,
+    director_enable_thinking: bool | None = None,
 ) -> AdaptiveSolverApplication:
     config.validate()
     route_health = RouteHealthStore(
@@ -2187,6 +2188,7 @@ def create_adaptive_application(
                     config.solver_model,
                     {"graph-director": 0.6},
                     sampling_seed=config.seed,
+                    director_enable_thinking=director_enable_thinking,
                 )
             )
             owned_backends.append(director_backend)
@@ -2384,6 +2386,7 @@ def _gateway_config(
     temperatures: dict[str, float],
     *,
     sampling_seed: int | None = None,
+    director_enable_thinking: bool | None = None,
 ) -> ModelGatewayConfig:
     return ModelGatewayConfig(
         base_url=model.base_url,
@@ -2396,7 +2399,11 @@ def _gateway_config(
                 temperature=temperature,
                 top_p=0.95 if role == "graph-director" else 1.0,
                 top_k=20 if role == "graph-director" else None,
-                enable_thinking=role == "graph-director",
+                enable_thinking=(
+                    role == "graph-director"
+                    if director_enable_thinking is None
+                    else role == "graph-director" and director_enable_thinking
+                ),
             )
             for role, temperature in temperatures.items()
         },

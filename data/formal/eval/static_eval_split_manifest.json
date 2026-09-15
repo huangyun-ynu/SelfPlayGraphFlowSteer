@@ -1,0 +1,30 @@
+{
+  "schema": "spgfs-static-eval-splits-v1",
+  "selection_seed": "spgfs-static-eval-20260916-v1",
+  "datasets": {
+    "aime": {
+      "path": "data/formal/eval/aime_official_test.jsonl",
+      "rows": 30,
+      "sha256": "f50a3ba12616c8d87b37d1fd7a0a2c2b5e440c18388db0991855423856a610c7",
+      "unique_source_rows": 30
+    },
+    "nq_open": {
+      "path": "data/formal/eval/nq_open_official_test.jsonl",
+      "rows": 128,
+      "sha256": "df345ef4864866d7df335a71e8315dfe18c209a4f9cc88b9d0e6d3dc1d90f4bc",
+      "unique_source_rows": 128
+    },
+    "hotpotqa": {
+      "path": "data/formal/eval/hotpotqa_official_test.jsonl",
+      "rows": 128,
+      "sha256": "110da0e2274d70235651bfae68ecaa2ab845dad3af78b2ac3d6287efc38c311f",
+      "unique_source_rows": 128
+    },
+    "alfworld": {
+      "path": "data/formal/eval/alfworld_official_test.jsonl",
+      "rows": 128,
+      "sha256": "797e04a0b037425e8b6aa7d7f6f68b14e9c4002ad29123e64536ec4286497b49",
+      "unique_source_rows": 128
+    }
+  }
+}

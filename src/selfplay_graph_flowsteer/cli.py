@@ -22,6 +22,7 @@ from .application import (
     load_adaptive_config,
 )
 from .benchmark import BenchmarkRunner, load_flowsteer_records, write_benchmark
+from .benchmark_tracking import BenchmarkRunTracker, benchmark_aggregate
 from .curriculum import ADSBoundaryScheduler, CurriculumProfile, FixedTaskPool, TSDSRetriever
 from .features import E5DelegationEncoder, SemanticGraphFeatureExtractor
 from .graph import MultiAgentGraph
@@ -45,6 +46,8 @@ from .selfplay import (
     normalize_selfplay_seed,
 )
 from .selfplay_runtime import (
+    PRIMARY_DATASET_DURATION_ESTIMATES_S,
+    PRIMARY_DURATION_ESTIMATE_VERSION,
     PRIMARY_JOB_ORDER_CHOICES,
     ByteTokenizer,
     HuggingFaceTokenizer,
@@ -55,6 +58,7 @@ from .selfplay_runtime import (
 )
 from .services import ModelServiceSpec, VLLMServiceManager
 from .skills import SolverSkillBank
+from .static_director_skills import StaticDirectorSkillBank
 from .training import (
     AlternatingGRPOTrainer,
     AlternatingTrainingConfig,
@@ -237,11 +241,52 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path(__file__).resolve().parents[2] / "configs" / "adaptive.toml",
     )
     benchmark.add_argument("--dataset", type=Path, required=True)
+    benchmark.add_argument(
+        "--additional-dataset",
+        type=Path,
+        action="append",
+        default=[],
+        help="additional fixed JSONL evaluated in the same shared route-pool process",
+    )
     benchmark.add_argument("--output", type=Path, required=True)
     benchmark.add_argument("--verifier", choices=VERIFIERS, default="auto")
     benchmark.add_argument("--seed", type=int, action="append", default=[])
     benchmark.add_argument("--flowsteer-baseline", type=Path)
     benchmark.add_argument("--mock", action="store_true")
+    benchmark.add_argument("--workers", type=int, default=1)
+    benchmark.add_argument("--limit-per-dataset", type=int)
+    benchmark.add_argument(
+        "--historical-duration-priority",
+        action="store_true",
+        help="order fixed evaluation jobs by versioned dataset duration estimates",
+    )
+    benchmark.add_argument(
+        "--wandb-mode",
+        choices=("disabled", "offline", "online"),
+        help="mirror durable local sample telemetry and artifacts to W&B",
+    )
+    benchmark.add_argument(
+        "--director-base-url",
+        help="override only the Qwen Director endpoint; Worker routes remain unchanged",
+    )
+    benchmark.add_argument("--director-api-key")
+    benchmark.add_argument("--director-model")
+    benchmark.add_argument(
+        "--director-thinking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="override Qwen Director thinking without changing Worker reasoning settings",
+    )
+    benchmark.add_argument(
+        "--disable-swe",
+        action="store_true",
+        help="disable SWE Actions for a fixed evaluation that excludes SWE-bench",
+    )
+    benchmark.add_argument(
+        "--director-skill-root",
+        type=Path,
+        help="reviewed per-dataset Director orchestration Skills for a fixed inference baseline",
+    )
     benchmark.add_argument(
         "--skill-context",
         choices=("auto", "on", "off"),
@@ -1266,6 +1311,7 @@ def _pending_cycle_metrics_updates(
 
 
 def benchmark(args: argparse.Namespace) -> int:
+    _load_project_env(Path(args.config).resolve())
     config = _skill_context_config(
         replace(
             load_adaptive_config(args.config), verifier=args.verifier, persist_runtime_updates=False
@@ -1273,23 +1319,152 @@ def benchmark(args: argparse.Namespace) -> int:
         args,
         training=False,
     )
+    director_overrides = {
+        key: value
+        for key, value in (
+            ("base_url", args.director_base_url),
+            ("api_key", args.director_api_key),
+            ("served_model", args.director_model),
+        )
+        if value is not None
+    }
+    if director_overrides:
+        config = replace(config, solver_model=replace(config.solver_model, **director_overrides))
+    if args.disable_swe:
+        config = replace(config, swe=replace(config.swe, enabled=False))
+    if args.director_skill_root is not None:
+        config = replace(config, skillbank_enabled=False, skillbank_usage="off")
+    if args.workers <= 0:
+        raise ValueError("--workers must be positive")
+    if args.limit_per_dataset is not None and args.limit_per_dataset <= 0:
+        raise ValueError("--limit-per-dataset must be positive")
     route_latency_tracker = RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
+    director_tokenizer = (
+        ByteTokenizer()
+        if args.mock
+        else HuggingFaceTokenizer(config.solver_model.base_model_path)
+    )
+    static_director_skills = (
+        StaticDirectorSkillBank(
+            args.director_skill_root,
+            prompt_token_budget=config.skillbank_prompt_token_budget,
+        )
+        if args.director_skill_root is not None
+        else None
+    )
 
     def application_factory(seed: int):
-        return create_adaptive_application(
+        application = create_adaptive_application(
             replace(config, seed=seed),
             mock=args.mock,
             route_latency_tracker=route_latency_tracker,
+            director_tokenizer=director_tokenizer,
+            director_enable_thinking=args.director_thinking,
         )
+        if static_director_skills is not None:
+            application.skillbank = static_director_skills
+            application.solver.skillbank = static_director_skills
+        return application
 
-    records = BenchmarkRunner(
-        application_factory,
-        checkpoint=str(config.solver_model.checkpoint_path),
-    ).run(load_fixed_jsonl(args.dataset), seeds=args.seed or [0])
-    baseline = load_flowsteer_records(args.flowsteer_baseline) if args.flowsteer_baseline else None
-    payload = write_benchmark(args.output, records, baseline=baseline)
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
+    examples = []
+    for path in (args.dataset, *args.additional_dataset):
+        selected = load_fixed_jsonl(path)
+        if args.limit_per_dataset is not None:
+            selected = selected[: args.limit_per_dataset]
+        examples.extend(selected)
+    if args.historical_duration_priority:
+        examples.sort(
+            key=lambda example: -PRIMARY_DATASET_DURATION_ESTIMATES_S.get(
+                str((example.metadata or {}).get("dataset", "")), 0.0
+            )
+        )
+    seeds = args.seed or [0]
+    wandb_mode = args.wandb_mode or os.environ.get("WANDB_MODE", "disabled")
+    tracker = BenchmarkRunTracker(args.output, wandb_mode=wandb_mode)
+    runtime_pool = config.runtime_pool()
+    tracker.start_wandb(
+        {
+            "evaluation_only": True,
+            "parameter_updates": 0,
+            "director_model": config.solver_model.served_model,
+            "director_thinking": args.director_thinking,
+            "worker_logical_routes": list(config.worker_runtime_routes),
+            "worker_endpoint_pools": {
+                name: list(members) for name, members in config.runtime_endpoint_pools.items()
+            },
+            "route_concurrency": {
+                name: runtime.max_concurrency for name, runtime in runtime_pool.items()
+            },
+            "dataset_token_limits": dict(config.canvas.max_total_tokens_by_dataset),
+            "workers": args.workers,
+            "datasets": sorted(
+                {str((example.metadata or {}).get("dataset", "unknown")) for example in examples}
+            ),
+            "examples_planned": len(examples) * len(seeds),
+            "historical_duration_priority": args.historical_duration_priority,
+            "duration_estimate_version": (
+                PRIMARY_DURATION_ESTIMATE_VERSION
+                if args.historical_duration_priority
+                else "disabled"
+            ),
+            "duration_estimates_s": (
+                dict(PRIMARY_DATASET_DURATION_ESTIMATES_S)
+                if args.historical_duration_priority
+                else {}
+            ),
+            "swe_enabled": config.swe.enabled,
+            "director_skill_root": str(args.director_skill_root or ""),
+            "deepseek_thinking": runtime_pool["deepseek"].enable_thinking,
+            "minimax_thinking": runtime_pool["minimax"].enable_thinking,
+        }
+    )
+    failed = True
+    try:
+        BenchmarkRunner(
+            application_factory,
+            checkpoint=str(config.solver_model.checkpoint_path),
+        ).run(
+            examples,
+            seeds=seeds,
+            workers=args.workers,
+            should_run=lambda example, seed: not tracker.is_complete(example, seed),
+            on_record=tracker.record,
+            on_error=tracker.record_error,
+            continue_on_error=True,
+        )
+        records = tracker.records()
+        aggregate = benchmark_aggregate(records, tracker.dataset_by_task())
+        aggregate["run"] = {
+            "planned": len(examples) * len(seeds),
+            "completed": len(records),
+            "failed": int(tracker.state.get("failed", 0)),
+            "workers": args.workers,
+            "parameter_updates": 0,
+        }
+        if records:
+            baseline = (
+                load_flowsteer_records(args.flowsteer_baseline)
+                if args.flowsteer_baseline
+                else None
+            )
+            payload = write_benchmark(args.output, records, baseline=baseline)
+            payload["datasets"] = aggregate
+        else:
+            payload = {"datasets": aggregate}
+        failed = bool(tracker.state.get("failed", 0))
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 2 if failed else 0
+    finally:
+        records = tracker.records()
+        aggregate = benchmark_aggregate(records, tracker.dataset_by_task())
+        aggregate["run"] = {
+            "planned": len(examples) * len(seeds),
+            "completed": len(records),
+            "failed": int(tracker.state.get("failed", 0)),
+            "workers": args.workers,
+            "parameter_updates": 0,
+        }
+        tracker.finish(aggregate, failed=failed)
 
 
 def model_services(args: argparse.Namespace) -> int:

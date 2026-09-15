@@ -98,13 +98,16 @@ def _resolve_systemd_ipv4(hostname: str, timeout: float = 20.0) -> list[str]:
     resolvectl = shutil.which("resolvectl")
     if not resolvectl:
         return []
-    result = subprocess.run(
-        [resolvectl, "query", "--legend=no", "--type=A", hostname],
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        result = subprocess.run(
+            [resolvectl, "query", "--legend=no", "--type=A", hostname],
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
     if result.returncode:
         return []
     addresses: list[str] = []

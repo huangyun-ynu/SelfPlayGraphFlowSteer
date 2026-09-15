@@ -28,6 +28,17 @@ def from_adaptive_result(
 ) -> EvaluationRecord:
     verification = result.solver_result.verification
     payload = result.to_dict()
+    solver_payload = result.solver_result.to_dict()
+    trajectory = dict(solver_payload["trace"])
+    trajectory.update(
+        {
+            "director_run": solver_payload["director_run"],
+            "flowsteer_structure": solver_payload["flowsteer_structure"],
+            "skills_used": solver_payload["skills_used"],
+            "skill_context": solver_payload["skill_context"],
+            "answer_submission": solver_payload["answer_submission"],
+        }
+    )
     return EvaluationRecord(
         task_id=result.task.task_id,
         system="selfplay_graph_flowsteer",
@@ -38,7 +49,7 @@ def from_adaptive_result(
         token_cost=int(payload["token_in"]) + int(payload["token_out"]),
         checkpoint=checkpoint,
         duration_s=0.0,
-        trajectory=result.solver_result.trace.to_dict(),
+        trajectory=trajectory,
     )
 
 

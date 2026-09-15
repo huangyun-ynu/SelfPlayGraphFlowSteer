@@ -5,6 +5,7 @@ import math
 import os
 import time
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -50,11 +51,23 @@ class BenchmarkRunner:
         examples: Iterable[FixedDatasetExample],
         *,
         seeds: Iterable[int] = (0,),
+        workers: int = 1,
+        should_run: Callable[[FixedDatasetExample, int], bool] | None = None,
+        on_record: Callable[[FixedDatasetExample, int, EvaluationRecord], None] | None = None,
+        on_error: Callable[[FixedDatasetExample, int, BaseException], None] | None = None,
+        continue_on_error: bool = False,
     ) -> list[EvaluationRecord]:
-        records: list[EvaluationRecord] = []
-        for example in examples:
-            for seed in seeds:
-                application = self.application_factory(int(seed))
+        jobs = [
+            (example, int(seed))
+            for example in examples
+            for seed in seeds
+            if should_run is None or should_run(example, int(seed))
+        ]
+
+        def execute(job: tuple[FixedDatasetExample, int]) -> EvaluationRecord:
+            example, seed = job
+            application = self.application_factory(seed)
+            try:
                 started = time.monotonic()
                 result = application.solve(
                     example.task,
@@ -65,13 +78,52 @@ class BenchmarkRunner:
                     metadata=example.metadata,
                 )
                 duration = time.monotonic() - started
-                records.append(
-                    replace(
-                        from_adaptive_result(result, seed=int(seed), checkpoint=self.checkpoint),
-                        duration_s=duration,
-                    )
+                return replace(
+                    from_adaptive_result(result, seed=seed, checkpoint=self.checkpoint),
+                    duration_s=duration,
                 )
-        return records
+            finally:
+                application.close()
+
+        if workers <= 0:
+            raise ValueError("benchmark workers must be positive")
+        if workers == 1:
+            records = []
+            for example, seed in jobs:
+                try:
+                    record = execute((example, seed))
+                except BaseException as exc:
+                    if on_error is not None:
+                        on_error(example, seed, exc)
+                    if not continue_on_error:
+                        raise
+                else:
+                    records.append(record)
+                    if on_record is not None:
+                        on_record(example, seed, record)
+            return records
+        records_by_index: dict[int, EvaluationRecord] = {}
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(execute, job): (index, job[0], job[1])
+                for index, job in enumerate(jobs)
+            }
+            for future in as_completed(futures):
+                index, example, seed = futures[future]
+                try:
+                    record = future.result()
+                except BaseException as exc:
+                    if on_error is not None:
+                        on_error(example, seed, exc)
+                    if not continue_on_error:
+                        for pending in futures:
+                            pending.cancel()
+                        raise
+                else:
+                    records_by_index[index] = record
+                    if on_record is not None:
+                        on_record(example, seed, record)
+        return [records_by_index[index] for index in sorted(records_by_index)]
 
 
 def summarize(records: Iterable[EvaluationRecord]) -> BenchmarkSummary:
