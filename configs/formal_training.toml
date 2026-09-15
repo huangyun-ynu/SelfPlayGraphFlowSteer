@@ -173,7 +173,7 @@ expected_model = "gpt-5.5"
 [resources]
 proposer_gpu_id = 0
 solver_gpu_id = 1
-allocated_gpu_ids = [0, 1]
+allocated_gpu_ids = [0, 1, 2]
 allow_policy_gpu_colocation = false
 proposer_service_gpu_memory_utilization = 0.38
 solver_service_gpu_memory_utilization = 0.80

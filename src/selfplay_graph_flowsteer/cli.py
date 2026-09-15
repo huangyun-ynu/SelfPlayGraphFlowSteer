@@ -2109,10 +2109,6 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         args,
         training=True,
     )
-    if config.pats.enabled and args.async_next_cycle_rollouts:
-        raise ValueError(
-            "PATS currently requires synchronous cycles; omit --async-next-cycle-rollouts"
-        )
     if args.enable_swe:
         config = replace(config, swe=replace(config.swe, enabled=True))
     if args.policy_gpu_id is not None and (
@@ -2556,9 +2552,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 primary_job_order=args.primary_job_order,
                 historical_duration_priority=args.historical_duration_priority,
                 primary_dataset_duration_estimates_s=primary_duration_estimates,
-                counterfactual_dataset_duration_estimates_s=(
-                    counterfactual_duration_estimates
-                ),
+                counterfactual_dataset_duration_estimates_s=(counterfactual_duration_estimates),
                 duration_history_version=str(duration_history["version"]),
                 structural_exploration_policy=(
                     collection_config.canvas.structural_exploration_policy
@@ -2772,6 +2766,8 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     "proposer_snapshot": behavior_snapshots.proposer_snapshot,
                     "solver_snapshot": behavior_snapshots.solver_snapshot,
                 }
+                if resume_queued_cycle and saved_pipeline.get("skill_context") is not None:
+                    pipeline_payload["skill_context"] = saved_pipeline["skill_context"]
                 _atomic_write_json(pipeline_state_path, pipeline_payload)
 
                 def collect_next_cycle(
@@ -2815,12 +2811,20 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                             },
                         )
                         raise
+                    from .async_cycle import validate_async_queue_skill_context
+
+                    ready_skill_context = validate_async_queue_skill_context(
+                        state,
+                        ready.result.solver_batch,
+                        pats_enabled=next_config.pats.enabled,
+                    )
                     _atomic_write_json(
                         pipeline_state_path,
                         {
                             **state,
                             "state": "ready",
                             "collection_elapsed_s": ready.collection_elapsed_s,
+                            "skill_context": ready_skill_context,
                         },
                     )
                     return ready
@@ -2891,7 +2895,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     else "relation_counterfactuals.jsonl"
                 )
             )
-            from .async_cycle import validate_batch_lineage
+            from .async_cycle import pats_skill_context_lineage, validate_batch_lineage
 
             training_state_payload = (
                 json.loads(training_config.state_path.read_text(encoding="utf-8"))
@@ -2913,6 +2917,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 learner_update_index=cycle,
                 learner_proposer_snapshot=learner_snapshots.proposer_snapshot,
                 learner_solver_snapshot=learner_snapshots.solver_snapshot,
+                expected_skill_context=pats_skill_context_lineage(cycle_dir),
             )
             if update_already_committed:
                 learner_binding["mode"] = "committed_update_recovery"
@@ -3143,6 +3148,14 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             if cycle + 1 < args.cycles:
                 if next_cycle_future is not None:
                     state = json.loads(pipeline_state_path.read_text(encoding="utf-8"))
+                    from .async_cycle import validate_async_queue_skill_context
+
+                    validate_async_queue_skill_context(
+                        state,
+                        collected_cycle.result.solver_batch,
+                        pats_enabled=config.pats.enabled,
+                        require_persisted=True,
+                    )
                     _atomic_write_json(
                         pipeline_state_path,
                         {**state, "state": "consumed", "completed_training_cycle": cycle},

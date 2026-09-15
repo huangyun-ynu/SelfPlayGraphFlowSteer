@@ -7,9 +7,10 @@ import pytest
 from selfplay_graph_flowsteer.async_cycle import (
     AsyncPolicyLineage,
     bind_rollout_result_lineage,
+    pats_skill_context_lineage,
+    validate_async_queue_skill_context,
     validate_batch_lineage,
 )
-from selfplay_graph_flowsteer.cli import main
 from selfplay_graph_flowsteer.rollouts import TrainingBatch, TrainingSample
 from selfplay_graph_flowsteer.selfplay import DryRunSelfPlayResult
 from selfplay_graph_flowsteer.services import ModelServiceSpec
@@ -26,6 +27,49 @@ from selfplay_graph_flowsteer.training import (
 def _batch(role: str, metadata=None) -> TrainingBatch:
     sample = TrainingSample("r0", "t0", (1, 2), (0, 1), 1.0, 0.0)
     return TrainingBatch(role, (sample,), metadata=metadata or {})
+
+
+def _write_pats_context(path: Path, *, step: int = 1) -> dict:
+    (path / "director_skill_snapshot.v2.json").write_text(
+        json.dumps(
+            {
+                "schema": "director_skill_v2",
+                "snapshot_id": "bank-view-1",
+                "collection_frozen": True,
+                "cards": [],
+                "pats": {"snapshot_id": "pats-view-1", "step": step},
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    (path / "skill_context_contract.json").write_text(
+        json.dumps(
+            {
+                "schema": "skill_context_contract_v1",
+                "context_enabled": True,
+                "pats_enabled": True,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    lineage = pats_skill_context_lineage(path)
+    assert lineage is not None
+    return lineage
+
+
+def test_pats_disabled_context_does_not_require_a_snapshot(tmp_path) -> None:
+    (tmp_path / "skill_context_contract.json").write_text(
+        json.dumps(
+            {
+                "schema": "skill_context_contract_v1",
+                "context_enabled": False,
+                "pats_enabled": True,
+            }
+        )
+    )
+    assert pats_skill_context_lineage(tmp_path) is None
 
 
 def test_async_lineage_accepts_exactly_one_stale_update() -> None:
@@ -105,6 +149,86 @@ def test_bound_batches_preserve_identical_lineage_and_validate_learner(tmp_path)
         assert (
             selection["artifacts_sha256"][name]
             == hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+        )
+
+
+def test_pats_async_lineage_binds_reviewed_view_and_rejects_changed_snapshot(tmp_path) -> None:
+    expected_context = _write_pats_context(tmp_path)
+    stale_context = {**expected_context, "pats_step": 0}
+    with pytest.raises(ValueError, match="review committed for its target cycle"):
+        AsyncPolicyLineage(
+            target_cycle=1,
+            behavior_update_index=0,
+            proposer_snapshot="p0",
+            solver_snapshot="s0",
+            collection_mode="async_one_step_stale",
+            skill_context=stale_context,
+        ).validate()
+    result = DryRunSelfPlayResult(
+        tasks=(),
+        frontier_scores=(),
+        proposer_batch=_batch("proposer"),
+        solver_batch=_batch("solver"),
+        snapshots={"proposer": "p0", "solver": "s0"},
+    )
+    bound = bind_rollout_result_lineage(
+        result,
+        output_dir=tmp_path,
+        target_cycle=1,
+        behavior_update_index=0,
+        collection_mode="async_one_step_stale",
+    )
+
+    lineage = bound.solver_batch.metadata["policy_lineage"]
+    assert lineage["schema_version"] == "async_policy_lineage_v2"
+    assert lineage["skill_context"] == expected_context
+    learner = validate_batch_lineage(
+        bound.proposer_batch,
+        bound.solver_batch,
+        learner_update_index=1,
+        learner_proposer_snapshot="p1",
+        learner_solver_snapshot="s1",
+        expected_skill_context=expected_context,
+    )
+    assert learner["mode"] == "bounded_stale_ppo"
+    assert learner["skill_context"]["pats_step"] == 1
+
+    assert (
+        validate_async_queue_skill_context({}, bound.solver_batch, pats_enabled=True)
+        == expected_context
+    )
+    with pytest.raises(ValueError, match="durable async queue"):
+        validate_async_queue_skill_context(
+            {}, bound.solver_batch, pats_enabled=True, require_persisted=True
+        )
+    with pytest.raises(ValueError, match="different PATS snapshot"):
+        validate_async_queue_skill_context(
+            {"skill_context": {**expected_context, "pats_step": 0}},
+            bound.solver_batch,
+            pats_enabled=True,
+        )
+
+    snapshot_path = tmp_path / "director_skill_snapshot.v2.json"
+    snapshot = json.loads(snapshot_path.read_text())
+    snapshot["cards"].append({"tampered": True})
+    snapshot_path.write_text(json.dumps(snapshot, indent=2) + "\n")
+    changed_context = pats_skill_context_lineage(tmp_path)
+    with pytest.raises(ValueError, match="PATS lineage"):
+        validate_batch_lineage(
+            bound.proposer_batch,
+            bound.solver_batch,
+            learner_update_index=1,
+            learner_proposer_snapshot="p1",
+            learner_solver_snapshot="s1",
+            expected_skill_context=changed_context,
+        )
+    with pytest.raises(ValueError, match="policy/PATS lineage"):
+        bind_rollout_result_lineage(
+            result,
+            output_dir=tmp_path,
+            target_cycle=1,
+            behavior_update_index=0,
+            collection_mode="async_one_step_stale",
         )
 
 

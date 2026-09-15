@@ -15,7 +15,7 @@ source .env
 set +a
 
 : "${SPGFS_DATA_ARCHIVE_KEY:?Set SPGFS_DATA_ARCHIVE_KEY in .env}"
-export SPGFS_ALLOWED_PHYSICAL_GPUS="${SPGFS_ALLOWED_PHYSICAL_GPUS:-0,1}"
+export SPGFS_ALLOWED_PHYSICAL_GPUS="${SPGFS_ALLOWED_PHYSICAL_GPUS:-0,1,2}"
 
 ARCHIVE=data/formal/private/formal_data.tar.gz.enc
 ARCHIVE_SHA=data/formal/private/formal_data.tar.gz.enc.sha256

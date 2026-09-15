@@ -16,11 +16,18 @@ if [[ ! -f "$SPGFS_FORMAL_TASK_POOL" ]]; then
   exit 2
 fi
 
-IFS=, read -r DEFAULT_PROPOSER_GPU DEFAULT_SOLVER_GPU _ <<<"$SPGFS_ALLOWED_PHYSICAL_GPUS"
+IFS=, read -r DEFAULT_PROPOSER_GPU DEFAULT_SOLVER_GPU DEFAULT_ASYNC_ROLLOUT_GPU _ \
+  <<<"$SPGFS_ALLOWED_PHYSICAL_GPUS"
 PROPOSER_GPU_ID="${SPGFS_PROPOSER_GPU_ID:-$DEFAULT_PROPOSER_GPU}"
 SOLVER_GPU_ID="${SPGFS_SOLVER_GPU_ID:-$DEFAULT_SOLVER_GPU}"
-if [[ -z "$PROPOSER_GPU_ID" || -z "$SOLVER_GPU_ID" ]]; then
-  printf 'Set two GPU IDs in SPGFS_ALLOWED_PHYSICAL_GPUS or set role GPU variables.\n' >&2
+ASYNC_ROLLOUT_GPU_ID="${SPGFS_ASYNC_ROLLOUT_GPU_ID:-$DEFAULT_ASYNC_ROLLOUT_GPU}"
+if [[ -z "$PROPOSER_GPU_ID" || -z "$SOLVER_GPU_ID" || -z "$ASYNC_ROLLOUT_GPU_ID" ]]; then
+  printf 'Set three GPU IDs in SPGFS_ALLOWED_PHYSICAL_GPUS or set role GPU variables.\n' >&2
+  exit 2
+fi
+if [[ "$ASYNC_ROLLOUT_GPU_ID" == "$PROPOSER_GPU_ID" \
+  || "$ASYNC_ROLLOUT_GPU_ID" == "$SOLVER_GPU_ID" ]]; then
+  printf 'The async rollout GPU must differ from both training GPUs.\n' >&2
   exit 2
 fi
 
@@ -95,6 +102,7 @@ python -m selfplay_graph_flowsteer selfplay-experiment \
   --enable-swe \
   --frontier-reverify-workers 8 \
   --pipeline-frontier-by-dataset \
+  --async-next-cycle-rollouts --async-rollout-gpu-id "$ASYNC_ROLLOUT_GPU_ID" \
   --parallel-role-training --max-sequence-length 32768 \
   --proposer-gpu-id "$PROPOSER_GPU_ID" --solver-gpu-id "$SOLVER_GPU_ID" \
   --max-micro-batch-tokens 32768 --micro-batch-size 1 \

@@ -47,18 +47,20 @@ scripts/formal/update_remote.sh
 `state/formal-training/route_report.json`。模型 API 禁止使用代理。
 
 ```bash
-export SPGFS_ALLOWED_PHYSICAL_GPUS=0,1
+export SPGFS_ALLOWED_PHYSICAL_GPUS=0,1,2
 scripts/formal/run_experiment.sh
 ```
 
-默认使用 GPU 0、1；如果目标主机使用其他编号，需要同步修改
+默认使用 GPU 0、1 训练 Proposer/Solver，GPU 2 使用冻结策略和维护后的
+PATS 快照异步采集下一 cycle；如果目标主机使用其他编号，需要同步修改
 `configs/formal_training.toml` 的 `[resources]` 和
 `SPGFS_ALLOWED_PHYSICAL_GPUS`，两者必须一致。
 
 正式入口已经开启 PATS、Director SkillBank、AIME Action、WebShop、
 ALFWorld、SWE、35 个主轨迹/反事实共享槽、8 个异步图复验槽、按数据集
-图复验流水线和 Proposer/Solver 并行训练。预测 token/时间 admission
-保护、未部署的 retrieval 服务及历史耗时优先级保持关闭。
+图复验流水线、Proposer/Solver 并行训练、PATS 版本绑定的下一 cycle
+异步采集和历史耗时优先级。预测 token/时间 admission 保护及未部署的
+retrieval 服务保持关闭。
 
 ## 交给远端 Codex 的指令
 

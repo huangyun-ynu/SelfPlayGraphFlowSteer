@@ -26,6 +26,7 @@ class AsyncPolicyLineage:
     solver_snapshot: str
     collection_mode: str
     max_staleness_updates: int = 1
+    skill_context: dict[str, Any] | None = None
 
     @property
     def staleness_updates(self) -> int:
@@ -45,14 +46,123 @@ class AsyncPolicyLineage:
             raise ValueError("async policy lineage requires both behavior snapshots")
         if self.collection_mode not in {"synchronous", "async_one_step_stale"}:
             raise ValueError("unknown async collection mode")
+        if self.skill_context is not None:
+            _validate_pats_skill_context(self.skill_context)
+            if (
+                self.collection_mode == "async_one_step_stale"
+                and self.skill_context["pats_step"] != self.target_cycle
+            ):
+                raise ValueError(
+                    "async PATS collection must use the review committed for its target cycle"
+                )
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
+        fields = asdict(self)
+        if self.skill_context is None:
+            fields.pop("skill_context")
         return {
-            "schema_version": "async_policy_lineage_v1",
-            **asdict(self),
+            "schema_version": (
+                "async_policy_lineage_v2"
+                if self.skill_context is not None
+                else "async_policy_lineage_v1"
+            ),
+            **fields,
             "staleness_updates": self.staleness_updates,
         }
+
+
+def _validate_pats_skill_context(payload: dict[str, Any]) -> None:
+    required = {
+        "schema_version",
+        "snapshot_id",
+        "snapshot_sha256",
+        "pats_snapshot_id",
+        "pats_step",
+        "contract_sha256",
+    }
+    if set(payload) != required or payload.get("schema_version") != "pats_lineage_v1":
+        raise ValueError("invalid PATS skill-context lineage")
+    for key in required - {"pats_step"}:
+        if not isinstance(payload.get(key), str) or not payload[key]:
+            raise ValueError("PATS skill-context lineage requires immutable identifiers")
+    if not isinstance(payload.get("pats_step"), int) or payload["pats_step"] < -1:
+        raise ValueError("PATS skill-context lineage has an invalid committed step")
+
+
+def pats_skill_context_lineage(output_dir: Path) -> dict[str, Any] | None:
+    """Return the immutable PATS view used by one collection cycle."""
+
+    snapshot_path = output_dir / "director_skill_snapshot.v2.json"
+    contract_path = output_dir / "skill_context_contract.json"
+    if not snapshot_path.exists() and not contract_path.exists():
+        return None
+    if not contract_path.exists():
+        raise ValueError("PATS collection snapshot lacks its context contract")
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    if contract.get("pats_enabled") is not True or contract.get("context_enabled") is not True:
+        return None
+    if not snapshot_path.exists():
+        raise ValueError("enabled PATS collection lacks its frozen snapshot")
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    pats = snapshot.get("pats")
+    if pats is None:
+        raise ValueError("PATS snapshot differs from the collection context contract")
+    payload = {
+        "schema_version": "pats_lineage_v1",
+        "snapshot_id": str(snapshot.get("snapshot_id", "")),
+        "snapshot_sha256": hashlib.sha256(snapshot_path.read_bytes()).hexdigest(),
+        "pats_snapshot_id": str(pats.get("snapshot_id", "")),
+        "pats_step": pats.get("step"),
+        "contract_sha256": hashlib.sha256(contract_path.read_bytes()).hexdigest(),
+    }
+    _validate_pats_skill_context(payload)
+    return payload
+
+
+def _lineage_from_payload(payload: dict[str, Any]) -> AsyncPolicyLineage:
+    schema = payload.get("schema_version")
+    if schema not in {"async_policy_lineage_v1", "async_policy_lineage_v2"}:
+        raise ValueError("unknown async policy lineage schema")
+    skill_context = payload.get("skill_context")
+    if schema == "async_policy_lineage_v2" and not isinstance(skill_context, dict):
+        raise ValueError("PATS-aware policy lineage requires a skill-context binding")
+    if schema == "async_policy_lineage_v1" and skill_context is not None:
+        raise ValueError("v1 policy lineage cannot contain a skill-context binding")
+    lineage = AsyncPolicyLineage(
+        target_cycle=int(payload["target_cycle"]),
+        behavior_update_index=int(payload["behavior_update_index"]),
+        proposer_snapshot=str(payload["proposer_snapshot"]),
+        solver_snapshot=str(payload["solver_snapshot"]),
+        collection_mode=str(payload["collection_mode"]),
+        max_staleness_updates=int(payload["max_staleness_updates"]),
+        skill_context=skill_context,
+    )
+    lineage.validate()
+    if lineage.to_dict() != payload:
+        raise ValueError("policy lineage contains unsupported or inconsistent fields")
+    return lineage
+
+
+def validate_async_queue_skill_context(
+    state: dict[str, Any],
+    solver_batch: TrainingBatch,
+    *,
+    pats_enabled: bool,
+    require_persisted: bool = False,
+) -> dict[str, Any] | None:
+    """Keep the durable async queue bound to the collected PATS view."""
+
+    lineage = solver_batch.metadata.get("policy_lineage", {})
+    skill_context = lineage.get("skill_context") if isinstance(lineage, dict) else None
+    if pats_enabled and skill_context is None:
+        raise ValueError("PATS async collection lacks a frozen skill-context lineage")
+    if "skill_context" in state:
+        if state["skill_context"] != skill_context:
+            raise ValueError("async queue has a different PATS snapshot")
+    elif pats_enabled and require_persisted:
+        raise ValueError("durable async queue lacks its PATS snapshot")
+    return skill_context
 
 
 def bind_rollout_result_lineage(
@@ -66,24 +176,17 @@ def bind_rollout_result_lineage(
     """Bind both role batches to the snapshots that actually generated them."""
 
     lineage_path = output_dir / "policy_lineage.json"
+    skill_context = pats_skill_context_lineage(output_dir)
     if lineage_path.exists():
         payload = json.loads(lineage_path.read_text(encoding="utf-8"))
+        saved = _lineage_from_payload(payload)
         if (
-            payload.get("schema_version") != "async_policy_lineage_v1"
-            or int(payload.get("target_cycle", -1)) != target_cycle
-            or str(payload.get("proposer_snapshot", ""))
-            != str(result.snapshots.get("proposer", ""))
-            or str(payload.get("solver_snapshot", "")) != str(result.snapshots.get("solver", ""))
+            saved.target_cycle != target_cycle
+            or saved.proposer_snapshot != str(result.snapshots.get("proposer", ""))
+            or saved.solver_snapshot != str(result.snapshots.get("solver", ""))
+            or saved.skill_context != skill_context
         ):
-            raise ValueError("saved policy lineage differs from durable rollout snapshots")
-        AsyncPolicyLineage(
-            target_cycle=target_cycle,
-            behavior_update_index=int(payload["behavior_update_index"]),
-            proposer_snapshot=str(payload["proposer_snapshot"]),
-            solver_snapshot=str(payload["solver_snapshot"]),
-            collection_mode=str(payload["collection_mode"]),
-            max_staleness_updates=int(payload["max_staleness_updates"]),
-        ).validate()
+            raise ValueError("saved policy/PATS lineage differs from durable rollout snapshots")
     else:
         lineage = AsyncPolicyLineage(
             target_cycle=target_cycle,
@@ -91,6 +194,7 @@ def bind_rollout_result_lineage(
             proposer_snapshot=str(result.snapshots.get("proposer", "")),
             solver_snapshot=str(result.snapshots.get("solver", "")),
             collection_mode=collection_mode,
+            skill_context=skill_context,
         )
         payload = lineage.to_dict()
     proposer_batch = replace(
@@ -143,25 +247,18 @@ def recover_interrupted_lineage_binding(output_dir: Path) -> bool:
         return False
     payload = json.loads(lineage_path.read_text())
     snapshots = json.loads((output_dir / "snapshots.json").read_text())
-    if payload.get("schema_version") != "async_policy_lineage_v1" or any(
+    if payload.get("schema_version") not in {
+        "async_policy_lineage_v1",
+        "async_policy_lineage_v2",
+    } or any(
         payload.get(role + "_snapshot") != snapshots.get(role) for role in ("proposer", "solver")
     ):
         return False
-    lineage = AsyncPolicyLineage(
-        **{
-            key: payload[key]
-            for key in (
-                "target_cycle",
-                "behavior_update_index",
-                "proposer_snapshot",
-                "solver_snapshot",
-                "collection_mode",
-                "max_staleness_updates",
-            )
-        }
-    )
-    lineage.validate()
-    if lineage.to_dict() != payload:
+    try:
+        lineage = _lineage_from_payload(payload)
+        if lineage.skill_context != pats_skill_context_lineage(output_dir):
+            return False
+    except (KeyError, TypeError, ValueError):
         return False
     if output_dir.name.startswith("cycle-") and int(output_dir.name[6:]) != lineage.target_cycle:
         return False
@@ -203,12 +300,15 @@ def validate_batch_lineage(
     learner_update_index: int,
     learner_proposer_snapshot: str,
     learner_solver_snapshot: str,
+    expected_skill_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate one bounded-stale batch immediately before optimizer creation."""
 
     proposer_lineage = proposer_batch.metadata.get("policy_lineage")
     solver_lineage = solver_batch.metadata.get("policy_lineage")
     if proposer_lineage is None and solver_lineage is None:
+        if expected_skill_context is not None:
+            raise ValueError("PATS-aware training batch lacks skill-context lineage")
         return {
             "schema_version": "async_learner_binding_v1",
             "mode": "legacy_synchronous",
@@ -219,10 +319,11 @@ def validate_batch_lineage(
         }
     if proposer_lineage != solver_lineage or not isinstance(solver_lineage, dict):
         raise ValueError("Proposer and Solver batches have different policy lineage")
-    if solver_lineage.get("schema_version") != "async_policy_lineage_v1":
-        raise ValueError("unknown async policy lineage schema")
-    target_cycle = int(solver_lineage.get("target_cycle", -1))
-    behavior_index = int(solver_lineage.get("behavior_update_index", -1))
+    lineage = _lineage_from_payload(solver_lineage)
+    if lineage.skill_context != expected_skill_context:
+        raise ValueError("rollout PATS lineage does not match its durable collection snapshot")
+    target_cycle = lineage.target_cycle
+    behavior_index = lineage.behavior_update_index
     staleness = learner_update_index - behavior_index
     if target_cycle != learner_update_index:
         raise ValueError(
@@ -234,21 +335,24 @@ def validate_batch_lineage(
             f"learner={learner_update_index}, behavior={behavior_index}"
         )
     if staleness == 0 and (
-        str(solver_lineage.get("proposer_snapshot")) != learner_proposer_snapshot
-        or str(solver_lineage.get("solver_snapshot")) != learner_solver_snapshot
+        lineage.proposer_snapshot != learner_proposer_snapshot
+        or lineage.solver_snapshot != learner_solver_snapshot
     ):
         raise ValueError("synchronous rollout snapshots do not match learner snapshots")
-    return {
+    binding = {
         "schema_version": "async_learner_binding_v1",
         "mode": "bounded_stale_ppo" if staleness else "synchronous_ppo",
         "learner_update_index": learner_update_index,
         "behavior_update_index": behavior_index,
         "staleness_updates": staleness,
-        "behavior_proposer_snapshot": solver_lineage["proposer_snapshot"],
-        "behavior_solver_snapshot": solver_lineage["solver_snapshot"],
+        "behavior_proposer_snapshot": lineage.proposer_snapshot,
+        "behavior_solver_snapshot": lineage.solver_snapshot,
         "learner_proposer_snapshot": learner_proposer_snapshot,
         "learner_solver_snapshot": learner_solver_snapshot,
     }
+    if lineage.skill_context is not None:
+        binding["skill_context"] = lineage.skill_context
+    return binding
 
 
 def _atomic_json(path: Path, payload: Any) -> None:

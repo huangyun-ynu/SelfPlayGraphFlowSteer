@@ -90,9 +90,11 @@ and `selfplay-experiment` commands. No extra PATS service or training policy
 is introduced: reviews use the configured `runtime_routing.skill_distiller`
 route. In mock collection, the component records evidence and mode decisions
 without contacting a refiner or fabricating edits. Real reviews use the
-actual Director tokenizer for capacity checks. The asynchronous
-`--async-next-cycle-rollouts` experiment option is rejected while PATS is
-enabled because the next snapshot must follow the completed review boundary.
+actual Director tokenizer for capacity checks. PATS-aware asynchronous
+`--async-next-cycle-rollouts` starts only after the current cycle's review has
+committed. The next collection binds that reviewed PATS view, its context
+contract and file hashes into the policy lineage. Policy parameters may be one
+update stale; the PATS view may not be stale or changed during resume.
 
 ## Cycle behavior and durable state
 

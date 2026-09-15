@@ -146,6 +146,8 @@ SWE 本地缓存包含 11 个完整 Git mirror，共约 4.1 GB；训练需要的
 
 主轨迹与关系反事实轨迹按各自的历史数据集平均耗时做长任务优先调度。正式启动脚本通过 `--historical-duration-priority` 开启该机制；每轮只使用此前轮次的持久化记录并冻结排序快照。
 
+正式训练恢复三卡异步流水线：GPU 0、1 并行更新 Proposer/Solver，GPU 2 使用冻结策略采集下一 cycle。异步采集在当前 cycle 的 PATS 维护提交后启动，并把维护后的 PATS 快照、上下文契约及文件哈希绑定到策略谱系；策略最多滞后一次更新，PATS 视图不允许滞后或在恢复时变化。
+
 环境路径：
 
 - GPU Python：`/home/bedicloud/sharestore2/iclr-users/owner/.venvs/spgfs-pats-gpu`
