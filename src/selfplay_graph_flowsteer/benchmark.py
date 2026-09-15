@@ -5,7 +5,7 @@ import math
 import os
 import time
 from collections.abc import Callable, Iterable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -56,6 +56,7 @@ class BenchmarkRunner:
         on_record: Callable[[FixedDatasetExample, int, EvaluationRecord], None] | None = None,
         on_error: Callable[[FixedDatasetExample, int, BaseException], None] | None = None,
         continue_on_error: bool = False,
+        systemic_error_limit: int = 3,
     ) -> list[EvaluationRecord]:
         jobs = [
             (example, int(seed))
@@ -87,6 +88,8 @@ class BenchmarkRunner:
 
         if workers <= 0:
             raise ValueError("benchmark workers must be positive")
+        if systemic_error_limit <= 0:
+            raise ValueError("systemic error limit must be positive")
         if workers == 1:
             records = []
             for example, seed in jobs:
@@ -103,26 +106,55 @@ class BenchmarkRunner:
                         on_record(example, seed, record)
             return records
         records_by_index: dict[int, EvaluationRecord] = {}
+        indexed_jobs = iter(enumerate(jobs))
+        consecutive_signature: tuple[type[BaseException], str] | None = None
+        consecutive_errors = 0
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(execute, job): (index, job[0], job[1])
-                for index, job in enumerate(jobs)
-            }
-            for future in as_completed(futures):
-                index, example, seed = futures[future]
+            futures: dict[Future[EvaluationRecord], tuple[int, FixedDatasetExample, int]] = {}
+
+            def submit_next() -> bool:
                 try:
-                    record = future.result()
-                except BaseException as exc:
-                    if on_error is not None:
-                        on_error(example, seed, exc)
-                    if not continue_on_error:
-                        for pending in futures:
-                            pending.cancel()
-                        raise
-                else:
-                    records_by_index[index] = record
-                    if on_record is not None:
-                        on_record(example, seed, record)
+                    index, (example, seed) = next(indexed_jobs)
+                except StopIteration:
+                    return False
+                futures[pool.submit(execute, (example, seed))] = (index, example, seed)
+                return True
+
+            for _ in range(min(workers, len(jobs))):
+                submit_next()
+            while futures:
+                completed, _pending = wait(futures, return_when=FIRST_COMPLETED)
+                for future in completed:
+                    index, example, seed = futures.pop(future)
+                    try:
+                        record = future.result()
+                    except BaseException as exc:
+                        if on_error is not None:
+                            on_error(example, seed, exc)
+                        if not continue_on_error:
+                            for pending in futures:
+                                pending.cancel()
+                            raise
+                        signature = (type(exc), str(exc))
+                        if signature == consecutive_signature:
+                            consecutive_errors += 1
+                        else:
+                            consecutive_signature = signature
+                            consecutive_errors = 1
+                        if consecutive_errors >= systemic_error_limit:
+                            for pending in futures:
+                                pending.cancel()
+                            raise RuntimeError(
+                                f"benchmark stopped after {consecutive_errors} consecutive "
+                                f"{type(exc).__name__} failures: {str(exc)[:500]}"
+                            ) from exc
+                    else:
+                        consecutive_signature = None
+                        consecutive_errors = 0
+                        records_by_index[index] = record
+                        if on_record is not None:
+                            on_record(example, seed, record)
+                    submit_next()
         return [records_by_index[index] for index in sorted(records_by_index)]
 
 

@@ -82,6 +82,23 @@ def test_benchmark_runner_persists_errors_and_continues(monkeypatch):
     assert errors == [("bad", RuntimeError)]
 
 
+def test_benchmark_runner_stops_refilling_after_systemic_failures():
+    attempts = []
+
+    def broken_factory(seed):
+        attempts.append(seed)
+        raise ValueError("invalid shared configuration")
+
+    with pytest.raises(RuntimeError, match="3 consecutive ValueError"):
+        BenchmarkRunner(broken_factory).run(
+            [_example(str(index)) for index in range(100)],
+            workers=4,
+            continue_on_error=True,
+            systemic_error_limit=3,
+        )
+    assert len(attempts) <= 6
+
+
 def test_benchmark_tracker_is_resumable_and_keeps_full_trajectory(tmp_path):
     tracker = BenchmarkRunTracker(tmp_path, wandb_mode="disabled")
     tracker.start_wandb({"evaluation_only": True})

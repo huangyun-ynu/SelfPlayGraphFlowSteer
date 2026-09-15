@@ -1330,12 +1330,6 @@ def benchmark(args: argparse.Namespace) -> int:
     }
     if director_overrides:
         config = replace(config, solver_model=replace(config.solver_model, **director_overrides))
-    # A fixed benchmark is inference-only even when it reuses a training config.
-    config = replace(
-        config,
-        proposer_model=replace(config.proposer_model, trainable=False),
-        solver_model=replace(config.solver_model, trainable=False),
-    )
     if args.disable_swe:
         config = replace(config, swe=replace(config.swe, enabled=False))
     if args.director_skill_root is not None:
@@ -1395,8 +1389,7 @@ def benchmark(args: argparse.Namespace) -> int:
             "director_model": config.solver_model.served_model,
             "director_model_source": str(config.solver_model.base_model_path),
             "director_thinking": args.director_thinking,
-            "proposer_trainable": config.proposer_model.trainable,
-            "director_trainable": config.solver_model.trainable,
+            "parameter_update_entrypoint": False,
             "worker_logical_routes": list(config.worker_runtime_routes),
             "worker_endpoint_pools": {
                 name: list(members) for name, members in config.runtime_endpoint_pools.items()
