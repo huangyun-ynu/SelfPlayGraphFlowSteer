@@ -91,7 +91,7 @@ python -m selfplay_graph_flowsteer selfplay-experiment \
   --route-report state/formal-training/route_report.json \
   --minimum-selected-routes 1 \
   --cycles "${SPGFS_FORMAL_CYCLES:-256}" --final-cycle-evaluation-only \
-  --workers 35 --pipeline-counterfactuals --no-historical-duration-priority \
+  --workers 35 --pipeline-counterfactuals --historical-duration-priority \
   --enable-swe \
   --frontier-reverify-workers 8 \
   --pipeline-frontier-by-dataset \

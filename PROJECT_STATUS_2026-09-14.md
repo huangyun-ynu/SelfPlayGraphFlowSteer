@@ -144,7 +144,7 @@ PATS 作为 Director 的训练期技能组件：根据可信轨迹估计各任�
 
 SWE 本地缓存包含 11 个完整 Git mirror，共约 4.1 GB；训练需要的 372/372 个 base commit 均可解析。运行时在本地隔离工作区生成 patch，再通过 SSH 交给腾讯云服务器中的官方 SWE-bench Docker 镜像验证。`swe.enabled = true`；未部署的通用 retrieval 服务保持关闭。
 
-主轨迹与关系反事实轨迹支持按各自的历史数据集平均耗时做长任务优先调度。该机制通过 `--historical-duration-priority` 开启，每轮只使用此前轮次的持久化记录并冻结排序快照；正式启动脚本当前显式使用 `--no-historical-duration-priority`，尚未开启。
+主轨迹与关系反事实轨迹按各自的历史数据集平均耗时做长任务优先调度。正式启动脚本通过 `--historical-duration-priority` 开启该机制；每轮只使用此前轮次的持久化记录并冻结排序快照。
 
 环境路径：
 
