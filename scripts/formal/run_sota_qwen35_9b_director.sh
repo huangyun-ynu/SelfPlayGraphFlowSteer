@@ -10,7 +10,7 @@ set +a
 source scripts/formal/environment.sh
 
 PYTHON=${SPGFS_PYTHON:-python}
-OUTPUT=${SPGFS_SOTA_OUTPUT:-state/sota-20260916/qwen35-9b-director-full}
+OUTPUT=${SPGFS_SOTA_OUTPUT:-state/sota-20260916/qwen35-9b-director-full-v2}
 DIRECTOR_URL=${SPGFS_SOTA_DIRECTOR_URL:-http://127.0.0.1:18603/v1}
 HEALTHBENCH_TEST=${SPGFS_HEALTHBENCH_TEST:-state/formal-data/healthbench_professional_test_128.jsonl}
 
