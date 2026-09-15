@@ -685,6 +685,16 @@ class HealthBenchOfficialRubricVerifier:
                     "criterion_decisions": [
                         {"index": index, "criteria_met": met} for index, met in enumerate(decisions)
                     ],
+                    "positive_criteria_total": sum(item["points"] > 0 for item in usable),
+                    "negative_criteria_total": sum(item["points"] < 0 for item in usable),
+                    "positive_criteria_met": sum(
+                        item["points"] > 0 and met
+                        for item, met in zip(usable, decisions, strict=True)
+                    ),
+                    "negative_criteria_met": sum(
+                        item["points"] < 0 and met
+                        for item, met in zip(usable, decisions, strict=True)
+                    ),
                     "weighted_points": weighted_points,
                     "positive_points": positive_points,
                     "negative_point_magnitude": negative_point_magnitude,
@@ -1108,6 +1118,14 @@ class HealthBenchRubricVerifier:
                         for index in range(len(criteria))
                     ],
                     "weighted_points": weighted,
+                    "positive_criteria_total": sum(item["points"] > 0 for item in criteria),
+                    "negative_criteria_total": sum(item["points"] < 0 for item in criteria),
+                    "positive_criteria_met": sum(
+                        item["points"] > 0 and met_by_index[item["index"]] for item in criteria
+                    ),
+                    "negative_criteria_met": sum(
+                        item["points"] < 0 and met_by_index[item["index"]] for item in criteria
+                    ),
                     "positive_points": positive_total,
                     "negative_point_magnitude": negative_total,
                     "raw_score": raw_score,

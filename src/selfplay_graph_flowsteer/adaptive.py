@@ -28,7 +28,7 @@ from .observability import (
     trace_from_canvas,
 )
 from .outcome_admission import terminal_policy_failure, trusted_environment_outcome
-from .qa_metrics import qa_official_metrics
+from .qa_metrics import hotpot_evidence_metrics, qa_official_metrics
 from .runtime import (
     WORKER_BACKEND_FAILURE_SENTINEL,
     WORKER_PROTOCOL_FAILURE_SENTINEL,
@@ -689,6 +689,12 @@ class AdaptiveWorkflowSolver:
             answer_submission.submitted_answer,
             task.reference,
         )
+        if (task.metadata["qa_official_metrics"] or {}).get("schema") == "hotpot_official_answer_v1":
+            task.metadata["qa_official_metrics"]["evidence"] = hotpot_evidence_metrics(
+                run.output,
+                task.private_verifier_payload.get("supporting_facts"),
+                task.metadata["qa_official_metrics"],
+            )
         terminal_failure = terminal_policy_failure(
             str(task.metadata.get("dataset", "")),
             terminal=not canvas.active,

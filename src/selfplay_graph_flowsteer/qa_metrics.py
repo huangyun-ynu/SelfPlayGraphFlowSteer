@@ -9,6 +9,7 @@ NQ F1 is an explicitly additional SQuAD-style token-overlap diagnostic.
 
 from __future__ import annotations
 
+import json
 import re
 import string
 from collections import Counter
@@ -16,6 +17,57 @@ from typing import Any
 
 from .config import canonical_dataset_name
 from .qa_submission import extract_qa_answer, is_short_qa_dataset
+
+
+def hotpot_evidence_metrics(prediction, gold, answer_metrics):
+    """Evaluate explicit sentence citations; missing gold means unavailable, not zero."""
+
+    def pairs(value):
+        if not isinstance(value, list):
+            raise ValueError("supporting facts must be a list")
+        result = set()
+        for item in value:
+            if (
+                not isinstance(item, (list, tuple))
+                or len(item) != 2
+                or not isinstance(item[0], str)
+                or type(item[1]) is not int
+                or item[1] < 0
+            ):
+                raise ValueError("invalid supporting fact")
+            result.add(tuple(item))
+        return result
+
+    try:
+        reference = pairs(gold)
+    except ValueError:
+        return {"gold_available": False, "submission_valid": False}
+    valid = True
+    try:
+        raw = prediction.strip()
+        if raw.startswith("```json\n") and raw.endswith("```"):
+            raw = raw[8:-3].strip()
+        payload = json.loads(raw)
+        submitted = pairs(payload["supporting_facts"])
+    except (ValueError, KeyError, TypeError):
+        valid, submitted = False, set()
+    common = len(reference & submitted)
+    precision = common / len(submitted) if submitted else 0.0
+    recall = common / len(reference) if reference else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    em = float(valid and reference == submitted)
+    joint_p = precision * answer_metrics.get("answer_precision", 0.0)
+    joint_r = recall * answer_metrics.get("answer_recall", 0.0)
+    return {
+        "gold_available": True,
+        "submission_valid": valid,
+        "support_em": em,
+        "support_f1": f1,
+        "support_precision": precision,
+        "support_recall": recall,
+        "joint_em": em * answer_metrics.get("answer_em", 0.0),
+        "joint_f1": 2 * joint_p * joint_r / (joint_p + joint_r) if joint_p + joint_r else 0.0,
+    }
 
 
 def normalize_official_qa(value: str) -> str:

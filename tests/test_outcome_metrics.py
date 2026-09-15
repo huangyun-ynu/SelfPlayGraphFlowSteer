@@ -327,3 +327,74 @@ def test_cli_emits_outcomes_and_wandb_with_mock_training(tmp_path, monkeypatch, 
     latest = json.loads((output / "training_metrics_latest.json").read_text())
     assert "outcomes" in latest
     assert latest["experiment"]["optimizer_schedule"]["solver_total_optimizer_steps"] == 2
+
+
+@pytest.mark.parametrize(
+    ("file_mode", "env_mode", "cli_mode", "expected"),
+    [
+        (None, None, None, "disabled"),
+        ("online", None, None, "online"),
+        ("online", "offline", None, "offline"),
+        ("online", None, "disabled", "disabled"),
+        ("invalid", None, "offline", "offline"),
+    ],
+)
+def test_wandb_mode_precedence(tmp_path, monkeypatch, file_mode, env_mode, cli_mode, expected):
+    import os
+
+    from selfplay_graph_flowsteer import cli, wandb_tracking
+
+    monkeypatch.setattr(os, "environ", dict(os.environ))
+    os.environ.pop("WANDB_MODE", None)
+    if env_mode is not None:
+        os.environ["WANDB_MODE"] = env_mode
+    config = tmp_path / "config.toml"
+    config.write_text("")
+    if file_mode is not None:
+        (tmp_path / ".env").write_text(f"WANDB_MODE={file_mode}\n")
+    calls = []
+    monkeypatch.setattr(
+        wandb_tracking,
+        "WandbTracker",
+        lambda root, mode: SimpleNamespace(
+            mode=mode, finish=lambda **kwargs: calls.append((mode, kwargs["failed"]))
+        ),
+    )
+    monkeypatch.setattr(cli, "_selfplay_experiment", lambda args, tracker: 0)
+    args = SimpleNamespace(config=str(config), output=tmp_path / "out", wandb_mode=cli_mode)
+    assert cli.selfplay_experiment(args) == 0
+    assert calls == [(expected, False)]
+
+
+def test_wandb_invalid_environment_mode_fails_before_tracker(tmp_path, monkeypatch):
+    from selfplay_graph_flowsteer import cli, wandb_tracking
+
+    monkeypatch.setenv("WANDB_MODE", "invalid")
+    monkeypatch.setattr(
+        wandb_tracking, "WandbTracker", lambda *args: pytest.fail("tracker must not start")
+    )
+    args = SimpleNamespace(config=str(tmp_path / "config.toml"), output=tmp_path / "out")
+    with pytest.raises(ValueError, match="WANDB_MODE must be"):
+        cli.selfplay_experiment(args)
+
+
+def test_wandb_settings_validate_with_installed_sdk(tmp_path, monkeypatch):
+    sdk = pytest.importorskip("wandb")
+    run = FakeRun()
+    settings = []
+
+    def fake_init(**kwargs):
+        settings.append(kwargs["settings"])
+        return run
+
+    monkeypatch.setattr(sdk, "init", fake_init)
+    tracker = WandbTracker(tmp_path, "offline")
+    tracker.start({"synthetic_data": True})
+    assert tracker.run is run
+    assert not tracker.failure
+    assert settings[0].console == "off"
+    assert settings[0].disable_code
+    assert settings[0].disable_git
+    assert settings[0].x_disable_meta
+    assert settings[0].x_disable_stats
+    tracker.finish()

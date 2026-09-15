@@ -90,6 +90,7 @@ if ! webshop_healthy; then
   fi
 fi
 
+python scripts/formal/wandb_direct_exec.py -- \
 python -m selfplay_graph_flowsteer selfplay-experiment \
   --config configs/formal_training.toml \
   --task-pool "$SPGFS_FORMAL_TASK_POOL" \

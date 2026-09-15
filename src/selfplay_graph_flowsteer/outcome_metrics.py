@@ -9,6 +9,7 @@ import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from .benchmark_reporting import benchmark_summary
 from .config import canonical_dataset_name
 
 
@@ -345,6 +346,14 @@ def collect_outcome_metrics(
                 and item["replacement_attempt"] > 0
             }
             official = meta.get("qa_official_metrics") or {}
+            detail = verification.get("detail") or {}
+            if isinstance(detail, str):
+                try:
+                    detail = json.loads(detail)
+                except (ValueError, TypeError):
+                    detail = {}
+            if not isinstance(detail, dict):
+                detail = {}
             rows.append(
                 {
                     "diagnostics": rollout_diagnostics(record),
@@ -356,8 +365,39 @@ def collect_outcome_metrics(
                         (item.get("replacement_attempt", 0) for item in local_attempts), default=0
                     ),
                     "seed": record.get("seed"),
-                    "split": task.get("metadata", {}).get("split"),
-                    "task_type": str(task.get("task_type") or "unknown"),
+                    "split": task.get("metadata", {}).get("source_split")
+                    or task.get("metadata", {}).get("split"),
+                    "difficulty": task.get("metadata", {}).get("difficulty"),
+                    "use_case": task.get("metadata", {}).get("use_case"),
+                    "red_teaming": task.get("metadata", {}).get("interaction_type"),
+                    "qa_answer_precision": number(official.get("answer_precision"))
+                    if known
+                    else None,
+                    "hotpot_evidence": official.get("evidence", {}),
+                    "healthbench_rubric_diagnostics": {
+                        key: number(detail.get(key)) if known else None
+                        for key in (
+                            "positive_criteria_total",
+                            "negative_criteria_total",
+                            "positive_criteria_met",
+                            "negative_criteria_met",
+                        )
+                    },
+                    "qa_answer_recall": number(official.get("answer_recall")) if known else None,
+                    "qa_explicit_submission_em": number(official.get("explicit_submission_em"))
+                    if known
+                    else None,
+                    "qa_explicit_submission_f1": number(official.get("explicit_submission_f1"))
+                    if known
+                    else None,
+                    "healthbench_answer_length_chars": number(breakdown.get("answer_length_chars"))
+                    if known
+                    else None,
+                    "task_type": str(
+                        task.get("metadata", {}).get("alfworld_task_type")
+                        or task.get("task_type")
+                        or "unknown"
+                    ),
                     "source_id": (
                         task.get("metadata", {}).get("instance_id")
                         or task.get("metadata", {}).get("source_task_id")
@@ -446,6 +486,28 @@ def collect_outcome_metrics(
     for row in rows:
         dataset_rows[row["dataset"]].append(row)
     datasets = {key: _summary(value, k) for key, value in sorted(dataset_rows.items())}
+    for key, value in dataset_rows.items():
+        datasets[key]["benchmark"] = benchmark_summary(value, key)
+        if key == "healthbench_professional":
+            datasets[key]["rubric_diagnostics"] = {
+                field: describe(
+                    row.get("healthbench_rubric_diagnostics", {}).get(field) for row in value
+                )
+                for field in (
+                    "positive_criteria_total",
+                    "negative_criteria_total",
+                    "positive_criteria_met",
+                    "negative_criteria_met",
+                )
+            }
+        for field in (
+            "qa_answer_precision",
+            "qa_answer_recall",
+            "qa_explicit_submission_em",
+            "qa_explicit_submission_f1",
+            "healthbench_answer_length_chars",
+        ):
+            datasets[key][field] = describe(row.get(field) for row in value)
     overall = _summary(rows, k)
     for summary in datasets.values():
         summary["share_of_admitted_solver_samples"] = _ratio(

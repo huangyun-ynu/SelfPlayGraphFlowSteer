@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
@@ -12,6 +13,7 @@ from urllib.parse import urlsplit
 
 from .ads_preprocessing import ADSPreprocessingConfig, prepare_ads_pool
 from .application import (
+    _load_project_env,
     consolidate_selfplay_skills,
     create_adaptive_application,
     create_fixed_pool_proposer,
@@ -561,8 +563,8 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument(
         "--wandb-mode",
         choices=("disabled", "offline", "online"),
-        default="disabled",
-        help="numeric-only telemetry; local records always retained",
+        default=None,
+        help="numeric-only telemetry; defaults to WANDB_MODE from environment/.env, otherwise disabled",
     )
     experiment.add_argument("--frontier-reverify-workers", type=int, default=2)
     experiment.add_argument("--counterfactual-pair-wall-time-s", type=float, default=900.0)
@@ -1996,7 +1998,13 @@ def _validate_proposal_selection_repair_resume(cycle_dir: Path) -> None:
 def selfplay_experiment(args: argparse.Namespace) -> int:
     from .wandb_tracking import WandbTracker
 
-    tracker = WandbTracker(args.output, getattr(args, "wandb_mode", "disabled"))
+    _load_project_env(Path(args.config).resolve())
+    mode = getattr(args, "wandb_mode", None)
+    if mode is None:
+        mode = os.environ.get("WANDB_MODE", "disabled")
+    if mode not in {"disabled", "offline", "online"}:
+        raise ValueError("WANDB_MODE must be disabled, offline or online")
+    tracker = WandbTracker(args.output, mode)
     failed = True
     try:
         result = _selfplay_experiment(args, tracker)

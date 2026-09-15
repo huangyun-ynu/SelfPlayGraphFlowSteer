@@ -140,7 +140,6 @@ class WandbTracker:
                     x_disable_stats=bool(config.get("synthetic_data")),
                     x_stats_gpu_device_ids=config.get("allocated_gpu_ids"),
                     init_timeout=30,
-                    finish_timeout=30,
                 ),
             )
             self.run.define_metric("rollout_step")

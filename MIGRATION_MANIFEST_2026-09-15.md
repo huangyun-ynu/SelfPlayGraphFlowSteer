@@ -12,6 +12,7 @@
 - 正式任务池已就绪：7 个数据集各 512 条，共 3584 条，每个数据集 16 个 ADS 簇。
 - SWE-bench Verified 已启用；本地 11 个 Git mirror 约 4.1 GB，372/372 个训练 base commit 已验证。
 - 腾讯云 SWE 官方验证端已配置，但它不属于 sharestore2 文件迁移。
+- W&B 已启用在线数值遥测；直连上传和服务端回读已验证，密钥仅保存在 `.env` 与私密配置备份。
 - 迁移后必须重新做路由探测并生成新鲜 route report，不能复制旧报告代替。
 
 ## 2. 必须迁移的本项目资产
@@ -109,6 +110,16 @@ Codex 附件位于 `/home/bedicloud/sharestore2/iclr-users/2/.codex/attachments`
 
 ## 7. 外部服务，不随文件迁移
 
+W&B 数值遥测：
+
+- Entity：`yun-huang-yunnanuniversity`
+- Project：`selfplay-graph-flowsteer`
+- 模式：`online`
+- API：`https://api.wandb.ai`
+- 当前主机必须通过 `scripts/formal/wandb_direct_exec.py` 直连，正式启动脚本已自动套用该包装器。
+- 包装器只在进程自己的 mount namespace 中临时固定 W&B 域名，不改宿主机 `/etc/hosts`，不使用代理。
+- W&B API key 见私密配置备份；迁移后安装 `python -m pip install '.[tracking]'` 并做一次上传回读检查。
+
 腾讯云 SWE 验证服务器：
 
 - 公网 IP：`43.134.20.27`
@@ -147,8 +158,9 @@ rg -n '/home/bedicloud/sharestore2/iclr-users/(owner|1|3)|/home/bedicloud/locals
 4. 替换绝对路径，将 `.env`、私密备份、SWE identity 和 known_hosts 权限设为 `0600`。
 5. 运行配置校验、七数据集池审计、SWE 372 个 commit 检查及本地 workspace clone/checkout probe。
 6. 直连探测 API 路由，生成新的 `route_report.json`；不要迁移过期报告。
-7. 开启腾讯云实例，核对 Host Key 后做空 patch 验证。
-8. 运行一轮 canary；确认通过后再启动正式长训练。
+7. 安装 `tracking` 可选依赖，恢复 W&B 环境变量，并通过直连包装器验证在线指标上传。
+8. 开启腾讯云实例，核对 Host Key 后做空 patch 验证。
+9. 运行一轮 canary；确认通过后再启动正式长训练。
 
 目标账号尚未提供，因此本文件不写具体目标路径。迁移时用新账号绝对路径替换 `<NEW_ROOT>`，并保留源目录直到全部验证完成。
 
