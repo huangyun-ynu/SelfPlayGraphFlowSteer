@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .answer_submission import is_short_answer_qa, submission_contract
+from .backend_failures import BackendRequestError
 from .healthbench_audit import (
     HealthBenchJudgeAuditStore,
     classify_judge_exception,
@@ -478,6 +479,8 @@ class HealthBenchOfficialRubricVerifier:
                         category,
                         len(completed_criteria),
                     )
+                    if isinstance(exc, BackendRequestError):
+                        raise
                     raise ValueError(
                         f"HealthBench Judge failed closed at rubric {criterion_index}: {category}"
                     ) from exc

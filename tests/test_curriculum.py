@@ -33,7 +33,7 @@ def test_curriculum_profiles_keep_joint_and_formal_regimes() -> None:
     assert joint.mini_cluster_size == formal.mini_cluster_size == 8
     assert joint.rollouts_per_task == formal.rollouts_per_task == 5
     assert joint.rollout_workers == 20
-    assert formal.rollout_workers == 64
+    assert formal.rollout_workers == 35
 
 
 def test_director_v21_paired_profile_matches_historical_collection_shape() -> None:

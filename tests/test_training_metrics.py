@@ -5,10 +5,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from selfplay_graph_flowsteer.counterfactual import RelationCredit
 from selfplay_graph_flowsteer.rollouts import TrainingBatch, TrainingSample
-from selfplay_graph_flowsteer.selfplay import FrontierScore
-from selfplay_graph_flowsteer.training import PolicyUpdateResult
 from selfplay_graph_flowsteer.training_metrics import (
     TrainingMetricsStore,
     _percentile,
@@ -19,6 +16,170 @@ from selfplay_graph_flowsteer.training_metrics import (
 def test_percentile_uses_linear_interpolation() -> None:
     assert _percentile([0, 10], 0.50) == 5.0
     assert _percentile([0, 10], 0.95) == 9.5
+
+
+def _skill_metrics(bank_path: Path, cycle_dir: Path | None = None):
+    return collect_cycle_metrics(
+        cycle=0,
+        proposer_batch=TrainingBatch("proposer", ()),
+        solver_batch=TrainingBatch("solver", ()),
+        updates=(),
+        skillbank_path=bank_path,
+        cycle_dir=cycle_dir,
+    )
+
+
+def _versioned_card(skill_id: str, version: int = 1, *, status: str = "active"):
+    return {
+        "card": {"skill_id": skill_id, "stats": {"is_seed": status == "seed"}},
+        "version": version,
+        "status": status,
+    }
+
+
+def test_legacy_skillbank_size_and_csv_remain_compatible(tmp_path: Path) -> None:
+    bank = tmp_path / "legacy.json"
+    bank.write_text(json.dumps({"skills": [{"skill_id": "old", "stats": {"usage_count": 3}}]}))
+    record = _skill_metrics(bank)
+    assert record["skillbank"]["size"] == 1
+    assert record["skillbank"]["total_usage"] == 3
+    assert "pats" not in record["skillbank"]
+    store = TrainingMetricsStore(tmp_path / "metrics")
+    store.append(record)
+    with store.csv_path.open() as stream:
+        row = next(csv.DictReader(stream))
+    assert row["skillbank_size"] == "1"
+
+
+def test_v2_snapshot_counts_global_records_without_pats(tmp_path: Path) -> None:
+    bank = tmp_path / "snapshot.json"
+    bank.write_text(
+        json.dumps(
+            {
+                "schema": "director_skill_v2",
+                "snapshot_id": "frozen-v2",
+                "cards": [
+                    _versioned_card("seed", status="seed"),
+                    _versioned_card("learned", 2),
+                    _versioned_card("retired", status="deprecated"),
+                ],
+            }
+        )
+    )
+    metrics = _skill_metrics(bank)["skillbank"]
+    assert metrics["size"] == metrics["global_card_count"] == 2
+    assert metrics["global_seed_card_count"] == 1
+    assert metrics["global_unique_skill_id_count"] == 2
+    assert metrics["skill_ids"] == ["seed", "learned"]
+    assert "pats" not in metrics
+
+
+def test_cycle_snapshot_and_review_work_without_live_bank_file(tmp_path: Path) -> None:
+    cycle = tmp_path / "cycle-0000"
+    cycle.mkdir()
+    bank = tmp_path / "custom-runtime-state" / "solver_skillbank.json"
+    assert not bank.exists()
+    scopes = {
+        '["nq_open","qa","easy"]': {
+            "cards": [_versioned_card("seed", status="seed"), _versioned_card("learned")],
+            "ema": 0.1,
+            "mode": "EXPAND",
+            "policy_snapshot": "solver-before-update",
+        },
+        '["nq_open","qa","hard"]': {
+            "cards": [_versioned_card("seed", 2), _versioned_card("learned")],
+            "ema": 0.4,
+            "mode": "REVISE",
+        },
+    }
+    frozen = cycle / "director_skill_snapshot.v2.json"
+    frozen.write_text(
+        json.dumps(
+            {
+                "schema": "director_skill_v2",
+                "snapshot_id": "frozen-cycle",
+                "cards": [_versioned_card("seed", status="seed")],
+                "pats": {"snapshot_id": "pats-before-review", "step": 0, "scopes": scopes},
+            }
+        )
+    )
+    (cycle / "pats_review.json").write_text(
+        json.dumps(
+            {
+                "step": 1,
+                "credible_groups": 4,
+                "refiner_calls": 2,
+                "reviews": [
+                    {"status": "updated", "operations": [{"op": "ADD"}, {"op": "UPDATE"}]},
+                    {"status": "rejected", "operations": [{"op": "DELETE"}]},
+                    {"status": "cycle_review_budget"},
+                ],
+            }
+        )
+    )
+    record = _skill_metrics(bank, cycle)
+    metrics = record["skillbank"]
+    assert metrics["available"] is True
+    assert metrics["source_path"] == str(frozen)
+    assert metrics["size"] == metrics["global_seed_card_count"] == 1
+    pats = metrics["pats"]
+    assert pats["scope_count"] == 2
+    assert pats["scoped_card_instance_count"] == 4
+    assert pats["scoped_unique_skill_id_count"] == 2
+    assert pats["scopes"]['["nq_open","qa","hard"]']["skill_versions"][0] == {
+        "id": "seed",
+        "version": 2,
+    }
+    assert pats["snapshot_step"] == 0 and pats["review_step"] == 1
+    assert pats["review_updated_scope_count"] == pats["review_rejected_scope_count"] == 1
+    assert pats["refiner_calls"] == 2
+    assert pats["applied_operation_counts"] == {"ADD": 1, "UPDATE": 1}
+    assert pats["review_status_counts"] == {
+        "cycle_review_budget": 1,
+        "rejected": 1,
+        "updated": 1,
+    }
+    store = TrainingMetricsStore(tmp_path / "metrics")
+    store.append(record)
+    with store.csv_path.open() as stream:
+        assert next(csv.DictReader(stream))["skillbank_size"] == "1"
+    saved = json.loads(store.latest_path.read_text())
+    assert saved["skillbank"]["pats"]["scoped_card_instance_count"] == 4
+
+
+def test_missing_pats_snapshot_and_review_do_not_claim_zero_counts(tmp_path: Path) -> None:
+    cycle = tmp_path / "evaluation"
+    cycle.mkdir()
+    (cycle / "skill_context_contract.json").write_text(
+        json.dumps({"pats_enabled": True, "context_enabled": False})
+    )
+    metrics = _skill_metrics(tmp_path / "missing.json", cycle)["skillbank"]
+    assert metrics["available"] is False
+    assert metrics["pats"] == {
+        "context_enabled": False,
+        "snapshot_available": False,
+        "review_available": False,
+    }
+
+
+def test_known_empty_scoped_view_is_distinct_from_missing_review(tmp_path: Path) -> None:
+    bank = tmp_path / "snapshot.json"
+    bank.write_text(
+        json.dumps(
+            {
+                "schema": "director_skill_v2",
+                "snapshot_id": "frozen",
+                "cards": [_versioned_card("seed", status="seed")],
+                "pats": {"snapshot_id": "withdrawn", "scopes": {"scope": {"cards": []}}},
+            }
+        )
+    )
+    pats = _skill_metrics(bank)["skillbank"]["pats"]
+    assert pats["snapshot_available"] is True
+    assert pats["scope_count"] == 1
+    assert pats["scoped_card_instance_count"] == pats["scoped_unique_skill_id_count"] == 0
+    assert pats["review_available"] is False
+    assert "review_updated_scope_count" not in pats
 
 
 def test_policy_off_reports_legacy_low_diversity_without_collapse_alert() -> None:

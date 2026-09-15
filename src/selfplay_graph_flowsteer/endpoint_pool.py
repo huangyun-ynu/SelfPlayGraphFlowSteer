@@ -11,16 +11,32 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
-from .backend_failures import classify_backend_failure
+from .backend_failures import (
+    BackendFailureClassification,
+    BackendRequestError,
+    classify_backend_failure,
+)
 from .llm import _logical_request_budget_s, endpoint_failover_scope
 
 
 class EndpointPoolBackend:
-    def __init__(self, name: str, members: dict[str, Any], state_dir: Path):
+    def __init__(
+        self,
+        name: str,
+        members: dict[str, Any],
+        state_dir: Path,
+        *,
+        pool_retry_attempts: int = 0,
+        retry_backoff_s: float = 0.0,
+    ):
         if not members:
             raise ValueError("endpoint pool must not be empty")
+        if pool_retry_attempts < 0 or retry_backoff_s < 0:
+            raise ValueError("endpoint pool retry settings must be non-negative")
         self.name = name
         self.members = tuple(members.items())
+        self.pool_retry_attempts = int(pool_retry_attempts)
+        self.retry_backoff_s = float(retry_backoff_s)
         self.config = self.members[0][1].config
         signature = repr([(key, backend.config.base_url) for key, backend in self.members])
         self.counter_path = state_dir / (
@@ -78,71 +94,117 @@ class EndpointPoolBackend:
         end = started + budget
         request_id = uuid.uuid4().hex
         attempts = []
+        failures = []
         last_error = None
-        for key, backend in ordered:
-            # Failed waits do not consume the next member's request budget.
-            # Each member is still tried once and the rollout has an absolute bound.
-            if getattr(deadline, "exclude_failed_request_time", False):
-                end = time.monotonic() + _logical_request_budget_s(backend.config, request_deadline)
-            if deadline is not None:
-                deadline.check("endpoint_pool_failover")
-            if time.monotonic() >= end and last_error is not None:
-                raise last_error
-            # Only completed canonical messages cross endpoints. Tools execute
-            # outside generate(), so failover cannot replay an environment action.
-            replay = [
-                {
-                    k: v
-                    for k, v in message.items()
-                    if k not in {"_provider_payloads", "_endpoint_pool_member"}
-                }
-                if message.get("_endpoint_pool_member") != key
-                else {k: v for k, v in message.items() if k != "_endpoint_pool_member"}
-                for message in messages
-            ]
-            attempt_started = time.monotonic()
-            event = dict(
-                request_id=request_id,
-                logical_route=self.name,
-                endpoint_pool_member=key,
-                attempt=len(attempts) + 1,
-                request_role=kwargs.get("role", ""),
-                timestamp=time.time(),
-                request_remaining_s=max(0.0, end - attempt_started),
+        for pool_round in range(self.pool_retry_attempts + 1):
+            round_members = (
+                ordered[pool_round % len(ordered) :] + ordered[: pool_round % len(ordered)]
             )
-            try:
-                with endpoint_failover_scope(end):
-                    response = backend.generate(replay, **kwargs)
-            except Exception as exc:
-                failure = classify_backend_failure(exc, stage="endpoint_pool", route=key)
-                if failure.backend_failure and hasattr(deadline, "record_failed_request"):
-                    deadline.record_failed_request(attempt_started, time.monotonic())
-                event.update(
-                    status="failed",
-                    elapsed_s=time.monotonic() - attempt_started,
-                    failure=failure.to_dict(),
+            for key, backend in round_members:
+                # Failed waits do not consume the next member's request budget.
+                if getattr(deadline, "exclude_failed_request_time", False):
+                    end = time.monotonic() + _logical_request_budget_s(
+                        backend.config, request_deadline
+                    )
+                if deadline is not None:
+                    deadline.check("endpoint_pool_failover")
+                if time.monotonic() >= end and last_error is not None:
+                    break
+                # Only completed canonical messages cross endpoints. Tools execute
+                # outside generate(), so failover cannot replay an environment action.
+                replay = [
+                    {
+                        k: v
+                        for k, v in message.items()
+                        if k not in {"_provider_payloads", "_endpoint_pool_member"}
+                    }
+                    if message.get("_endpoint_pool_member") != key
+                    else {k: v for k, v in message.items() if k != "_endpoint_pool_member"}
+                    for message in messages
+                ]
+                attempt_started = time.monotonic()
+                event = dict(
+                    request_id=request_id,
+                    logical_route=self.name,
+                    endpoint_pool_member=key,
+                    pool_round=pool_round + 1,
+                    attempt=len(attempts) + 1,
+                    request_role=kwargs.get("role", ""),
+                    timestamp=time.time(),
+                    request_remaining_s=max(0.0, end - attempt_started),
                 )
+                try:
+                    with endpoint_failover_scope(end):
+                        response = backend.generate(replay, **kwargs)
+                except Exception as exc:
+                    failure = classify_backend_failure(exc, stage="endpoint_pool", route=key)
+                    if failure.backend_failure and hasattr(deadline, "record_failed_request"):
+                        deadline.record_failed_request(attempt_started, time.monotonic())
+                    event.update(
+                        status="failed",
+                        elapsed_s=time.monotonic() - attempt_started,
+                        failure=failure.to_dict(),
+                    )
+                    attempts.append(event)
+                    failures.append(failure)
+                    self._audit(event)
+                    exc.endpoint_pool_attempts = list(attempts)
+                    last_error = exc
+                    # Invalid requests, environment failures and controller deadlines
+                    # are shared call failures, not endpoint availability failures.
+                    if not failure.backend_failure or not (
+                        failure.retryable or failure.disable_route
+                    ):
+                        raise
+                    continue
+                event.update(status="success", elapsed_s=time.monotonic() - attempt_started)
                 attempts.append(event)
                 self._audit(event)
-                exc.endpoint_pool_attempts = list(attempts)
-                last_error = exc
-                if not failure.backend_failure or not failure.retryable:
-                    raise
-                continue
-            event.update(status="success", elapsed_s=time.monotonic() - attempt_started)
-            attempts.append(event)
-            self._audit(event)
-            if getattr(response, "assistant_message", None) is not None:
-                response.assistant_message["_endpoint_pool_member"] = key
-            response.metadata.update(
-                logical_route=self.name,
-                endpoint_pool_member=key,
-                endpoint_pool_attempts=attempts,
-                endpoint_pool_failovers=len(attempts) - 1,
-            )
-            return response
+                if getattr(response, "assistant_message", None) is not None:
+                    response.assistant_message["_endpoint_pool_member"] = key
+                response.metadata.update(
+                    logical_route=self.name,
+                    endpoint_pool_member=key,
+                    endpoint_pool_attempts=attempts,
+                    endpoint_pool_failovers=len(attempts) - 1,
+                    endpoint_pool_retries=pool_round,
+                )
+                return response
+            if pool_round >= self.pool_retry_attempts or last_error is None:
+                break
+            delay_s = self.retry_backoff_s * 2**pool_round
+            if time.monotonic() + delay_s >= end:
+                break
+            if delay_s:
+                time.sleep(delay_s)
         assert last_error is not None
-        raise last_error
+        kinds = {failure.kind for failure in failures}
+        classification = BackendFailureClassification(
+            backend_failure=True,
+            origin="endpoint_pool",
+            kind=next(iter(kinds)) if len(kinds) == 1 else "endpoint_pool_exhausted",
+            retryable=False,
+            counts_toward_route_circuit=True,
+            disable_route=True,
+            stage="endpoint_pool",
+            route=self.name,
+            exception_type="EndpointPoolExhausted",
+            message=(
+                f"all {len(self.members)} endpoints failed across "
+                f"{max(event['pool_round'] for event in attempts)} pool rounds"
+            ),
+        )
+        terminal_event = {
+            "schema_version": 1,
+            "event": "backend_request_failure",
+            **classification.to_dict(),
+            "attempt": len(attempts),
+            "will_retry": False,
+            "endpoint_pool_attempts": len(attempts),
+        }
+        error = BackendRequestError(classification, request_events=[terminal_event])
+        error.endpoint_pool_attempts = list(attempts)
+        raise error from last_error
 
     def set_deadline_context(self, deadline):
         self._deadline.set(deadline)

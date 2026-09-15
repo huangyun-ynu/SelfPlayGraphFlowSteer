@@ -49,6 +49,7 @@ from .selfplay_runtime import (
     SelfPlayRolloutRunner,
     SelfPlayRunConfig,
     _read_jsonl,
+    load_dataset_duration_history,
 )
 from .services import ModelServiceSpec, VLLMServiceManager
 from .skills import SolverSkillBank
@@ -99,6 +100,7 @@ class _CollectedExperimentCycle:
     resumed_partial_cycle: bool
     started_monotonic: float
     collection_elapsed_s: float
+    director_tokenizer: Any = None
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -124,6 +126,12 @@ def build_parser() -> argparse.ArgumentParser:
     adaptive.add_argument("--reference")
     adaptive.add_argument("--run-id")
     adaptive.add_argument("--verifier", choices=VERIFIERS)
+    adaptive.add_argument(
+        "--skill-context",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="auto follows SkillBank usage; on enables supported inference",
+    )
     for role in ("proposer", "solver"):
         adaptive.add_argument(f"--{role}-base-url")
         adaptive.add_argument(f"--{role}-api-key")
@@ -158,19 +166,13 @@ def build_parser() -> argparse.ArgumentParser:
     selfplay.add_argument("--workers", type=int, default=1)
     selfplay.add_argument("--task-window", type=int, default=1)
     selfplay.add_argument(
-        "--task-scheduling-policy",
-        choices=("logical_windows", "frozen_manifest_dynamic"),
-        default="logical_windows",
-    )
-    selfplay.add_argument(
         "--primary-job-order",
         choices=tuple(sorted(PRIMARY_JOB_ORDER_CHOICES)),
         default="round_robin",
         help="order primary rollout admission; long_tail_first uses versioned duration estimates",
     )
-    selfplay.add_argument("--max-active-task-groups", type=int, default=8)
     selfplay.add_argument("--pipeline-counterfactuals", action="store_true")
-    selfplay.add_argument("--counterfactual-workers", type=int, default=2)
+    selfplay.add_argument("--frontier-reverify-workers", type=int, default=2)
     selfplay.add_argument("--counterfactual-pair-wall-time-s", type=float, default=900.0)
     selfplay.add_argument("--rollout-wall-time-s", type=float, default=900.0)
     selfplay.add_argument("--stateful-rollout-wall-time-s", type=float, default=900.0)
@@ -195,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     selfplay.add_argument("--mock", action="store_true")
     selfplay.add_argument("--verifier", choices=VERIFIERS)
+    selfplay.add_argument("--skill-context", choices=("auto", "on", "off"), default="auto")
 
     train = commands.add_parser(
         "train-cycle", help="update Proposer then Solver from one collected rollout directory"
@@ -237,6 +240,12 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--seed", type=int, action="append", default=[])
     benchmark.add_argument("--flowsteer-baseline", type=Path)
     benchmark.add_argument("--mock", action="store_true")
+    benchmark.add_argument(
+        "--skill-context",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="explicit supported or scaffold-free evaluation",
+    )
 
     services = commands.add_parser("model-services", help="manage owned vLLM model services")
     services.add_argument("action", choices=("status", "start", "stop", "refresh"))
@@ -274,6 +283,12 @@ def build_parser() -> argparse.ArgumentParser:
     experiment = commands.add_parser(
         "selfplay-experiment",
         help="run repeated rollout -> Proposer update -> Solver update cycles",
+    )
+    experiment.add_argument(
+        "--skill-context",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="auto follows usage; on also retains support in final evaluation",
     )
     experiment.add_argument(
         "--config",
@@ -422,17 +437,20 @@ def build_parser() -> argparse.ArgumentParser:
     experiment.add_argument("--workers", type=int)
     experiment.add_argument("--task-window", type=int)
     experiment.add_argument(
-        "--task-scheduling-policy",
-        choices=("logical_windows", "frozen_manifest_dynamic"),
-        default="frozen_manifest_dynamic",
-    )
-    experiment.add_argument(
         "--primary-job-order",
         choices=tuple(sorted(PRIMARY_JOB_ORDER_CHOICES)),
         default="round_robin",
         help="order primary rollout admission; long_tail_first uses versioned duration estimates",
     )
-    experiment.add_argument("--max-active-task-groups", type=int, default=8)
+    experiment.add_argument(
+        "--historical-duration-priority",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "prioritize primary and counterfactual queues by separate prior-cycle "
+            "dataset mean durations"
+        ),
+    )
     experiment.add_argument(
         "--uncertain-attribution-zero-reward",
         action=argparse.BooleanOptionalAction,
@@ -546,7 +564,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="disabled",
         help="numeric-only telemetry; local records always retained",
     )
-    experiment.add_argument("--counterfactual-workers", type=int, default=2)
+    experiment.add_argument("--frontier-reverify-workers", type=int, default=2)
     experiment.add_argument("--counterfactual-pair-wall-time-s", type=float, default=900.0)
     experiment.add_argument("--rollout-wall-time-s", type=float, default=900.0)
     experiment.add_argument("--stateful-rollout-wall-time-s", type=float, default=900.0)
@@ -731,8 +749,47 @@ def _add_grpo_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _skill_context_config(config, args, *, training: bool):
+    """Resolve an explicit context mode without changing the saved skill archive."""
+    mode = getattr(args, "skill_context", "auto")
+    usage = {"on": "always", "off": "off"}.get(mode, config.skillbank_usage)
+    return replace(config, skillbank_training=training, skillbank_usage=usage)
+
+
+def _freeze_training_skill_context(config, cycle_dir: Path, *, step: int, mock: bool):
+    """Audit pending learned guidance before the first immutable collection view."""
+    from .skill_evolution_v2 import SCHEMA, freeze_collection
+
+    needs_semantic_backend = (
+        config.pats.enabled
+        and config.skillbank_context_enabled
+        and config.skillbank_mode == SCHEMA
+        and not mock
+        and not (cycle_dir / "director_skill_snapshot.v2.json").exists()
+        and not (cycle_dir / "solver_rollouts.jsonl").exists()
+    )
+    if not needs_semantic_backend:
+        return freeze_collection(config, cycle_dir, step=step)
+
+    from .application import _create_runtime_backend
+
+    # Scope budgets use the Director's tokenizer even when Proposer uses a
+    # different model. The review service remains the configured frozen Worker.
+    tokenizer = HuggingFaceTokenizer(config.solver_model.base_model_path)
+    route_name = config.skill_distiller_runtime
+    backend = _create_runtime_backend(config.runtime_pool()[route_name], route_name=route_name)
+    try:
+        return freeze_collection(
+            config, cycle_dir, step=step, semantic_backend=backend, tokenizer=tokenizer
+        )
+    finally:
+        close = getattr(backend, "close", None)
+        if callable(close):
+            close()
+
+
 def adaptive_solve(args: argparse.Namespace) -> int:
-    config = load_adaptive_config(args.config)
+    config = _skill_context_config(load_adaptive_config(args.config), args, training=False)
     if args.verifier is not None:
         config = replace(config, verifier=args.verifier)
     for role in ("proposer", "solver"):
@@ -881,7 +938,11 @@ def dry_run_selfplay(num_tasks: int, rollouts: int, output: Path | None) -> int:
 
 
 def selfplay_rollout(args: argparse.Namespace) -> int:
-    config = replace(load_adaptive_config(args.config), persist_runtime_updates=False)
+    config = _skill_context_config(
+        replace(load_adaptive_config(args.config), persist_runtime_updates=False),
+        args,
+        training=True,
+    )
     if args.verifier is not None:
         config = replace(config, verifier=args.verifier)
     if not args.mock and config.verifier == "none":
@@ -905,6 +966,7 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
         seeds = seeds[: args.num_tasks]
     if not seeds:
         raise ValueError("provide --task-pool, --seed, or --seed-data")
+    config = _freeze_training_skill_context(config, args.output, step=1, mock=args.mock)
     tokenizer = (
         ByteTokenizer()
         if args.mock
@@ -962,10 +1024,7 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
             args.workers,
             args.proposals_per_seed,
             args.task_window,
-            require_all_proposals=(args.task_scheduling_policy == "frozen_manifest_dynamic"),
-            task_scheduling_policy=args.task_scheduling_policy,
             primary_job_order=args.primary_job_order,
-            max_active_task_groups=args.max_active_task_groups,
             structural_exploration_policy=config.canvas.structural_exploration_policy,
             rollout_wall_time_s=args.rollout_wall_time_s,
             stateful_rollout_wall_time_s=args.stateful_rollout_wall_time_s,
@@ -982,13 +1041,20 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
             route_health_cooldown_s=config.route_health_cooldown_s,
             worker_runtime_routes=config.worker_runtime_routes,
             pipeline_counterfactuals=args.pipeline_counterfactuals,
-            counterfactual_workers=args.counterfactual_workers,
+            frontier_reverify_workers=args.frontier_reverify_workers,
             counterfactual_pair_wall_time_s=args.counterfactual_pair_wall_time_s,
-            task_execution_window=max(args.task_window, args.max_active_task_groups),
+            task_execution_window=args.task_window,
         ),
         graph_feature_extractor=graph_feature_extractor,
     ).run(seeds, resume=args.resume)
-    consolidate_selfplay_skills(config, result, mock=args.mock, step=result.snapshots["cycle"] + 1)
+    consolidate_selfplay_skills(
+        config,
+        result,
+        mock=args.mock,
+        step=result.snapshots["cycle"] + 1,
+        cycle_dir=args.output,
+        tokenizer=tokenizer,
+    )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     return 0
 
@@ -1122,6 +1188,7 @@ def train_cycle(args: argparse.Namespace) -> int:
             frontier_scores=_load_frontier_scores(args.run_dir / "frontier_scores.json"),
             relation_credits=relation_credits,
             skillbank_path=adaptive.skillbank_path,
+            cycle_dir=args.run_dir,
             mace_path=None,
             context={
                 "config": str(args.config.resolve()),
@@ -1197,10 +1264,12 @@ def _pending_cycle_metrics_updates(
 
 
 def benchmark(args: argparse.Namespace) -> int:
-    config = replace(
-        load_adaptive_config(args.config),
-        verifier=args.verifier,
-        persist_runtime_updates=False,
+    config = _skill_context_config(
+        replace(
+            load_adaptive_config(args.config), verifier=args.verifier, persist_runtime_updates=False
+        ),
+        args,
+        training=False,
     )
     route_latency_tracker = RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
 
@@ -1572,13 +1641,16 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
     if minimum_selected_routes not in {1, 4, 5}:
         raise ValueError("minimum selected routes must be one, four or five")
     usable = {str(value) for value in payload.get("usable_routes", [])}
+
+    def logical_route_usable(route: str) -> bool:
+        members = config.runtime_endpoint_pools.get(route, ())
+        return route in usable or bool(set(members) & usable)
+
     dedicated_judge = config.healthbench_judge_runtime_route
-    if dedicated_judge and dedicated_judge not in usable:
+    if dedicated_judge and not logical_route_usable(dedicated_judge):
         raise ValueError("dedicated HealthBench Judge route must be freshly qualified")
     qualified = tuple(
-        str(value)
-        for value in payload.get("usable_routes", [])
-        if str(value) in config.worker_runtime_routes
+        route for route in config.worker_runtime_routes if logical_route_usable(route)
     )
     if len(set(qualified)) < minimum_selected_routes or not set(qualified) <= requested:
         raise ValueError("route report does not contain the requested minimum usable routes")
@@ -1615,8 +1687,14 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
         if key in support_routes
     }
     pool_members = {member for members in active_pools.values() for member in members}
-    if not pool_members <= usable:
-        raise ValueError("all active endpoint pool members must be freshly qualified")
+    unavailable_pools = {
+        key: members for key, members in active_pools.items() if not (set(members) & usable)
+    }
+    if unavailable_pools:
+        raise ValueError(
+            "each active endpoint pool requires at least one freshly qualified member: "
+            + ", ".join(sorted(unavailable_pools))
+        )
     support_routes = tuple(dict.fromkeys((*support_routes, *sorted(pool_members))))
     restricted = replace(
         config,
@@ -2024,11 +2102,17 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         curriculum_profile.rollout_workers if curriculum_profile else 1
     )
     task_window = args.task_window or (curriculum_profile.task_window if curriculum_profile else 1)
-    config = replace(
-        load_adaptive_config(args.config),
-        verifier=args.verifier,
-        persist_runtime_updates=False,
+    config = _skill_context_config(
+        replace(
+            load_adaptive_config(args.config), verifier=args.verifier, persist_runtime_updates=False
+        ),
+        args,
+        training=True,
     )
+    if config.pats.enabled and args.async_next_cycle_rollouts:
+        raise ValueError(
+            "PATS currently requires synchronous cycles; omit --async-next-cycle-rollouts"
+        )
     if args.enable_swe:
         config = replace(config, swe=replace(config.swe, enabled=True))
     if args.policy_gpu_id is not None and (
@@ -2244,7 +2328,8 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             "tasks_per_cycle": tasks_per_cycle,
             "provenance_id": provenance_id,
             "rollout_workers": rollout_workers,
-            "counterfactual_workers": args.counterfactual_workers,
+            "frontier_reverify_workers": args.frontier_reverify_workers,
+            "historical_duration_priority": args.historical_duration_priority,
             "max_micro_batch_tokens": args.max_micro_batch_tokens,
             "max_sequence_length": training_config.solver.max_sequence_length,
             "proposer_learning_rate": training_config.proposer.learning_rate,
@@ -2310,9 +2395,21 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         evaluation_only = args.final_cycle_evaluation_only and cycle == args.cycles - 1
         cycle_collection_only = _cycle_collection_only(args, cycle)
         cycle_dir = args.output / f"cycle-{cycle:04d}"
-        from .skill_evolution_v2 import freeze_collection
-
-        collection_config = freeze_collection(collection_config, cycle_dir)
+        duration_history = load_dataset_duration_history(args.output, before_cycle=cycle)
+        if args.historical_duration_priority:
+            _atomic_write_json(cycle_dir / "duration_priority_snapshot.json", duration_history)
+        primary_duration_estimates = {
+            dataset: float(summary["mean_s"])
+            for dataset, summary in duration_history["primary"].items()
+        }
+        counterfactual_duration_estimates = {
+            dataset: float(summary["mean_s"])
+            for dataset, summary in duration_history["counterfactual"].items()
+        }
+        collection_config = replace(collection_config, skillbank_training=not evaluation_only)
+        collection_config = _freeze_training_skill_context(
+            collection_config, cycle_dir, step=cycle + 1, mock=args.mock
+        )
         resumed_partial_cycle = bool(args.resume and (cycle_dir / "solver_rollouts.jsonl").exists())
         policy_sampling_attempt_offsets: dict[str, int] = {}
         rate_limit_repair_resume = bool(
@@ -2456,9 +2553,13 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 args.proposals_per_seed,
                 task_window,
                 True,
-                task_scheduling_policy=args.task_scheduling_policy,
                 primary_job_order=args.primary_job_order,
-                max_active_task_groups=args.max_active_task_groups,
+                historical_duration_priority=args.historical_duration_priority,
+                primary_dataset_duration_estimates_s=primary_duration_estimates,
+                counterfactual_dataset_duration_estimates_s=(
+                    counterfactual_duration_estimates
+                ),
+                duration_history_version=str(duration_history["version"]),
                 structural_exploration_policy=(
                     collection_config.canvas.structural_exploration_policy
                 ),
@@ -2523,19 +2624,13 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 backend_failure_retry_attempts=args.backend_failure_retries,
                 uncertain_attribution_zero_reward=args.uncertain_attribution_zero_reward,
                 pipeline_counterfactuals=args.pipeline_counterfactuals,
-                counterfactual_workers=args.counterfactual_workers,
+                frontier_reverify_workers=args.frontier_reverify_workers,
                 counterfactual_pair_wall_time_s=args.counterfactual_pair_wall_time_s,
                 evaluation_only=evaluation_only,
                 frontier_reverify_fraction=0.0 if evaluation_only else 0.25,
                 pipeline_frontier_by_dataset=args.pipeline_frontier_by_dataset,
                 canary_exclude_migrated_frontier=args.canary_exclude_migrated_frontier,
-                task_execution_window=(
-                    None
-                    if evaluation_only
-                    and args.freeze_runtime_state
-                    and args.task_scheduling_policy == "frozen_manifest_dynamic"
-                    else max(task_window, args.max_active_task_groups)
-                ),
+                task_execution_window=task_window,
             ),
             graph_feature_extractor=graph_feature_extractor,
             primary_probability_observer=probability_observer,
@@ -2561,6 +2656,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
             resumed_partial_cycle=resumed_partial_cycle,
             started_monotonic=cycle_started_monotonic,
             collection_elapsed_s=collection_elapsed_s,
+            director_tokenizer=tokenizer,
         )
 
     first_snapshots = create_selfplay_snapshots(config)
@@ -2624,6 +2720,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                     mock=args.mock,
                     step=cycle + 1,
                     cycle_dir=cycle_dir,
+                    tokenizer=collected_cycle.director_tokenizer,
                 )
             )
             next_cycle_is_frozen_evaluation = bool(
@@ -2921,6 +3018,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 frontier_scores=rollout_result.frontier_scores,
                 relation_credits=relation_credits,
                 skillbank_path=config.skillbank_path,
+                cycle_dir=cycle_dir,
                 mace_path=None,
                 context={
                     "config": str(args.config.resolve()),

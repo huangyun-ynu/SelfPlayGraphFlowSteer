@@ -7,8 +7,9 @@ from types import SimpleNamespace
 import pytest
 
 from selfplay_graph_flowsteer.application import (
-    AdaptiveSolverApplication,
     REMOTE_RUNTIME_MAX_CONCURRENCY,
+    AdaptiveSolverApplication,
+    FixedRuntimeConfig,
     _unique_worker_token_totals,
     _verifier,
     create_adaptive_application,
@@ -112,11 +113,11 @@ def test_dataset_specific_canvas_token_budget_is_selected_per_task(tmp_path) -> 
 
     assert result.task.metadata["canvas_token_budget"] == {
         "dataset": "nq_open",
-        "max_total_tokens": 16384,
+        "max_total_tokens": 65536,
         "fallback_max_total_tokens": 32768,
     }
     assert application.solver.active_canvas is not None
-    assert application.solver.active_canvas.config.max_total_tokens == 16384
+    assert application.solver.active_canvas.config.max_total_tokens == 65536
     assert config.canvas.max_total_tokens == 32768
 
 
@@ -671,6 +672,47 @@ frozen = true
         match="externally managed runtime.max_concurrency must not exceed 16",
     ):
         load_adaptive_config(config_path)
+
+
+def test_gpt_6_astra_remote_runtime_allows_twenty_concurrent_requests() -> None:
+    runtime = FixedRuntimeConfig(
+        base_url="https://example.test/v1",
+        api_key="test-key",
+        served_model="gpt-6-astra",
+        model_path=None,
+        request_profile="generic",
+        network_path="direct",
+        max_concurrency=20,
+        managed_locally=False,
+    )
+
+    runtime.validate()
+    with pytest.raises(
+        ValueError,
+        match="externally managed runtime.max_concurrency must not exceed 20",
+    ):
+        replace(runtime, max_concurrency=21).validate()
+
+
+@pytest.mark.parametrize("model", ["deepseek-flash", "MiniMax-M2.7"])
+def test_high_capacity_remote_runtime_allows_thirty_concurrent_requests(model) -> None:
+    runtime = FixedRuntimeConfig(
+        base_url="https://example.test/v1",
+        api_key="test-key",
+        served_model=model,
+        model_path=None,
+        request_profile="generic",
+        network_path="direct",
+        max_concurrency=30,
+        managed_locally=False,
+    )
+
+    runtime.validate()
+    with pytest.raises(
+        ValueError,
+        match="externally managed runtime.max_concurrency must not exceed 30",
+    ):
+        replace(runtime, max_concurrency=31).validate()
 
 
 def test_proposer_solver_are_separate_but_share_base_initialization(tmp_path) -> None:

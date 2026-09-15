@@ -68,6 +68,7 @@ from .observability import (
     task_requires_reference,
     task_to_public_dict,
 )
+from .pats import PatsConfig
 from .protocol_reward import LEGACY_REWARD_VERSION, DirectorRewardConfig
 from .rollouts import Tokenizer
 from .route_health import PersistentRouteCircuitOpenError, RouteHealthStore
@@ -121,6 +122,8 @@ class GraphEvaluationBackendError(RuntimeError):
 
 
 REMOTE_RUNTIME_MAX_CONCURRENCY = 16
+_REMOTE_RUNTIME_20_CONCURRENCY_MODELS = frozenset({"gpt-6-astra"})
+_REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES = ("deepseek", "minimax")
 
 
 def _allowed_physical_gpu_ids() -> set[int]:
@@ -216,10 +219,15 @@ class FixedRuntimeConfig:
             for dataset, limit in self.max_concurrency_by_dataset.items()
         ):
             raise ValueError("runtime dataset concurrency overrides must be positive")
+        model_name = self.served_model.casefold()
         remote_limit = (
-            20
-            if self.served_model.casefold().startswith("deepseek")
-            else REMOTE_RUNTIME_MAX_CONCURRENCY
+            30
+            if model_name.startswith(_REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES)
+            else (
+                20
+                if model_name in _REMOTE_RUNTIME_20_CONCURRENCY_MODELS
+                else REMOTE_RUNTIME_MAX_CONCURRENCY
+            )
         )
         if not self.managed_locally and self.max_concurrency > remote_limit:
             raise ValueError(
@@ -528,9 +536,11 @@ class AdaptiveApplicationConfig:
     additional_runtimes: dict[str, FixedRuntimeConfig] = field(default_factory=dict)
     worker_runtime_routes: tuple[str, ...] = ("default",)
     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    endpoint_pool_retry_attempts: int = 2
+    endpoint_pool_retry_backoff_s: float = 1.0
     skill_distiller_runtime: str = "default"
     route_health_path: Path = Path("state/route_health.json")
-    route_health_cooldown_s: float = 3600.0
+    route_health_cooldown_s: float = 600.0
     canvas: CanvasConfig = field(default_factory=CanvasConfig)
     verifier: str = "none"
     mace_enabled: bool = False  # Retired compatibility field; True is rejected.
@@ -542,6 +552,11 @@ class AdaptiveApplicationConfig:
     mace_model_statistics_path: Path = Path("state/mace_model_statistics.json")
     skillbank_enabled: bool = True
     skillbank_mode: str = "legacy"
+    skillbank_usage: str = "always"
+    # Runtime context set by collection entry points, never read from TOML.
+    skillbank_training: bool = False
+    skillbank_snapshot_frozen: bool = False
+    pats: PatsConfig = field(default_factory=PatsConfig)
     skillbank_prompt_token_budget: int = 1024
     skillbank_retrieval_min_score: float | None = None
     skillbank_path: Path = Path("state/solver_skillbank.json")
@@ -582,6 +597,14 @@ class AdaptiveApplicationConfig:
     answer_submission: AnswerSubmissionConfig = field(default_factory=AnswerSubmissionConfig)
     director_reward: DirectorRewardConfig = field(default_factory=DirectorRewardConfig)
     director_prompt_variant: str = "v2.1"
+
+    @property
+    def skillbank_context_enabled(self) -> bool:
+        return (
+            self.skillbank_enabled
+            and self.skillbank_usage != "off"
+            and (self.skillbank_usage == "always" or self.skillbank_training)
+        )
 
     def validate(self) -> None:
         self.proposer_model.validate("proposer")
@@ -632,6 +655,8 @@ class AdaptiveApplicationConfig:
             configs = [runtime_pool[member] for member in (logical, *members)]
             if len({(item.served_model, item.reasoning_effort) for item in configs}) != 1:
                 raise ValueError("endpoint pool must use the same model and effort")
+        if self.endpoint_pool_retry_attempts < 0 or self.endpoint_pool_retry_backoff_s < 0:
+            raise ValueError("endpoint pool retry settings must be non-negative")
         if (
             self.healthbench_judge_runtime_route is not None
             and self.healthbench_judge_runtime_route not in runtime_pool
@@ -771,6 +796,11 @@ class AdaptiveApplicationConfig:
             raise ValueError("MACE is retired; remove [mace] and use Director SET_MODEL")
         if self.skillbank_mode not in {"legacy", "director_skill_v2"}:
             raise ValueError("unknown skillbank mode")
+        if self.skillbank_usage not in {"always", "training_only", "off"}:
+            raise ValueError("skillbank usage must be always, training_only or off")
+        self.pats.validate()
+        if self.pats.enabled and self.skillbank_mode != "director_skill_v2":
+            raise ValueError("PATS requires solver_skillbank.mode='director_skill_v2'")
         if self.skillbank_prompt_token_budget <= 0:
             raise ValueError("skill prompt token budget must be positive")
         if self.skillbank_activation_policy not in {"paired", "checked"}:
@@ -852,6 +882,8 @@ class AdaptiveApplicationConfig:
                 "endpoint_pools": {
                     key: list(value) for key, value in self.runtime_endpoint_pools.items()
                 },
+                "endpoint_pool_retry_attempts": self.endpoint_pool_retry_attempts,
+                "endpoint_pool_retry_backoff_s": self.endpoint_pool_retry_backoff_s,
                 "skill_distiller": self.skill_distiller_runtime,
                 "health_state_path": str(self.route_health_path),
                 "health_cooldown_s": self.route_health_cooldown_s,
@@ -1002,11 +1034,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             str(key): tuple(str(member) for member in value)
             for key, value in runtime_routing.get("endpoint_pools", {}).items()
         },
+        endpoint_pool_retry_attempts=int(runtime_routing.get("pool_retry_attempts", 2)),
+        endpoint_pool_retry_backoff_s=float(runtime_routing.get("pool_retry_backoff_s", 1.0)),
         skill_distiller_runtime=str(runtime_routing.get("skill_distiller", runtime_name)),
         route_health_path=_path(
             runtime_routing.get("health_state_path"), root, "state/route_health.json"
         ),
-        route_health_cooldown_s=float(runtime_routing.get("health_cooldown_s", 3600.0)),
+        route_health_cooldown_s=float(runtime_routing.get("health_cooldown_s", 600.0)),
         canvas=CanvasConfig(
             max_agents=int(canvas.get("max_agents", 8)),
             max_rounds=int(canvas.get("max_rounds", 20)),
@@ -1070,6 +1104,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         ),
         skillbank_enabled=bool(skills.get("enabled", True)),
         skillbank_mode=str(skills.get("mode", "legacy")),
+        skillbank_usage=str(skills.get("usage", "always")),
+        pats=PatsConfig(**skills.get("pats", {})),
         skillbank_prompt_token_budget=int(skills.get("prompt_token_budget", 1024)),
         skillbank_retrieval_min_score=(
             float(skills["retrieval_min_score"]) if "retrieval_min_score" in skills else None
@@ -2011,6 +2047,16 @@ def create_adaptive_application(
         )
     if active_routes != config.worker_runtime_routes:
         config = replace(config, worker_runtime_routes=active_routes)
+    if config.healthbench_judge_runtime_route is not None:
+        judge_routes, blocked_judge_routes = route_health.available_routes(
+            (config.healthbench_judge_runtime_route,)
+        )
+        if not judge_routes:
+            state = blocked_judge_routes[config.healthbench_judge_runtime_route]
+            raise PersistentRouteCircuitOpenError(
+                "HealthBench Judge route is blocked by persisted health state: "
+                f"{config.healthbench_judge_runtime_route}({state['block_reason']})"
+            )
     owned_backends: list[ChatBackend] = []
     tools: dict[str, Any] = {}
     if config.retrieval.enabled:
@@ -2158,6 +2204,8 @@ def create_adaptive_application(
                     logical,
                     {name: physical_backends[name] for name in members},
                     config.route_health_path.parent / "endpoint_pools",
+                    pool_retry_attempts=config.endpoint_pool_retry_attempts,
+                    retry_backoff_s=config.endpoint_pool_retry_backoff_s,
                 )
                 # Install the shared rollout clock on the pool wrapper too,
                 # not only on its physical clients.
@@ -2221,10 +2269,10 @@ def create_adaptive_application(
                 else None
             ),
         )
-        if config.skillbank_enabled and config.skillbank_mode == "legacy"
+        if config.skillbank_context_enabled and config.skillbank_mode == "legacy"
         else None
     )
-    if config.skillbank_enabled and config.skillbank_mode == "director_skill_v2":
+    if config.skillbank_context_enabled and config.skillbank_mode == "director_skill_v2":
         from .skill_evolution_v2 import load_bank
 
         skillbank = load_bank(
@@ -2479,16 +2527,18 @@ def consolidate_selfplay_skills(
     mock: bool,
     step: int,
     cycle_dir: Path | None = None,
+    tokenizer: Any | None = None,
 ) -> tuple[tuple[str, str], ...]:
     """Apply SESA's frontier-failure gate to Solver Director skill evolution."""
 
-    if not config.skillbank_enabled:
+    if not config.skillbank_context_enabled:
         return ()
     if config.skillbank_mode == "director_skill_v2":
         from .skill_evolution_v2 import atomic_json, consolidate
 
         try:
-            return consolidate(config, result, step=step, mock=mock, cycle_dir=cycle_dir)
+            kwargs = {"tokenizer": tokenizer} if config.pats.enabled else {}
+            return consolidate(config, result, step=step, mock=mock, cycle_dir=cycle_dir, **kwargs)
         except Exception as exc:
             # Raw rollout evidence remains authoritative and can be re-ingested.
             # Skill maintenance must not cancel an otherwise valid PPO update.

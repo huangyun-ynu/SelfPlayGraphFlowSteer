@@ -547,75 +547,36 @@ def test_thread_rollout_pool_cancels_queued_jobs_when_iteration_stops() -> None:
     assert 2 not in started
 
 
-def test_thread_rollout_pool_grouped_refill_bounds_active_task_groups() -> None:
-    jobs = [
-        ("task-1", 0),
-        ("task-2", 0),
-        ("task-3", 0),
-        ("task-1", 1),
-        ("task-2", 1),
-        ("task-3", 1),
-    ]
-    started: list[tuple[str, int]] = []
+def test_thread_rollout_pool_resumable_refills_trajectory_slots() -> None:
+    slots = 24
+    lock = threading.Lock()
+    initial_slots_full = threading.Event()
+    active = 0
+    peak = 0
+    started: list[int] = []
 
-    def run(job: tuple[str, int]) -> tuple[str, int]:
-        started.append(job)
+    def run(job: int):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            started.append(job)
+            if active == slots:
+                initial_slots_full.set()
+        if job < slots:
+            assert initial_slots_full.wait(timeout=2)
+        if job == 0:
+            yield 0.05
+        with lock:
+            active -= 1
         return job
 
-    results = list(
-        ThreadRolloutPool[tuple[str, int], tuple[str, int]](workers=4).iter_map_grouped(
-            run,
-            jobs,
-            group_key=lambda job: job[0],
-            max_active_groups=1,
-        )
-    )
+    jobs = range(slots + 6)
+    results = list(ThreadRolloutPool[int, int](workers=slots).iter_map_resumable(run, jobs))
 
     assert set(results) == set(jobs)
-    assert [task_id for task_id, _index in started] == [
-        "task-1",
-        "task-1",
-        "task-2",
-        "task-2",
-        "task-3",
-        "task-3",
-    ]
-
-
-def test_thread_rollout_pool_grouped_refill_replaces_one_completed_group() -> None:
-    release_slow_group = threading.Event()
-    replacement_started = threading.Event()
-    jobs = [
-        ("fast", 0),
-        ("slow", 0),
-        ("waiting", 0),
-        ("fast", 1),
-        ("slow", 1),
-        ("waiting", 1),
-    ]
-
-    def run(job: tuple[str, int]) -> tuple[str, int]:
-        if job[0] == "slow":
-            release_slow_group.wait(timeout=5)
-        if job[0] == "waiting":
-            replacement_started.set()
-        return job
-
-    pool = ThreadRolloutPool[tuple[str, int], tuple[str, int]](workers=3)
-    with ThreadPoolExecutor(max_workers=1) as outer:
-        future = outer.submit(
-            lambda: list(
-                pool.iter_map_grouped(
-                    run,
-                    jobs,
-                    group_key=lambda job: job[0],
-                    max_active_groups=2,
-                )
-            )
-        )
-        assert replacement_started.wait(timeout=2)
-        release_slow_group.set()
-        assert set(future.result(timeout=5)) == set(jobs)
+    assert peak == slots
+    assert set(started[:slots]) == set(range(slots))
 
 
 def test_thread_rollout_pool_can_launch_a_full_packed_window() -> None:

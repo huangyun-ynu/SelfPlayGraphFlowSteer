@@ -339,7 +339,7 @@ def test_frontier_backend_failure_excludes_only_the_affected_proposer(
         output_dir=tmp_path,
         config=SelfPlayRunConfig(
             rollouts_per_task=2,
-            counterfactual_workers=4,
+            frontier_reverify_workers=4,
             frontier_reverify_fraction=1.0,
         ),
     )
@@ -431,7 +431,7 @@ def test_runner_reverifies_selected_tasks_in_one_global_graph_pool(tmp_path: Pat
         output_dir=tmp_path,
         config=SelfPlayRunConfig(
             rollouts_per_task=2,
-            counterfactual_workers=4,
+            frontier_reverify_workers=4,
             frontier_reverify_fraction=1.0,
         ),
     )

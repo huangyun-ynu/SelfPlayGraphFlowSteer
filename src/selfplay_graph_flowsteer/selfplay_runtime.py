@@ -64,6 +64,7 @@ from .selfplay import (
     graph_local_frontier,
     group_rollouts_by_task,
     select_frontier_reverification,
+    validate_pats_group_context,
 )
 from .swebench import SWEWorkspaceProvisioningError, swe_task_is_training_split
 from .training_selection import INDEPENDENT_SCHEMA, SELECTION_SCHEMAS, build_training_selection
@@ -90,6 +91,81 @@ PRIMARY_DURATION_ESTIMATE_VERSION = "20260909-cycle1-14x5-v1"
 _BINARY_OUTCOME_DATASETS = frozenset({"aime", "nq_open", "hotpotqa", "alfworld", "swe_bench"})
 
 
+class _PriorityTrajectoryGate:
+    """Bound primary and relation-counterfactual work to one trajectory pool."""
+
+    def __init__(self, limit: int, pending_primary: int) -> None:
+        if limit <= 0 or pending_primary < 0:
+            raise ValueError("invalid shared trajectory gate limits")
+        self.limit = int(limit)
+        self._pending_primary = int(pending_primary)
+        self._active = 0
+        self._cancelled = False
+        self._counterfactual_sequence = 0
+        self._counterfactual_waiters: dict[int, tuple[float, int]] = {}
+        self._condition = threading.Condition()
+
+    def acquire_primary(self) -> bool:
+        with self._condition:
+            while self._active >= self.limit and not self._cancelled:
+                self._condition.wait()
+            if self._cancelled:
+                return False
+            if self._pending_primary <= 0:
+                raise RuntimeError("shared trajectory gate has no pending primary admission")
+            self._pending_primary -= 1
+            self._active += 1
+            self._condition.notify_all()
+            return True
+
+    def skip_primary(self, count: int) -> None:
+        if count < 0:
+            raise ValueError("skipped primary count must be non-negative")
+        with self._condition:
+            if count > self._pending_primary:
+                raise RuntimeError("skipped primary count exceeds pending admissions")
+            self._pending_primary -= count
+            self._condition.notify_all()
+
+    def acquire_counterfactual(self, priority: float = 0.0) -> bool:
+        with self._condition:
+            ticket = self._counterfactual_sequence
+            self._counterfactual_sequence += 1
+            self._counterfactual_waiters[ticket] = (float(priority), ticket)
+            while (
+                self._active >= self.limit
+                or self._pending_primary > 0
+                or ticket
+                != max(
+                    self._counterfactual_waiters,
+                    key=lambda value: (
+                        self._counterfactual_waiters[value][0],
+                        -self._counterfactual_waiters[value][1],
+                    ),
+                )
+            ) and not self._cancelled:
+                self._condition.wait()
+            if self._cancelled:
+                self._counterfactual_waiters.pop(ticket, None)
+                return False
+            self._counterfactual_waiters.pop(ticket)
+            self._active += 1
+            self._condition.notify_all()
+            return True
+
+    def release(self) -> None:
+        with self._condition:
+            if self._active <= 0:
+                raise RuntimeError("shared trajectory gate released without an acquisition")
+            self._active -= 1
+            self._condition.notify_all()
+
+    def cancel(self) -> None:
+        with self._condition:
+            self._cancelled = True
+            self._condition.notify_all()
+
+
 def _primary_job_dataset(job: tuple[ProposedTask, int]) -> str:
     proposal, _rollout_index = job
     return canonical_dataset_name(proposal.task.metadata.get("dataset", proposal.task.task_type))
@@ -106,11 +182,31 @@ def _primary_job_duration_estimate_s(job: tuple[ProposedTask, int]) -> float:
     return PRIMARY_DATASET_DURATION_ESTIMATES_S.get(_primary_job_dataset(job), 182.0)
 
 
+def _historical_duration_estimate_s(
+    dataset: str,
+    estimates: dict[str, float],
+) -> float:
+    value = estimates.get(canonical_dataset_name(dataset), 0.0)
+    return float(value) if math.isfinite(float(value)) and float(value) > 0 else 0.0
+
+
 def _order_primary_jobs(
     jobs: Iterable[tuple[ProposedTask, int]],
     order: str,
+    *,
+    historical_duration_priority: bool = False,
+    historical_estimates_s: dict[str, float] | None = None,
 ) -> list[tuple[ProposedTask, int]]:
     indexed = list(enumerate(jobs))
+    if historical_duration_priority:
+        estimates = historical_estimates_s or {}
+        indexed.sort(
+            key=lambda item: (
+                -_historical_duration_estimate_s(_primary_job_dataset(item[1]), estimates),
+                item[0],
+            )
+        )
+        return [job for _index, job in indexed]
     if order == PRIMARY_JOB_ORDER_ROUND_ROBIN:
         return [job for _index, job in indexed]
     if order != PRIMARY_JOB_ORDER_LONG_TAIL_FIRST:
@@ -144,6 +240,9 @@ def _freeze_primary_job_schedule(
     window_start: int,
     jobs: Iterable[tuple[ProposedTask, int]],
     requested_order: str,
+    historical_duration_priority: bool = False,
+    historical_estimates_s: dict[str, float] | None = None,
+    duration_history_version: str = "",
 ) -> tuple[list[tuple[ProposedTask, int]], dict[str, Any]]:
     """Persist and replay the exact job order for one physical task window."""
 
@@ -178,7 +277,12 @@ def _freeze_primary_job_schedule(
             raise ValueError("frozen primary rollout schedule does not match planned jobs")
         return [jobs_by_id[rollout_id] for rollout_id in ordered_ids], window
 
-    ordered = _order_primary_jobs(jobs_by_id.values(), requested_order)
+    ordered = _order_primary_jobs(
+        jobs_by_id.values(),
+        requested_order,
+        historical_duration_priority=historical_duration_priority,
+        historical_estimates_s=historical_estimates_s,
+    )
     ordered_ids = [_primary_job_rollout_id(job) for job in ordered]
     entries = [
         {
@@ -187,13 +291,26 @@ def _freeze_primary_job_schedule(
             "task_id": str(job[0].task.task_id),
             "rollout_index": int(job[1]),
             "dataset": _primary_job_dataset(job),
-            "estimated_duration_s": _primary_job_duration_estimate_s(job),
+            "estimated_duration_s": (
+                _historical_duration_estimate_s(
+                    _primary_job_dataset(job), historical_estimates_s or {}
+                )
+                if historical_duration_priority
+                else _primary_job_duration_estimate_s(job)
+            ),
         }
         for rank, (rollout_id, job) in enumerate(zip(ordered_ids, ordered, strict=True))
     ]
     window = {
         "window_start": window_start,
         "order": requested_order,
+        "historical_duration_priority": historical_duration_priority,
+        "duration_history_version": duration_history_version,
+        "duration_estimates_s": (
+            dict(historical_estimates_s or {})
+            if historical_duration_priority
+            else dict(PRIMARY_DATASET_DURATION_ESTIMATES_S)
+        ),
         "ordered_rollout_ids": ordered_ids,
         "order_sha256": hashlib.sha256(
             json.dumps(ordered_ids, separators=(",", ":")).encode("utf-8")
@@ -203,6 +320,89 @@ def _freeze_primary_job_schedule(
     payload.setdefault("windows", []).append(window)
     _write_json(path, payload)
     return ordered, window
+
+
+def load_dataset_duration_history(
+    experiment_dir: str | Path,
+    *,
+    before_cycle: int,
+) -> dict[str, Any]:
+    """Build separate dataset means from durable prior-cycle trajectory records."""
+
+    root = Path(experiment_dir)
+    primary_samples: dict[str, list[float]] = {}
+    counterfactual_samples: dict[str, list[float]] = {}
+    source_cycles: list[int] = []
+    for cycle_dir in sorted(root.glob("cycle-*")):
+        try:
+            cycle = int(cycle_dir.name.removeprefix("cycle-"))
+        except ValueError:
+            continue
+        if cycle >= before_cycle:
+            continue
+        tasks = {
+            str(row.get("task", {}).get("task_id", row.get("task_id", ""))): row
+            for row in _read_jsonl(cycle_dir / "tasks.jsonl")
+        }
+        dataset_by_task = {
+            task_id: canonical_dataset_name(
+                row.get("task", {}).get("metadata", {}).get(
+                    "dataset", row.get("task", {}).get("task_type", "")
+                )
+            )
+            for task_id, row in tasks.items()
+        }
+        found = False
+        for row in _read_jsonl(cycle_dir / "solver_rollouts.jsonl"):
+            dataset = dataset_by_task.get(str(row.get("task_id", "")), "")
+            duration = row.get("metadata", {}).get("duration_s")
+            if (
+                dataset
+                and isinstance(duration, (int, float))
+                and math.isfinite(duration)
+                and duration > 0
+            ):
+                primary_samples.setdefault(dataset, []).append(float(duration))
+                found = True
+        latest_updates: dict[str, dict[str, Any]] = {}
+        for row in _read_jsonl(cycle_dir / "rollout_metadata_updates.jsonl"):
+            latest_updates[str(row.get("rollout_id", ""))] = row.get("metadata", {})
+        for rollout_id, metadata in latest_updates.items():
+            task_id = rollout_id.rsplit("-r", 1)[0]
+            dataset = dataset_by_task.get(task_id, "")
+            for branch in metadata.get("relation_counterfactual_branches", ()):
+                duration = branch.get("duration_s")
+                if (
+                    dataset
+                    and isinstance(duration, (int, float))
+                    and math.isfinite(duration)
+                    and duration > 0
+                ):
+                    counterfactual_samples.setdefault(dataset, []).append(float(duration))
+                    found = True
+        if found:
+            source_cycles.append(cycle)
+
+    def summarize(samples: dict[str, list[float]]) -> dict[str, dict[str, float | int]]:
+        return {
+            dataset: {
+                "mean_s": sum(values) / len(values),
+                "samples": len(values),
+            }
+            for dataset, values in sorted(samples.items())
+        }
+
+    payload: dict[str, Any] = {
+        "schema_version": "dataset_duration_history_v1",
+        "before_cycle": int(before_cycle),
+        "source_cycles": source_cycles,
+        "primary": summarize(primary_samples),
+        "counterfactual": summarize(counterfactual_samples),
+    }
+    payload["version"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return payload
 
 
 def _executor_compatibility_signature(manifest: dict[str, Any]) -> str:
@@ -1048,6 +1248,7 @@ class _PrimaryCollection:
     primary_duration_s: float
     decisions: tuple[Any, ...] = ()
     counterfactual_cancellation_event: threading.Event | None = None
+    counterfactual_trajectory_gate: _PriorityTrajectoryGate | None = None
     closed: bool = False
 
     def close(self) -> None:
@@ -2027,8 +2228,6 @@ class SelfPlayRunConfig:
     proposals_per_seed: int = 1
     task_window: int = 1
     require_all_proposals: bool = False
-    task_scheduling_policy: str = "logical_windows"
-    max_active_task_groups: int = 8
     graph_diversity_bonus: float = 0.0
     # ``off`` permits simple tasks to converge to a legal single-Agent graph.
     # ``stratified`` retains the historical topology-diversity collapse gate.
@@ -2094,7 +2293,7 @@ class SelfPlayRunConfig:
     # task identity, Executor seed, MACE snapshots, and route pool stay frozen.
     policy_sampling_attempt_offsets: dict[str, int] = field(default_factory=dict)
     route_health_path: Path | None = None
-    route_health_cooldown_s: float = 3600.0
+    route_health_cooldown_s: float = 600.0
     worker_runtime_routes: tuple[str, ...] = ()
     rollout_group_policy: str = "complete"
     minimum_complete_task_groups: int = 1
@@ -2114,7 +2313,7 @@ class SelfPlayRunConfig:
     # Explicit outcome convention; does not relax policy-data or full-group gates.
     uncertain_attribution_zero_reward: bool = False
     pipeline_counterfactuals: bool = False
-    counterfactual_workers: int = 2
+    frontier_reverify_workers: int = 2
     # One independently bounded wall-clock envelope is shared by the off/on
     # pair.  It never borrows from, or shortens, the primary rollout deadline.
     counterfactual_pair_wall_time_s: float = 900.0
@@ -2132,6 +2331,12 @@ class SelfPlayRunConfig:
     # versioned historical duration estimate.  This is ordinary list scheduling,
     # not reward- or outcome-conditioned sample selection.
     primary_job_order: str = PRIMARY_JOB_ORDER_ROUND_ROBIN
+    # Optional cycle-frozen scheduling from prior-cycle dataset averages. Primary
+    # and counterfactual samples use separate histories because their costs differ.
+    historical_duration_priority: bool = False
+    primary_dataset_duration_estimates_s: dict[str, float] = field(default_factory=dict)
+    counterfactual_dataset_duration_estimates_s: dict[str, float] = field(default_factory=dict)
+    duration_history_version: str = ""
 
 
 class SelfPlayRolloutRunner:
@@ -2177,26 +2382,21 @@ class SelfPlayRolloutRunner:
             raise ValueError("task_execution_window must be positive")
         if not 0.0 <= self.config.frontier_reverify_fraction <= 1.0:
             raise ValueError("frontier_reverify_fraction must be in [0, 1]")
-        if self.config.task_scheduling_policy not in {
-            "logical_windows",
-            "frozen_manifest_dynamic",
-        }:
-            raise ValueError(
-                "task_scheduling_policy must be 'logical_windows' or 'frozen_manifest_dynamic'"
-            )
-        if self.config.max_active_task_groups <= 0:
-            raise ValueError("max_active_task_groups must be positive")
         if self.config.primary_job_order not in PRIMARY_JOB_ORDER_CHOICES:
             raise ValueError("primary_job_order must be 'round_robin' or 'long_tail_first'")
-        if (
-            self.config.task_scheduling_policy == "frozen_manifest_dynamic"
-            and not self.config.require_all_proposals
+        for label, estimates in (
+            ("primary", self.config.primary_dataset_duration_estimates_s),
+            ("counterfactual", self.config.counterfactual_dataset_duration_estimates_s),
         ):
-            raise ValueError(
-                "frozen_manifest_dynamic scheduling requires require_all_proposals=true"
-            )
-        if self.config.counterfactual_workers <= 0:
-            raise ValueError("counterfactual_workers must be positive")
+            if any(
+                not canonical_dataset_name(dataset)
+                or not math.isfinite(float(value))
+                or float(value) <= 0
+                for dataset, value in estimates.items()
+            ):
+                raise ValueError(f"{label} dataset duration estimates must be finite and positive")
+        if self.config.frontier_reverify_workers <= 0:
+            raise ValueError("frontier_reverify_workers must be positive")
         if self.config.counterfactual_pair_wall_time_s <= 0:
             raise ValueError("counterfactual_pair_wall_time_s must be positive")
         if self.config.graph_diversity_bonus != 0.0:
@@ -2871,12 +3071,29 @@ class SelfPlayRolloutRunner:
                     "without recollecting missing rollout ids: " + ", ".join(missing_persisted_ids)
                 )
         failed_task_ids: list[str] = []
-        # A single cycle-wide queue receives every optional relation probe as
-        # soon as its primary row is durable.  It is deliberately independent
-        # of the primary rollout pool and its deadlines.
+        pending_primary_ids = {
+            _rollout_id(task_id, rollout_index)
+            for *_prefix, task_id in task_specs
+            if task_id not in quarantined_task_ids
+            for rollout_index in range(self.config.rollouts_per_task)
+            if _rollout_id(task_id, rollout_index) not in rollouts_by_id
+            and _rollout_id(task_id, rollout_index) not in terminal_failed_ids
+        }
+        shared_trajectory_gate = (
+            _PriorityTrajectoryGate(self.config.workers, len(pending_primary_ids))
+            if self.config.pipeline_counterfactuals
+            else None
+        )
+        # Relation probes are queued as soon as their primary row is durable,
+        # but share the primary trajectory ceiling and yield every new slot to
+        # primary work that has not yet been admitted.
         dynamic_counterfactual_executor = (
             ThreadPoolExecutor(
-                max_workers=self.config.counterfactual_workers,
+                max_workers=(
+                    max(1, self.config.task_window * self.config.rollouts_per_task)
+                    if self.config.historical_duration_priority
+                    else max(1, (self.config.workers + 1) // 2)
+                ),
                 thread_name_prefix="counterfactual-stream",
             )
             if self.config.pipeline_counterfactuals
@@ -2897,6 +3114,7 @@ class SelfPlayRolloutRunner:
             rollout_id = primary.rollout.trajectory.rollout_id
             task_id = primary.proposal.task.task_id
             primary.counterfactual_cancellation_event = counterfactual_cancellation
+            primary.counterfactual_trajectory_gate = shared_trajectory_gate
             with counterfactual_commit_lock:
                 counterfactual_status[rollout_id] = "queued"
 
@@ -2915,7 +3133,7 @@ class SelfPlayRolloutRunner:
                         "rollout_id": rollout_id,
                         "timestamp": time.time(),
                         "priority": "counterfactual",
-                        "scheduling": "after_primary_rollout",
+                        "scheduling": "shared_trajectory_pool",
                         "window_index": window_index,
                     },
                 )
@@ -2947,7 +3165,7 @@ class SelfPlayRolloutRunner:
                             "rollout_id": rollout_id,
                             "timestamp": time.time(),
                             "priority": "counterfactual",
-                            "scheduling": "after_primary_rollout",
+                            "scheduling": "shared_trajectory_pool",
                             "window_index": window_index,
                         },
                     )
@@ -2983,6 +3201,8 @@ class SelfPlayRolloutRunner:
                 # attached to a failed cycle.
                 with counterfactual_commit_lock:
                     counterfactual_cancellation.set()
+                    if shared_trajectory_gate is not None:
+                        shared_trajectory_gate.cancel()
                     for future, primary in dynamic_counterfactual_futures:
                         rollout_id = primary.rollout.trajectory.rollout_id
                         status = counterfactual_status.get(rollout_id, "queued")
@@ -3037,6 +3257,8 @@ class SelfPlayRolloutRunner:
                     ),
                     "boundary_wait_s": time.monotonic() - wait_started,
                     "primary_budget_shared": False,
+                    "shared_trajectory_slots": self.config.workers,
+                    "branch_slots_per_pair": 2,
                     "pair_wall_budget_s": self.config.counterfactual_pair_wall_time_s,
                     "timestamp": time.time(),
                 },
@@ -3061,11 +3283,6 @@ class SelfPlayRolloutRunner:
         deferred_collapse_error: RuntimeError | None = None
         if self.config.task_execution_window is not None:
             physical_window_size = self.config.task_execution_window
-        elif self.config.task_scheduling_policy == "frozen_manifest_dynamic":
-            # Preserve the dynamic scheduler's ability to refill active groups
-            # when no MACE publication barrier was requested.  A configured
-            # MACE window remains an explicit physical barrier above.
-            physical_window_size = max(1, len(task_specs))
         else:
             physical_window_size = self.config.task_window
         if self.config.pipeline_frontier_by_dataset and physical_window_size < len(task_specs):
@@ -3076,7 +3293,7 @@ class SelfPlayRolloutRunner:
         frontier_pipeline_started = time.monotonic()
         frontier_pipeline_executor = (
             ThreadPoolExecutor(
-                max_workers=self.config.counterfactual_workers,
+                max_workers=self.config.frontier_reverify_workers,
                 thread_name_prefix="frontier-dataset",
             )
             if self.config.pipeline_frontier_by_dataset
@@ -3085,7 +3302,7 @@ class SelfPlayRolloutRunner:
         )
         frontier_dataset_futures: dict[str, Future[dict[str, dict[str, Any]]]] = {}
         frontier_graph_semaphore = (
-            threading.Semaphore(self.config.counterfactual_workers)
+            threading.Semaphore(self.config.frontier_reverify_workers)
             if frontier_pipeline_executor is not None
             else None
         )
@@ -3204,6 +3421,12 @@ class SelfPlayRolloutRunner:
                         attempts.append(event)
                         _append_jsonl(self.output_dir / "proposal_attempts.jsonl", event)
                         failed_task_ids.append(task_id)
+                        if shared_trajectory_gate is not None:
+                            skipped = sum(
+                                _rollout_id(task_id, rollout_index) in pending_primary_ids
+                                for rollout_index in range(self.config.rollouts_per_task)
+                            )
+                            shared_trajectory_gate.skip_primary(skipped)
                         continue
                     selection_group = str(
                         generated.metadata.get("selection_group", f"seed-{index}")
@@ -3256,6 +3479,9 @@ class SelfPlayRolloutRunner:
                 window_start=window_start,
                 jobs=planned_jobs,
                 requested_order=self.config.primary_job_order,
+                historical_duration_priority=self.config.historical_duration_priority,
+                historical_estimates_s=self.config.primary_dataset_duration_estimates_s,
+                duration_history_version=self.config.duration_history_version,
             )
             jobs = [
                 job
@@ -3273,15 +3499,6 @@ class SelfPlayRolloutRunner:
             }
             effective_primary_job_order = str(frozen_job_schedule["order"])
             scheduler_path = self.output_dir / "rollout_scheduler_events.jsonl"
-            scheduler_state_lock = threading.Lock()
-            scheduler_started_groups: set[str] = set()
-            scheduler_finished_by_group: dict[str, int] = {}
-            scheduler_expected_by_group: dict[str, int] = {}
-            for proposal, _rollout_index in jobs:
-                task_id = str(proposal.task.task_id)
-                scheduler_expected_by_group[task_id] = (
-                    scheduler_expected_by_group.get(task_id, 0) + 1
-                )
 
             def scheduler_event(
                 event: str,
@@ -3329,10 +3546,6 @@ class SelfPlayRolloutRunner:
                 job,
                 collection_cancelled=collection_cancelled,
                 scheduler_event=scheduler_event,
-                scheduler_state_lock=scheduler_state_lock,
-                scheduler_started_groups=scheduler_started_groups,
-                scheduler_finished_by_group=scheduler_finished_by_group,
-                scheduler_expected_by_group=scheduler_expected_by_group,
             ):
                 proposal, rollout_index = job
                 attempt_events: list[dict[str, Any]] = []
@@ -3340,16 +3553,6 @@ class SelfPlayRolloutRunner:
                 task_id = str(proposal.task.task_id)
                 rollout_id = _rollout_id(task_id, rollout_index)
                 worker_name = threading.current_thread().name
-                with scheduler_state_lock:
-                    if task_id not in scheduler_started_groups:
-                        scheduler_started_groups.add(task_id)
-                        scheduler_event(
-                            "group_admitted",
-                            task_id=task_id,
-                            dataset=dataset,
-                            expected_jobs=scheduler_expected_by_group[task_id],
-                            worker=worker_name,
-                        )
                 scheduler_event(
                     "job_started",
                     task_id=task_id,
@@ -3369,17 +3572,6 @@ class SelfPlayRolloutRunner:
                         worker=worker_name,
                         status=status,
                     )
-                    with scheduler_state_lock:
-                        finished = scheduler_finished_by_group.get(task_id, 0) + 1
-                        scheduler_finished_by_group[task_id] = finished
-                        if finished == scheduler_expected_by_group[task_id]:
-                            scheduler_event(
-                                "group_released",
-                                task_id=task_id,
-                                dataset=dataset,
-                                completed_jobs=finished,
-                                worker=worker_name,
-                            )
 
                 maximum_attempt = (
                     self.config.swe_non_trainable_recovery_attempts
@@ -3819,37 +4011,39 @@ class SelfPlayRolloutRunner:
                         return done.value
                     collection_cancelled.wait(delay_s)
 
+            def collect_primary_steps_in_shared_slot(job):
+                assert shared_trajectory_gate is not None
+                if not shared_trajectory_gate.acquire_primary():
+                    raise RuntimeError("shared trajectory collection was cancelled")
+                try:
+                    return (yield from collect_primary_steps(job))
+                finally:
+                    shared_trajectory_gate.release()
+
+            primary_step_collector = (
+                collect_primary_steps_in_shared_slot
+                if shared_trajectory_gate is not None
+                else collect_primary_steps
+            )
+
+            def collect_primary_outcome_with_shared_slot(job):
+                steps = primary_step_collector(job)
+                while True:
+                    try:
+                        delay_s = next(steps)
+                    except StopIteration as done:
+                        return done.value
+                    collection_cancelled.wait(delay_s)
+
             resumable_map = getattr(self.rollout_pool, "iter_map_resumable", None)
             iter_map = getattr(self.rollout_pool, "iter_map", None)
-            grouped_iter_map = getattr(self.rollout_pool, "iter_map_grouped", None)
             if callable(resumable_map):
-                results = resumable_map(
-                    collect_primary_steps,
-                    jobs,
-                    group_key=lambda job: str(job[0].task.task_id),
-                    max_active_groups=(
-                        self.config.max_active_task_groups
-                        if self.config.task_scheduling_policy == "frozen_manifest_dynamic"
-                        else max(1, len(jobs))
-                    ),
-                )
-            elif self.config.task_scheduling_policy == "frozen_manifest_dynamic":
-                if not callable(grouped_iter_map):
-                    raise TypeError(
-                        "frozen_manifest_dynamic scheduling requires a rollout pool "
-                        "with iter_map_grouped"
-                    )
-                results = grouped_iter_map(
-                    collect_primary_outcome,
-                    jobs,
-                    group_key=lambda job: str(job[0].task.task_id),
-                    max_active_groups=self.config.max_active_task_groups,
-                )
+                results = resumable_map(primary_step_collector, jobs)
             else:
                 results = (
-                    iter_map(collect_primary_outcome, jobs)
+                    iter_map(collect_primary_outcome_with_shared_slot, jobs)
                     if callable(iter_map)
-                    else self.rollout_pool.map(collect_primary_outcome, jobs)
+                    else self.rollout_pool.map(collect_primary_outcome_with_shared_slot, jobs)
                 )
             collection_errors: list[dict[str, Any]] = []
             counterfactual_jobs: list[_PrimaryCollection] = []
@@ -3912,6 +4106,7 @@ class SelfPlayRolloutRunner:
                         )
                 if error is not None:
                     circuit_relevant = False
+                    persistent_circuit_open = False
                     error_event = {
                         "task_id": proposal.task.task_id,
                         "rollout_id": rollout_id,
@@ -3976,7 +4171,6 @@ class SelfPlayRolloutRunner:
                         ) and (error.counts_toward_route_circuit or error.disable_route)
                         if circuit_relevant:
                             consecutive_backend_failures += 1
-                        persistent_circuit_open = False
                         persistent_states: dict[str, dict[str, Any]] = {}
                         for detail in error.failure_details:
                             kind = str(detail.get("kind", "unknown"))
@@ -4028,6 +4222,68 @@ class SelfPlayRolloutRunner:
                             {
                                 **error_event,
                                 "stage": "primary_worker_execution",
+                                "event": "terminal_backend_failure",
+                            },
+                        )
+                    elif classification.backend_failure:
+                        failure = classification.to_dict()
+                        error_event["backend_failure"] = failure
+                        for request_event in getattr(error, "request_events", ()):
+                            _append_jsonl(
+                                self.output_dir / "backend_api_events.jsonl",
+                                {
+                                    "task_id": proposal.task.task_id,
+                                    "rollout_id": rollout_id,
+                                    "rollout_index": rollout_index,
+                                    **request_event,
+                                },
+                            )
+                        backend_failure_total += 1
+                        route = classification.route or "unknown"
+                        backend_failure_by_route[route] = backend_failure_by_route.get(route, 0) + 1
+                        backend_failure_by_kind[classification.kind] = (
+                            backend_failure_by_kind.get(classification.kind, 0) + 1
+                        )
+                        backend_failure_by_origin[classification.origin] = (
+                            backend_failure_by_origin.get(classification.origin, 0) + 1
+                        )
+                        circuit_relevant = bool(
+                            classification.counts_toward_route_circuit
+                            or classification.disable_route
+                        )
+                        if circuit_relevant:
+                            consecutive_backend_failures += 1
+                            increment = (
+                                self.config.backend_failure_route_threshold
+                                if classification.disable_route
+                                else 1
+                            )
+                            consecutive_backend_failures_by_route[route] = (
+                                consecutive_backend_failures_by_route.get(route, 0) + increment
+                            )
+                        if route_health_store is not None and circuit_relevant:
+                            state = route_health_store.record_failure(
+                                route,
+                                failure_type=classification.kind,
+                                threshold=(
+                                    1
+                                    if classification.disable_route
+                                    else self.config.backend_failure_route_threshold
+                                ),
+                                evidence={
+                                    "output_dir": str(self.output_dir),
+                                    "rollout_id": rollout_id,
+                                    "stage": classification.stage,
+                                    "failure_details": [failure],
+                                },
+                            )
+                            error_event["persistent_route_health"] = {route: state}
+                            persistent_circuit_open = state.get("status") == "open"
+                        _append_jsonl(
+                            self.output_dir / "backend_api_events.jsonl",
+                            {
+                                **error_event,
+                                "stage": classification.stage,
                                 "event": "terminal_backend_failure",
                             },
                         )
@@ -4116,10 +4372,7 @@ class SelfPlayRolloutRunner:
                             close_results()
                         break
                     circuit_open = (
-                        (
-                            isinstance(error, WorkerBackendUnavailableError)
-                            and persistent_circuit_open
-                        )
+                        persistent_circuit_open
                         or (
                             circuit_relevant
                             and consecutive_backend_failures
@@ -4390,102 +4643,6 @@ class SelfPlayRolloutRunner:
                 circuit_open=circuit_open,
             )
 
-            if self.config.task_scheduling_policy == "frozen_manifest_dynamic":
-                # Split this physical collection window into logical training
-                # windows without closing the cycle-wide counterfactual queue.
-                # The queue is frozen only once, at the actual update boundary
-                # after every physical collection window has finished.
-                complete_by_task = dict(current_window.window_complete_entries)
-                logical_windows: list[_WindowPipelineState] = []
-                for logical_offset in range(
-                    0, len(current_window.window_entries), self.config.task_window
-                ):
-                    logical_entries = current_window.window_entries[
-                        logical_offset : logical_offset + self.config.task_window
-                    ]
-                    logical_task_ids = {task_id for task_id, _proposal in logical_entries}
-                    logical_windows.append(
-                        _WindowPipelineState(
-                            window_start=window_start + logical_offset,
-                            window_entries=logical_entries,
-                            window_complete_entries=[
-                                (task_id, complete_by_task[task_id])
-                                for task_id, _proposal in logical_entries
-                                if task_id in complete_by_task
-                            ],
-                            collection_errors=[
-                                error
-                                for error in current_window.collection_errors
-                                if str(error.get("task_id", "")) in logical_task_ids
-                            ],
-                            counterfactual_jobs=[
-                                primary
-                                for primary in current_window.counterfactual_jobs
-                                if primary.proposal.task.task_id in logical_task_ids
-                            ],
-                            circuit_open=current_window.circuit_open,
-                        )
-                    )
-                for logical_index, logical_window in enumerate(logical_windows):
-                    if logical_window.counterfactual_jobs and not circuit_open:
-                        if self.config.pipeline_counterfactuals:
-                            _append_jsonl(
-                                self.output_dir / "pipeline_events.jsonl",
-                                {
-                                    "event": "counterfactual_window_started",
-                                    "window_index": logical_window.window_start
-                                    // max(1, self.config.task_window),
-                                    "timestamp": time.time(),
-                                    "jobs": len(logical_window.counterfactual_jobs),
-                                    "workers": self.config.counterfactual_workers,
-                                    "priority": "counterfactual",
-                                    "scheduling": "after_dynamic_primary_collection",
-                                },
-                            )
-                        counterfactual_pool = (
-                            ThreadRolloutPool(self.config.counterfactual_workers)
-                            if self.config.pipeline_counterfactuals
-                            else self.rollout_pool
-                        )
-                        counterfactual_results = self._collect_counterfactual_batch(
-                            logical_window.counterfactual_jobs,
-                            pool=counterfactual_pool,
-                            low_priority=self.config.pipeline_counterfactuals,
-                        )
-                        self._persist_counterfactual_batch(counterfactual_results)
-                        if self.config.pipeline_counterfactuals:
-                            _append_jsonl(
-                                self.output_dir / "pipeline_events.jsonl",
-                                {
-                                    "event": "counterfactual_window_completed",
-                                    "window_index": logical_window.window_start
-                                    // max(1, self.config.task_window),
-                                    "timestamp": time.time(),
-                                    "jobs": len(logical_window.counterfactual_jobs),
-                                    "scheduling": "after_dynamic_primary_collection",
-                                },
-                            )
-                        logical_window.counterfactual_jobs = []
-                    collapse_error = self._finalize_window(
-                        logical_window,
-                        proposals=proposals,
-                        rollouts=rollouts,
-                        rollouts_by_id=rollouts_by_id,
-                        observations=observations,
-                        observed_task_ids=observed_task_ids,
-                        collapse_windows=collapse_windows,
-                        inherited_collapse_streak=inherited_collapse_streak,
-                        quarantined_task_ids=quarantined_task_ids,
-                    )
-                    if collapse_error is not None:
-                        for remaining_window in logical_windows[logical_index + 1 :]:
-                            for primary in remaining_window.counterfactual_jobs:
-                                primary.close()
-                        raise collapse_error
-                if circuit_open:
-                    break
-                continue
-
             if self.config.pipeline_counterfactuals:
                 # Relation probes already run in the cycle-wide queue.  Logical
                 # curriculum windows can finalize without waiting for them.
@@ -4542,8 +4699,8 @@ class SelfPlayRolloutRunner:
             deferred_collapse_error = deferred_collapse_error or collapse_error
             pending_window = None
         finish_dynamic_counterfactuals(
-            reason="training_batch_boundary",
-            wait_for_completion=True,
+            reason=("backend_circuit_open" if circuit_open else "training_batch_boundary"),
+            wait_for_completion=not circuit_open,
         )
         if deferred_collapse_error is not None:
             raise deferred_collapse_error
@@ -4822,7 +4979,7 @@ class SelfPlayRolloutRunner:
                         {str(row.get("task_id", "")) for row in frontier_failures} - {""}
                     ),
                     "scheduling": "dataset_early_global_pool",
-                    "workers": self.config.counterfactual_workers,
+                    "workers": self.config.frontier_reverify_workers,
                     "submitted_datasets": sorted(frontier_dataset_futures),
                 },
             )
@@ -4924,6 +5081,7 @@ class SelfPlayRolloutRunner:
         proposals: list[ProposedTask],
         rollouts: list[SolverRollout],
     ) -> dict[str, dict[str, Any]]:
+        validate_pats_group_context(rollouts)
         phase_started = time.monotonic()
         override_path = self.output_dir / "frontier_execution_override.json"
         override = json.loads(override_path.read_text()) if override_path.exists() else {}
@@ -5039,7 +5197,7 @@ class SelfPlayRolloutRunner:
         pending_graph_futures: dict[Future[dict[str, Any]], tuple[str, int]] = {}
         task_contexts: dict[str, dict[str, Any]] = {}
         graph_results_by_task: dict[str, dict[int, dict[str, Any]]] = {}
-        executor = ThreadPoolExecutor(max_workers=self.config.counterfactual_workers)
+        executor = ThreadPoolExecutor(max_workers=self.config.frontier_reverify_workers)
         nonreplayable_failures: dict[str, list[dict[str, Any]]] = {}
         for task_id in sorted(selected_ids):
             proposal = proposals_by_id[task_id]
@@ -5351,7 +5509,7 @@ class SelfPlayRolloutRunner:
                 "completed_task_count": len(records),
                 "excluded_task_count": len(infrastructure_failures_by_task),
                 "scheduling": "global_graph_pool",
-                "workers": self.config.counterfactual_workers,
+                "workers": self.config.frontier_reverify_workers,
             },
         )
         return records
@@ -5759,6 +5917,22 @@ class SelfPlayRolloutRunner:
                 else {"supported": False, "reason": "full_graph_capability_unavailable"}
             )
             rollout.trajectory.metadata["graph_counterfactual_capability"] = capability
+            if (
+                capability["supported"]
+                and self.config.counterfactuals_per_rollout > 0
+                and (
+                    not rollout.graph.output_agent
+                    or any(not node.configured for node in rollout.graph.nodes.values())
+                )
+            ):
+                # A terminal policy failure can remain valid graph-level evidence,
+                # but neither relation sibling can execute an unfinished graph.
+                primary.decisions = ()
+                rollout.trajectory.metadata["relation_counterfactual_candidate_count"] = 0
+                rollout.trajectory.metadata["relation_counterfactual_skip_reason"] = (
+                    "incomplete_terminal_graph"
+                )
+                return
             action_spans = rollout.trajectory.metadata.get(
                 "relation_choice_token_spans",
                 rollout.trajectory.metadata.get("action_token_spans", ()),
@@ -5819,19 +5993,32 @@ class SelfPlayRolloutRunner:
         )
         _primary_timeout_s, request_timeout_s, request_overrides = self._deadline_profile(proposal)
         pair_budget = self.config.counterfactual_pair_wall_time_s
-        pair_deadline = RolloutDeadline(
-            exclude_failed_request_time=True,
-            absolute_wall_timeout_s=pair_budget,
-            total_timeout_s=pair_budget,
-            no_progress_timeout_s=min(self.config.rollout_no_progress_time_s, pair_budget),
-            request_timeout_s=min(request_timeout_s, pair_budget),
-            request_timeout_overrides_s={
-                route: min(value, pair_budget) for route, value in request_overrides.items()
-            },
-            cancellation_event=primary.counterfactual_cancellation_event,
-            cancellation_reason="counterfactual_collection_aborted",
-        )
+        pair_deadline_lock = threading.Lock()
+        pair_deadline_holder: list[RolloutDeadline] = []
+
+        def get_pair_deadline() -> RolloutDeadline:
+            with pair_deadline_lock:
+                if not pair_deadline_holder:
+                    pair_deadline_holder.append(
+                        RolloutDeadline(
+                            exclude_failed_request_time=True,
+                            absolute_wall_timeout_s=pair_budget,
+                            total_timeout_s=pair_budget,
+                            no_progress_timeout_s=min(
+                                self.config.rollout_no_progress_time_s, pair_budget
+                            ),
+                            request_timeout_s=min(request_timeout_s, pair_budget),
+                            request_timeout_overrides_s={
+                                route: min(value, pair_budget)
+                                for route, value in request_overrides.items()
+                            },
+                            cancellation_event=primary.counterfactual_cancellation_event,
+                            cancellation_reason="counterfactual_collection_aborted",
+                        )
+                    )
+                return pair_deadline_holder[0]
         branch_audits: list[dict[str, Any]] = []
+        branch_audit_lock = threading.Lock()
         rollout.trajectory.metadata["relation_counterfactual_execution_mode"] = "full_graph_v1"
         rollout.trajectory.metadata["relation_counterfactual_budget"] = {
             "scope": "independent_off_on_pair",
@@ -5839,12 +6026,30 @@ class SelfPlayRolloutRunner:
             "primary_duration_deducted": False,
         }
 
-        def evaluate_branch(graph: MultiAgentGraph, same_seed: int) -> float:
-            pair_deadline.check("counterfactual_branch_start")
-            branch = self.application_factory(same_seed)
+        def evaluate_branch(
+            graph: MultiAgentGraph,
+            same_seed: int,
+            branch_name: str,
+        ) -> float:
+            slot_gate = primary.counterfactual_trajectory_gate
+            counterfactual_priority = (
+                _historical_duration_estimate_s(
+                    proposal.task.metadata.get("dataset", proposal.task.task_type),
+                    self.config.counterfactual_dataset_duration_estimates_s,
+                )
+                if self.config.historical_duration_priority
+                else 0.0
+            )
+            if slot_gate is not None and not slot_gate.acquire_counterfactual(
+                counterfactual_priority
+            ):
+                raise RuntimeError("counterfactual trajectory collection was cancelled")
             started = time.monotonic()
-            branch_name = "off" if len(branch_audits) % 2 == 0 else "on"
+            branch = None
             try:
+                pair_deadline = get_pair_deadline()
+                pair_deadline.check("counterfactual_branch_start")
+                branch = self.application_factory(same_seed)
                 expected_bundle = _rollout_executor_compatibility_signature(rollout)
                 actual_bundle = _executor_compatibility_signature(branch.config.model_manifest())
                 if expected_bundle and expected_bundle != actual_bundle:
@@ -5854,39 +6059,58 @@ class SelfPlayRolloutRunner:
                 # Both branches consume the same independent deadline.  The
                 # second branch receives only what remains after the first.
                 branch.set_rollout_deadline(pair_deadline)
-                score = float(
-                    branch.evaluate_graph(copy.deepcopy(proposal.task), graph, seed=same_seed)
-                )
-                branch_audits.append(
-                    {
-                        **getattr(branch, "last_graph_evaluation", {}),
-                        "score": score,
-                        "pair_wall_budget_s": pair_budget,
-                        "branch": branch_name,
-                        "completed": True,
-                        "duration_s": time.monotonic() - started,
-                        "pair_deadline": pair_deadline.diagnostics(),
-                    }
-                )
+                with request_priority("counterfactual"):
+                    score = float(
+                        branch.evaluate_graph(
+                            copy.deepcopy(proposal.task), graph, seed=same_seed
+                        )
+                    )
+                with branch_audit_lock:
+                    branch_audits.append(
+                        {
+                            **getattr(branch, "last_graph_evaluation", {}),
+                            "score": score,
+                            "pair_wall_budget_s": pair_budget,
+                            "branch": branch_name,
+                            "completed": True,
+                            "duration_s": time.monotonic() - started,
+                            "pair_deadline": pair_deadline.diagnostics(),
+                        }
+                    )
                 return score
             except Exception as exc:
-                branch_audits.append(
-                    {
-                        **getattr(branch, "last_graph_evaluation", {}),
-                        "branch": branch_name,
-                        "completed": False,
-                        "pair_wall_budget_s": pair_budget,
-                        "duration_s": time.monotonic() - started,
-                        "error_type": type(exc).__name__,
-                        "error": str(exc),
-                        "request_budget": getattr(exc, "budget", {}),
-                        "request_events": getattr(exc, "request_events", []),
-                        "pair_deadline": pair_deadline.diagnostics(),
-                    }
-                )
+                with branch_audit_lock:
+                    branch_audits.append(
+                        {
+                            **getattr(branch, "last_graph_evaluation", {}),
+                            "branch": branch_name,
+                            "completed": False,
+                            "pair_wall_budget_s": pair_budget,
+                            "duration_s": time.monotonic() - started,
+                            "error_type": type(exc).__name__,
+                            "error": str(exc),
+                            "request_budget": getattr(exc, "budget", {}),
+                            "request_events": getattr(exc, "request_events", []),
+                            "pair_deadline": pair_deadline.diagnostics(),
+                        }
+                    )
                 raise
             finally:
-                branch.close()
+                close = getattr(branch, "close", None)
+                if callable(close):
+                    close()
+                if slot_gate is not None:
+                    slot_gate.release()
+
+        def evaluate_pair(
+            absent: MultiAgentGraph,
+            present: MultiAgentGraph,
+            same_seed: int,
+        ) -> tuple[float, float]:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                absent_future = executor.submit(evaluate_branch, absent, same_seed, "off")
+                present_future = executor.submit(evaluate_branch, present, same_seed, "on")
+                return float(absent_future.result()), float(present_future.result())
 
         try:
             if pair_budget <= 0.5:
@@ -5894,6 +6118,7 @@ class SelfPlayRolloutRunner:
                     "insufficient_paired_probe_budget"
                 )
                 return rollout, []
+            sequential_branch_names = iter(("off", "on"))
             for decision in primary.decisions:
                 try:
                     credit = evaluate_relation_decision(
@@ -5901,7 +6126,14 @@ class SelfPlayRolloutRunner:
                         rollout_id=rollout.trajectory.rollout_id,
                         seed=primary.executor_seed,
                         action_token_span=action_spans[decision.action_index],
-                        evaluate=evaluate_branch,
+                        evaluate=lambda graph, seed: evaluate_branch(
+                            graph, seed, next(sequential_branch_names)
+                        ),
+                        evaluate_pair=(
+                            evaluate_pair
+                            if primary.counterfactual_trajectory_gate is not None
+                            else None
+                        ),
                     )
                 except Exception as exc:
                     # A relation probe is optional local credit. Its failure must
@@ -5918,7 +6150,9 @@ class SelfPlayRolloutRunner:
                     continue
                 if credit:
                     credits.append(credit.to_dict())
-            rollout.trajectory.metadata["relation_counterfactual_branches"] = branch_audits
+            rollout.trajectory.metadata["relation_counterfactual_branches"] = sorted(
+                branch_audits, key=lambda item: (item.get("branch") == "on", item.get("branch", ""))
+            )
             rollout.trajectory.metadata["relation_counterfactual_success_count"] = len(credits)
             if counterfactual_errors:
                 rollout.trajectory.metadata["relation_counterfactual_errors"] = (
@@ -5946,6 +6180,20 @@ class SelfPlayRolloutRunner:
             except Exception as exc:  # optional credit never invalidates a primary
                 return primary, None, exc
 
+        if self.config.historical_duration_priority:
+            primaries = sorted(
+                enumerate(primaries),
+                key=lambda item: (
+                    -_historical_duration_estimate_s(
+                        item[1].proposal.task.metadata.get(
+                            "dataset", item[1].proposal.task.task_type
+                        ),
+                        self.config.counterfactual_dataset_duration_estimates_s,
+                    ),
+                    item[0],
+                ),
+            )
+            primaries = [primary for _index, primary in primaries]
         iter_map = getattr(pool, "iter_map", None)
         results = (
             iter_map(collect, primaries) if callable(iter_map) else pool.map(collect, primaries)
@@ -6353,14 +6601,17 @@ class SelfPlayRolloutRunner:
                 },
                 "rollout_batching": {
                     "mode": "independent_requests_continuous_server_batch",
-                    "task_scheduling_policy": self.config.task_scheduling_policy,
                     "primary_job_order": self.config.primary_job_order,
                     "primary_duration_estimate_version": (PRIMARY_DURATION_ESTIMATE_VERSION),
-                    "max_active_task_groups": (
-                        self.config.max_active_task_groups
-                        if self.config.task_scheduling_policy == "frozen_manifest_dynamic"
-                        else self.config.task_window
+                    "historical_duration_priority": self.config.historical_duration_priority,
+                    "duration_history_version": self.config.duration_history_version,
+                    "primary_dataset_duration_estimates_s": dict(
+                        self.config.primary_dataset_duration_estimates_s
                     ),
+                    "counterfactual_dataset_duration_estimates_s": dict(
+                        self.config.counterfactual_dataset_duration_estimates_s
+                    ),
+                    "slot_refill_policy": "trajectory_completion",
                     "curriculum_observation_order": "logical_manifest_windows",
                     "logical_window_size": (
                         self.config.task_window * self.config.rollouts_per_task
@@ -6374,9 +6625,10 @@ class SelfPlayRolloutRunner:
                     **(
                         {
                             "counterfactual_pipeline": (
-                                "global_queue_as_each_primary_rollout_completes"
+                                "shared_priority_queue_as_each_primary_rollout_completes"
                             ),
-                            "counterfactual_workers": self.config.counterfactual_workers,
+                            "shared_trajectory_slots": self.config.workers,
+                            "trajectory_priority": "primary_before_counterfactual",
                             "counterfactual_pair_wall_time_s": (
                                 self.config.counterfactual_pair_wall_time_s
                             ),

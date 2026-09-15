@@ -9,6 +9,7 @@ This project builds on the following designs and implementation patterns:
 - **MACE:** relational features, LinUCB equations and reward blending implemented from the published method.
 - **ADS (Apache-2.0):** mini-cluster curriculum state, boundary movement, clustering and difficulty preprocessing adapted to JSONL pools. See `third_party/notices/ADS-LICENSE` and `ADS-NOTICE`.
 - **TSDS (MIT):** KNN-KDE probability assignment, adapted to an exact NumPy nearest-neighbor implementation. See `third_party/notices/TSDS-LICENSE`.
+- **PATS (Apache-2.0):** policy-aware training scaffolding, grouped rollout evidence, success-rate EMA, pressure-based review modes and bounded skill edits are adapted from [shi-yipeng/PATS](https://github.com/shi-yipeng/PATS), revision `bad468b5c73081c2f5aa74c4e0011c6fb2872dbf`. The adaptation targets Director-only support, the existing cycle snapshots and evidence store, with project-specific evidence checks and edit validation; it does not vendor the upstream training stack or SkillRL seed artifacts. See `docs/PATS.md` and the unchanged upstream license in `third_party/notices/PATS-LICENSE`.
 
 Graph constraints, relation counterfactual integration, checkpoint orchestration, dataset integration and runtime scheduling include project-specific code. Benchmark performance must be established separately; mock tests are not evidence of model quality.
 

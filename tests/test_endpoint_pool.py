@@ -81,6 +81,25 @@ def _transient_failure():
     )
 
 
+def _permanent_endpoint_failure():
+    from selfplay_graph_flowsteer.backend_failures import (
+        BackendFailureClassification,
+        BackendRequestError,
+    )
+
+    return BackendRequestError(
+        BackendFailureClassification(
+            backend_failure=True,
+            origin="route_configuration",
+            kind="auth_failure",
+            retryable=False,
+            counts_toward_route_circuit=True,
+            disable_route=True,
+            status_code=401,
+        )
+    )
+
+
 @pytest.mark.parametrize("capacity_failure", [False, True])
 def test_failover_retries_same_request_and_reuses_recovered_endpoint(tmp_path, capacity_failure):
     calls = []
@@ -141,6 +160,56 @@ def test_failover_is_bounded_and_preserves_permanent_errors(tmp_path):
     with pytest.raises(ValueError, match="local invalid"):
         pool.generate([{"content": "same"}], role="worker")
     assert calls == ["invalid"]
+
+
+def test_pool_failover_skips_one_permanently_failed_endpoint(tmp_path):
+    class PermanentlyFailing(Backend):
+        def generate(self, messages, **kwargs):
+            raise _permanent_endpoint_failure()
+
+    pool = EndpointPoolBackend(
+        "gpt",
+        {"a": PermanentlyFailing("a"), "b": Backend("b")},
+        tmp_path,
+        pool_retry_attempts=2,
+    )
+
+    result = pool.generate([{"content": "same"}], role="worker")
+
+    assert result.metadata["endpoint_pool_member"] == "b"
+    assert result.metadata["endpoint_pool_failovers"] == 1
+    assert result.metadata["endpoint_pool_retries"] == 0
+
+
+def test_pool_retries_all_members_then_reports_one_logical_failure(tmp_path):
+    from selfplay_graph_flowsteer.backend_failures import BackendRequestError
+
+    calls = []
+
+    class Failing(Backend):
+        def generate(self, messages, **kwargs):
+            calls.append(self.config.route_name)
+            raise _transient_failure()
+
+    pool = EndpointPoolBackend(
+        "gpt",
+        {"a": Failing("a"), "b": Failing("b")},
+        tmp_path,
+        pool_retry_attempts=2,
+        retry_backoff_s=0,
+    )
+
+    with pytest.raises(BackendRequestError) as captured:
+        pool.generate([{"content": "same"}], role="worker")
+
+    error = captured.value
+    assert calls == ["a", "b", "b", "a", "a", "b"]
+    assert error.classification.route == "gpt"
+    assert error.classification.disable_route
+    assert not error.classification.retryable
+    assert len(error.endpoint_pool_attempts) == 6
+    assert len(error.request_events) == 1
+    assert error.request_events[0]["route"] == "gpt"
 
 
 def test_failover_cannot_extend_request_budget(tmp_path, monkeypatch):

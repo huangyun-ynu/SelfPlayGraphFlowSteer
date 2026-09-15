@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 
 DEFAULT_DATASET_MAX_TOTAL_TOKENS = {
     "aime": 65_536,
-    "nq_open": 16_384,
-    "hotpotqa": 32_768,
-    "webshop": 65_536,
-    "alfworld": 163_840,
+    "nq_open": 65_536,
+    "hotpotqa": 65_536,
+    "webshop": 350_000,
+    "alfworld": 350_000,
     "healthbench_professional": 65_536,
     "swe_bench": 350_000,
 }

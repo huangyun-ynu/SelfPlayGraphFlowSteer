@@ -64,3 +64,14 @@ See [NOTICE.md](NOTICE.md) for implementation provenance. Available MIT/Apache l
 ## Director SkillBank
 
 See [SkillBank setup and lifecycle](docs/SKILLBANK.md). The offline mock configuration keeps SkillBank disabled; `configs/skillbank.example.toml` enables the current implementation with eight seed skills and an environment-variable API credential.
+
+The optional [PATS integration](docs/PATS.md) ([中文说明](docs/PATS.zh-CN.md)) maintains a separate skill view for each dataset, task type and difficulty using observed policy performance. Each collection cycle freezes its context; bounded reviews expand, revise or compress the next cycle's scaffold. `configs/pats.example.toml` enables this component during training and turns skill context off for normal evaluation. Use `--skill-context on` for an explicit supported evaluation or `--skill-context off` for an ablation. The existing SkillBank behavior remains the default. An offline collection check is:
+
+```bash
+spgfs selfplay-rollout --config configs/pats.example.toml \
+  --mock --seed 'independent evidence verification' \
+  --seed 'compare evidence and verify constraints' --rollouts 2 --verifier exact_match \
+  --output state/pats-demo/cycle_000
+```
+
+Mock mode exercises snapshotting and evidence collection without contacting a refiner or claiming learned-skill gains. Real reviews use the configured frozen `skill_distiller` route. Start independent experiments with separate SkillBank state paths.

@@ -26,7 +26,7 @@ class RouteHealthStore:
         self,
         path: str | Path,
         *,
-        cooldown_s: float = 3600.0,
+        cooldown_s: float = 600.0,
         clock: Callable[[], float] = time.time,
     ) -> None:
         if cooldown_s <= 0:

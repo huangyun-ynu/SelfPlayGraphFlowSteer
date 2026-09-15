@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -887,6 +888,30 @@ class DryRunSelfPlayCoordinator:
         )
 
 
+def validate_pats_group_context(rollouts: Iterable[SolverRollout]) -> None:
+    """Reject mixed scaffolds before attributing group reward differences to graphs."""
+    for task_id, group in group_rollouts_by_task(rollouts).items():
+        manifests = [item.trajectory.metadata.get("skill_context", {}) for item in group]
+        if not any(manifest.get("pats_enabled") for manifest in manifests):
+            continue
+        identities = set()
+        for manifest in manifests:
+            context = manifest.get("context")
+            if (
+                manifest.get("pats_enabled") is not True
+                or not manifest.get("snapshot_id")
+                or not manifest.get("pats_scope")
+                or not isinstance(context, str)
+            ):
+                raise ValueError(f"PATS task {task_id}: missing frozen skill context")
+            digest = hashlib.sha256(context.encode("utf-8")).hexdigest()
+            if digest != manifest.get("context_sha256"):
+                raise ValueError(f"PATS task {task_id}: skill context hash mismatch")
+            identities.add((manifest["snapshot_id"], manifest["pats_scope"], digest))
+        if len(identities) != 1:
+            raise ValueError(f"PATS task {task_id}: mixed skill contexts within rollout group")
+
+
 def assemble_selfplay_result(
     proposals: list[ProposedTask],
     all_rollouts: list[SolverRollout],
@@ -902,6 +927,9 @@ def assemble_selfplay_result(
 ) -> DryRunSelfPlayResult:
     """Assemble the two trainer-ready batches after SESA-style K rollouts."""
 
+    validate_pats_group_context(all_rollouts)
+    if frontier_evidence is not None:
+        validate_pats_group_context([*all_rollouts, *frontier_evidence])
     if training_selection and training_selection.get("schema_version") == "independent_frontier_v2":
         from .proposer_learning import assemble_independent_result
 

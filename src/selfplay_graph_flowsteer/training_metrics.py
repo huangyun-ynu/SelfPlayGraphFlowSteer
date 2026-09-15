@@ -172,6 +172,7 @@ def collect_cycle_metrics(
     frontier_scores: Iterable[FrontierScore] = (),
     relation_credits: Iterable[RelationCredit] = (),
     skillbank_path: str | Path | None = None,
+    cycle_dir: str | Path | None = None,
     mace_path: str | Path | None = None,
     context: dict[str, Any] | None = None,
     proposal_extraction: dict[str, Any] | None = None,
@@ -231,6 +232,7 @@ def collect_cycle_metrics(
         "relation_counterfactual": _relation_summary(credits),
         "skillbank": _skillbank_snapshot(
             skillbank_path,
+            cycle_dir=cycle_dir,
             active_skill_ids=active_skill_ids,
             skill_changes=observed_skill_changes,
         ),
@@ -867,22 +869,37 @@ def _relation_summary(credits: list[RelationCredit]) -> dict[str, Any]:
 def _skillbank_snapshot(
     path: str | Path | None,
     *,
+    cycle_dir: str | Path | None = None,
     active_skill_ids: list[str],
     skill_changes: list[tuple[Any, ...]],
 ) -> dict[str, Any]:
     source = Path(path) if path else None
+    directory = Path(cycle_dir) if cycle_dir is not None else None
+    frozen_path = directory / "director_skill_snapshot.v2.json" if directory else None
+    if frozen_path is not None and frozen_path.exists():
+        # The configured live JSON file need not exist for v2. Collection uses
+        # this immutable snapshot, not the state after a subsequent review.
+        source = frozen_path
     if source is None or not source.exists():
-        return {
+        result = {
             "available": False,
             "size": 0,
             "skill_ids": [],
             "active_skill_ids_this_cycle": active_skill_ids,
             "active_skills_this_cycle": len(active_skill_ids),
         }
+        _attach_pats_metrics(result, None, directory)
+        return result
     payload = json.loads(source.read_text(encoding="utf-8"))
-    skills = list(payload.get("skills", []))
+    versioned = payload.get("schema") == "director_skill_v2"
+    records = (
+        [item for item in payload.get("cards", []) if item.get("status") in {"seed", "active"}]
+        if versioned
+        else []
+    )
+    skills = [item["card"] for item in records] if versioned else list(payload.get("skills", []))
     stats = [item.get("stats", {}) for item in skills]
-    return {
+    result = {
         "available": True,
         "size": len(skills),
         "skill_ids": [str(item.get("skill_id", "")) for item in skills],
@@ -893,6 +910,102 @@ def _skillbank_snapshot(
         "total_hurt": sum(int(item.get("hurt_count", 0)) for item in stats),
         "lifecycle_events": _skill_lifecycle_events(skill_changes),
     }
+    if versioned:
+        result.update(
+            schema="director_skill_v2",
+            source_path=str(source),
+            snapshot_id=payload.get("snapshot_id"),
+            size_semantics="global_card_records_only; scoped copies are reported separately",
+            global_card_count=len(records),
+            global_unique_skill_id_count=len(set(result["skill_ids"])),
+            global_seed_card_count=sum(
+                item.get("status") == "seed"
+                or item.get("provenance") == "human_seed"
+                or item["card"].get("stats", {}).get("is_seed") is True
+                for item in records
+            ),
+        )
+    _attach_pats_metrics(result, payload.get("pats") if versioned else None, directory)
+    return result
+
+
+def _attach_pats_metrics(
+    result: dict[str, Any], snapshot: dict[str, Any] | None, directory: Path | None
+) -> None:
+    """Keep frozen scoped membership distinct from after-collection review outcomes."""
+    pats: dict[str, Any] = {}
+    if snapshot is not None:
+        scopes = {}
+        unique_ids: set[str] = set()
+        for key, value in sorted(snapshot.get("scopes", {}).items()):
+            cards = [
+                record
+                for record in value.get("cards", [])
+                if record.get("status") in {"seed", "active"}
+            ]
+            versions = [
+                {"id": str(record["card"]["skill_id"]), "version": int(record["version"])}
+                for record in cards
+            ]
+            unique_ids.update(item["id"] for item in versions)
+            scopes[key] = {
+                "card_count": len(cards),
+                "skill_versions": versions,
+                **{
+                    field: value[field]
+                    for field in ("ema", "mode", "policy_snapshot")
+                    if field in value
+                },
+            }
+        pats.update(
+            snapshot_available=True,
+            snapshot_id=snapshot.get("snapshot_id"),
+            snapshot_step=snapshot.get("step"),
+            counts_semantics="scoped instances in the frozen collection view; not a global bank total",
+            scope_count=len(scopes),
+            scoped_card_instance_count=sum(value["card_count"] for value in scopes.values()),
+            scoped_unique_skill_id_count=len(unique_ids),
+            scopes=scopes,
+        )
+    if directory is not None:
+        contract_path = directory / "skill_context_contract.json"
+        if contract_path.exists():
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            if contract.get("pats_enabled") is True:
+                pats["context_enabled"] = bool(contract.get("context_enabled"))
+        review_path = directory / "pats_review.json"
+        if review_path.exists():
+            receipt = json.loads(review_path.read_text(encoding="utf-8"))
+            reviews = receipt.get("reviews", [])
+            statuses = Counter(str(review["status"]) for review in reviews)
+            # Rejected edits were never committed. Do not count their proposed
+            # operations as additions/deletions to the scoped archive.
+            operations = Counter(
+                str(operation["op"])
+                for review in reviews
+                if review.get("status") == "updated"
+                for operation in review.get("operations", [])
+            )
+            pats.update(
+                review_available=True,
+                review_source_path=str(review_path),
+                review_step=receipt.get("step"),
+                review_scope_count=len(reviews),
+                review_status_counts=dict(sorted(statuses.items())),
+                review_updated_scope_count=statuses["updated"],
+                review_rejected_scope_count=statuses["rejected"],
+                review_unchanged_scope_count=statuses["unchanged"],
+                applied_operation_counts=dict(sorted(operations.items())),
+            )
+            for field in ("credible_groups", "refiner_calls"):
+                if field in receipt:
+                    pats[field] = receipt[field]
+    if pats:
+        # Missing files mean unavailable counts, never evidence for zero scopes
+        # or zero reviews (especially in a final evaluation with skills off).
+        pats.setdefault("snapshot_available", False)
+        pats.setdefault("review_available", False)
+        result["pats"] = pats
 
 
 def _mace_snapshot(path: str | Path | None) -> dict[str, Any]:

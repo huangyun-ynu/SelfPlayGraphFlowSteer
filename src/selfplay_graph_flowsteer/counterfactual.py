@@ -218,6 +218,10 @@ def evaluate_relation_decision(
     rollout_id: str,
     seed: int,
     evaluate: Callable[[MultiAgentGraph, int], float],
+    evaluate_pair: Callable[
+        [MultiAgentGraph, MultiAgentGraph, int], tuple[float, float]
+    ]
+    | None = None,
     evaluate_from_prefix: Callable[
         [MultiAgentGraph, int, dict[str, dict[str, Any]], set[str]], float
     ]
@@ -233,8 +237,13 @@ def evaluate_relation_decision(
     right.pop("relations", None)
     if left != right:
         raise ValueError("relation siblings changed non-relation graph configuration")
-    q_absent = float(evaluate(absent, seed))
-    q_present = float(evaluate(present, seed))
+    if evaluate_pair is None:
+        q_absent = float(evaluate(absent, seed))
+        q_present = float(evaluate(present, seed))
+    else:
+        q_absent, q_present = (
+            float(value) for value in evaluate_pair(absent, present, seed)
+        )
     if not all(math.isfinite(q) for q in (q_absent, q_present)):
         raise ValueError("incomplete/non-finite counterfactual final score")
     baseline = (

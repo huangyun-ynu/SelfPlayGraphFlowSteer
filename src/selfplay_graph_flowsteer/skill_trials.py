@@ -24,6 +24,8 @@ from .skills import SkillCard
 class TrialContextBank(DirectorSkillBankV2):
     """Hold other selected cards constant; add only the one target in the on arm."""
 
+    supports_task_metadata = False
+
     def __init__(self, snapshot, candidate, *, enabled, prompt_token_budget, embedder=None):
         super().__init__(
             snapshot, embedder=embedder, top_k=2, prompt_token_budget=prompt_token_budget

@@ -378,11 +378,17 @@ class AdaptiveWorkflowSolver:
 
         skill_manifest = {}
         if self.skillbank and hasattr(self.skillbank, "select_context"):
+            scope_kwargs = (
+                {"task_metadata": task.metadata}
+                if getattr(self.skillbank, "supports_task_metadata", False)
+                else {}
+            )
             selected_skills, skill_context, skill_manifest = self.skillbank.select_context(
                 task.prompt,
                 task_type=task.task_type,
                 tokenizer=self.director_tokenizer,
                 tools=getattr(self.runtime.executor, "tools", {}).keys(),
+                **scope_kwargs,
             )
         else:
             selected_skills = (

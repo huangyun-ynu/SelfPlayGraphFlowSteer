@@ -39,6 +39,34 @@ from .skills import (
 
 SCHEMA = "director_skill_v2"
 SEEDS = Path(__file__).with_name("director_seed_v2.json")
+_PATS_ACCOUNTING_FIELDS = ("pats_scope", "pats_snapshot_id", "selection_revision")
+
+
+def _pats_accounting_metadata(manifest: dict[str, Any]) -> dict[str, str]:
+    # Only the original collection manifest can identify a historical scoped card.
+    # Never infer missing scope/snapshot metadata from the current PATS state.
+    if manifest.get("pats_enabled") is not True:
+        return {}
+    return {
+        key: manifest[key]
+        for key in _PATS_ACCOUNTING_FIELDS
+        if isinstance(manifest.get(key), str) and manifest[key]
+    }
+
+
+def _is_additive_pats_accounting_enrichment(previous: str, event: dict[str, Any]) -> bool:
+    old = json.loads(previous)
+    additions = set(event) - set(old)
+    if not additions or additions - set(_PATS_ACCOUNTING_FIELDS):
+        return False
+    if any(not isinstance(event[key], str) or not event[key] for key in additions):
+        return False
+    # Keep the existing primary key and every original value, including numeric
+    # types. A changed reward, snapshot, or already recorded scope is a conflict.
+    original_fields = {key: value for key, value in event.items() if key not in additions}
+    return json.dumps(original_fields, ensure_ascii=False, sort_keys=True, allow_nan=False) == (
+        json.dumps(old, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    )
 
 
 def atomic_json(path: Path, value: Any) -> None:
@@ -197,7 +225,10 @@ class SkillStore:
             previous = db.execute("SELECT payload FROM events WHERE id=?", (key,)).fetchone()
             payload = json.dumps(event, ensure_ascii=False, sort_keys=True, allow_nan=False)
             if previous and previous[0] != payload:
-                raise ValueError("conflicting repeated skill outcome event")
+                if not _is_additive_pats_accounting_enrichment(previous[0], event):
+                    raise ValueError("conflicting repeated skill outcome event")
+                db.execute("UPDATE events SET payload=? WHERE id=?", (payload, key))
+                return
             db.execute("INSERT OR IGNORE INTO events VALUES(?,?)", (key, payload))
 
     def record_usage_outcome(self, event: dict[str, Any]) -> None:
@@ -206,7 +237,10 @@ class SkillStore:
         with self.connect() as db:
             old = db.execute("SELECT payload FROM usage_outcomes WHERE id=?", (key,)).fetchone()
             if old and old[0] != payload:
-                raise ValueError("conflicting repeated skill usage outcome")
+                if not _is_additive_pats_accounting_enrichment(old[0], event):
+                    raise ValueError("conflicting repeated skill usage outcome")
+                db.execute("UPDATE usage_outcomes SET payload=? WHERE id=?", (payload, key))
+                return
             db.execute("INSERT OR IGNORE INTO usage_outcomes VALUES(?,?)", (key, payload))
 
     def usage_summary(self) -> list[dict[str, Any]]:
@@ -217,7 +251,7 @@ class SkillStore:
                 json.loads(row[0]) for row in db.execute("SELECT payload FROM usage_outcomes")
             ]
         for event in events:
-            key = (event["skill"], event["version"], event["dataset"])
+            key = (event["skill"], event["version"], event["dataset"], event.get("pats_scope"))
             record = groups.setdefault(
                 key,
                 dict(
@@ -233,6 +267,7 @@ class SkillStore:
                     infrastructure_failure_count=0,
                     unscored_count=0,
                     skipped_feedback_count=0,
+                    **({"pats_scope": key[3]} if key[3] is not None else {}),
                 ),
             )
             record["usage_count"] += 1
@@ -259,7 +294,10 @@ class SkillStore:
                 if record["mode"] == "continuous"
                 else record["helpful_count"] - record["hurt_count"]
             )
-        return sorted(groups.values(), key=lambda r: (r["skill_id"], r["version"], r["dataset"]))
+        return sorted(
+            groups.values(),
+            key=lambda r: (r["skill_id"], r["version"], r["dataset"], r.get("pats_scope", "")),
+        )
 
     def retire_negative_usage(self, *, min_usage: int, step: int) -> list[tuple[str, int]]:
         if min_usage <= 0:
@@ -842,6 +880,7 @@ class SkillStore:
 class DirectorSkillBankV2(SolverSkillBank):
     """Read-only, scoped view. No per-rollout mutable outcome counters."""
 
+    supports_task_metadata = True
     _vector_cache: dict[tuple[str, str], tuple[float, ...]] = {}
     _cache_lock = threading.Lock()
 
@@ -853,6 +892,7 @@ class DirectorSkillBankV2(SolverSkillBank):
         top_k=3,
         prompt_token_budget=1024,
         retrieval_min_score=None,
+        selection_revision="e5_only_v1",
     ):
         if snapshot.get("schema") != SCHEMA:
             raise ValueError("expected a frozen director_skill_v2 snapshot")
@@ -865,6 +905,16 @@ class DirectorSkillBankV2(SolverSkillBank):
         self.retrieve_top_k = min(3, top_k)
         self.prompt_token_budget = prompt_token_budget
         self.retrieval_min_score = retrieval_min_score
+        self._pats = snapshot.get("pats")
+        _validate_semantic_snapshot(self._pats)
+        self._selection_revision = (
+            self._pats.get("selection_revision", "e5_only_v1")
+            if self._pats is not None
+            else selection_revision
+        )
+        if self._selection_revision not in {"e5_only_v1", "learned_first_v1"}:
+            raise ValueError(f"unknown PATS selection revision: {self._selection_revision!r}")
+        self._pats_views: dict[str, DirectorSkillBankV2] = {}
         self._embeddings = {}
         if embedder:
             namespace = str(getattr(embedder, "model_path", type(embedder).__qualname__))
@@ -890,7 +940,7 @@ class DirectorSkillBankV2(SolverSkillBank):
                 while len(self._vector_cache) > 2400:
                     self._vector_cache.pop(next(iter(self._vector_cache)))
 
-    def retrieve(self, query, *, task_type="", top_k=None, tools=()):
+    def _rank_candidates(self, query, *, task_type="", tools=()):
         if not query.strip():
             return []
         vector = self.embedder.encode([query], query=True)[0] if self.embedder else None
@@ -921,10 +971,23 @@ class DirectorSkillBankV2(SolverSkillBank):
             ):
                 continue
             scores.append((score, key, card))
-        scores.sort(key=lambda row: (-row[0], row[1]))
-        return [
-            row[2] for row in scores[: min(self.retrieve_top_k, top_k if top_k is not None else 3)]
-        ]
+        if self._selection_revision == "learned_first_v1":
+            # Scoped ADD and UPDATE cards carry this provenance, including updated
+            # seed IDs. Eligibility and calibrated score cutoffs still apply first.
+            scores.sort(
+                key=lambda row: (
+                    self.records[row[1]].get("provenance") != "pats_scoped_unvalidated",
+                    -row[0],
+                    row[1],
+                )
+            )
+        else:
+            scores.sort(key=lambda row: (-row[0], row[1]))
+        return [row[2] for row in scores]
+
+    def retrieve(self, query, *, task_type="", top_k=None, tools=()):
+        candidates = self._rank_candidates(query, task_type=task_type, tools=tools)
+        return candidates[: min(self.retrieve_top_k, top_k if top_k is not None else 3)]
 
     def format_prompt_context(self, selected):
         if not selected:
@@ -935,31 +998,77 @@ class DirectorSkillBankV2(SolverSkillBank):
             for card in selected
         )
 
-    def select_context(self, query, *, task_type, tokenizer, tools=()):
+    def select_context(self, query, *, task_type, tokenizer, tools=(), task_metadata=None):
+        if self._pats is not None:
+            from .pats import resolve_scope
+
+            scope = resolve_scope(task_type, task_metadata)
+            if scope not in self._pats_views:
+                scoped = self._pats.get("scopes", {}).get(scope)
+                # An explicitly empty view represents withdrawal, not a retrieval miss.
+                records = scoped["cards"] if scoped is not None else list(self.records.values())
+                self._pats_views[scope] = DirectorSkillBankV2(
+                    {"schema": SCHEMA, "snapshot_id": self.snapshot_id, "cards": records},
+                    embedder=self.embedder,
+                    top_k=self.retrieve_top_k,
+                    prompt_token_budget=self.prompt_token_budget,
+                    retrieval_min_score=self.retrieval_min_score,
+                    selection_revision=self._selection_revision,
+                )
+            selected, context, manifest = self._pats_views[scope].select_context(
+                query,
+                task_type=task_type,
+                tokenizer=tokenizer,
+                tools=tools,
+            )
+            import hashlib
+
+            manifest.update(
+                pats_enabled=True,
+                pats_scope=scope,
+                pats_snapshot_id=self._pats["snapshot_id"],
+                context_sha256=hashlib.sha256(context.encode()).hexdigest(),
+            )
+            if "semantic_gate_revision" in self._pats:
+                manifest.update(
+                    semantic_gate_revision=self._pats["semantic_gate_revision"],
+                    semantic_contract_sha256=self._pats["semantic_contract_sha256"],
+                )
+            return selected, context, manifest
         if tokenizer is None:
             raise ValueError("v2 skill token budget requires the actual Director tokenizer")
         chosen = []
-        for card in self.retrieve(query, task_type=task_type, tools=tools):
+        candidates = (
+            self._rank_candidates(query, task_type=task_type, tools=tools)
+            if self._selection_revision == "learned_first_v1"
+            else self.retrieve(query, task_type=task_type, tools=tools)
+        )
+        for card in candidates:
+            if (
+                self._selection_revision == "learned_first_v1"
+                and len(chosen) >= self.retrieve_top_k
+            ):
+                break
             context = self.format_prompt_context([*chosen, card])
             if len(tokenizer.encode(context, add_special_tokens=False)) <= self.prompt_token_budget:
                 chosen.append(card)
         context = self.format_prompt_context(chosen)
-        return (
-            chosen,
-            context,
-            {
-                "schema": SCHEMA,
-                "snapshot_id": self.snapshot_id,
-                "selected": [
-                    {"id": c.skill_id, "version": self.records[c.skill_id]["version"]}
-                    for c in chosen
-                ],
-                "prompt_tokens": len(tokenizer.encode(context, add_special_tokens=False))
-                if context
-                else 0,
-                "context": context,
-            },
-        )
+        manifest = {
+            "schema": SCHEMA,
+            "snapshot_id": self.snapshot_id,
+            "selected": [
+                {"id": c.skill_id, "version": self.records[c.skill_id]["version"]} for c in chosen
+            ],
+            "prompt_tokens": len(tokenizer.encode(context, add_special_tokens=False))
+            if context
+            else 0,
+            "context": context,
+        }
+        # Missing revision denotes the historical selector. Preserve its manifest
+        # verbatim so exact frozen-cycle resumes retain their context identity.
+        if self._selection_revision == "learned_first_v1":
+            manifest["selection_revision"] = self._selection_revision
+        return chosen, context, manifest
 
     def save(self):
         raise RuntimeError("frozen v2 bank is read-only")
@@ -1000,8 +1109,123 @@ def store_for_config(config):
     )
 
 
-def freeze_collection(config, cycle_dir: Path):
-    if not config.skillbank_enabled or config.skillbank_mode != SCHEMA:
+def _validate_semantic_snapshot(pats_view):
+    if pats_view is None or "semantic_gate_revision" not in pats_view:
+        return  # Historical frozen contexts predate the admission gate.
+    from .pats_semantics import SEMANTIC_REVISION
+
+    if pats_view["semantic_gate_revision"] != SEMANTIC_REVISION:
+        raise ValueError("unknown PATS semantic gate revision in frozen collection")
+    digest = pats_view.get("semantic_contract_sha256")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("frozen PATS semantic gate lacks its contract hash")
+
+
+def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
+    """Audit old candidates at a new boundary without replaying a policy-maintenance step."""
+    from .pats_semantics import (
+        SEMANTIC_REVISION,
+        audit_semantic_cards,
+        card_identity,
+        contract_hash,
+        semantic_approvals,
+    )
+
+    def state_payload():
+        with store.connect() as db:
+            row = db.execute("SELECT payload FROM pats_state WHERE id=1").fetchone()
+        return json.loads(row[0]) if row else {"scopes": {}, "step": -1}
+
+    state = state_payload()
+    reviews = []
+    checker_calls = 0
+
+    def counter(text):
+        return len(tokenizer.encode(text, add_special_tokens=False))
+
+    for scope, scoped in sorted(state["scopes"].items()):
+        candidates = [
+            record for record in scoped["cards"] if record.get("provenance") != "human_seed"
+        ]
+        approvals = semantic_approvals(store, scope, candidates)
+        pending = [record for record in candidates if card_identity(scope, record) not in approvals]
+        if not pending or checker_calls >= config.pats.max_reviews_per_cycle:
+            continue
+        review = audit_semantic_cards(
+            store,
+            scope,
+            pending,
+            backend=backend,
+            token_counter=counter,
+            max_input_tokens=config.pats.max_review_input_tokens,
+            run=str(cycle_dir.parent.resolve()),
+            step=step if step is not None else state["step"] + 1,
+        )
+        reviews.append({"scope": scope, **review})
+        checker_calls += review["checker_calls"]
+    state_changed = state_payload() != state
+    if checker_calls:
+        import hashlib
+
+        receipt = {
+            "event": "precollection_semantic_review",
+            "semantic_gate_revision": SEMANTIC_REVISION,
+            "semantic_contract_sha256": contract_hash(),
+            "run": str(cycle_dir.parent.resolve()),
+            "collection_cycle": cycle_dir.name,
+            "next_collection_step": step,
+            "source_pats_step": state["step"],
+            "source_state_sha256": hashlib.sha256(
+                json.dumps(state, sort_keys=True, ensure_ascii=False).encode()
+            ).hexdigest(),
+            "semantic_checker_calls": checker_calls,
+            "reviews": reviews,
+            "policy_maintenance_replayed": False,
+            "pats_state_mutated_by_preflight": False,
+            "source_state_unchanged": not state_changed,
+        }
+        # Each actual attempt gets an immutable entry; exact approved/rejected
+        # decisions skip future provider calls. Interrupted pending checks may retry.
+        path = cycle_dir / "pats_semantic_preflight.json"
+        attempts = json.loads(path.read_text()) if path.exists() else {"attempts": []}
+        attempts["attempts"].append(receipt)
+        atomic_json(path, attempts)
+    if state_changed:
+        raise ValueError("PATS state changed during semantic preflight; freeze a fresh boundary")
+
+
+def freeze_collection(
+    config, cycle_dir: Path, *, step: int | None = None, semantic_backend=None, tokenizer=None
+):
+    from dataclasses import asdict
+
+    enabled = getattr(config, "skillbank_context_enabled", config.skillbank_enabled)
+    pats_enabled = getattr(getattr(config, "pats", None), "enabled", False)
+    contract_path = cycle_dir / "skill_context_contract.json"
+    if pats_enabled or contract_path.exists():
+        contract = {
+            "schema": "skill_context_contract_v1",
+            "context_enabled": bool(enabled),
+            "pats_enabled": pats_enabled,
+            "pats_config": asdict(config.pats),
+            "skillbank_mode": config.skillbank_mode,
+            "prompt_token_budget": config.skillbank_prompt_token_budget,
+            "retrieve_top_k": config.skillbank_retrieve_top_k,
+            "retrieval_min_score": config.skillbank_retrieval_min_score,
+            "embedding_model_path": str(config.skillbank_embedding_model_path),
+        }
+        if contract_path.exists():
+            if json.loads(contract_path.read_text(encoding="utf-8")) != contract:
+                raise ValueError(
+                    "collection skill context contract changed; use a fresh output cycle"
+                )
+        elif (cycle_dir / "solver_rollouts.jsonl").exists():
+            raise ValueError(
+                "existing PATS rollouts lack a context contract; use a fresh output cycle"
+            )
+        else:
+            atomic_json(contract_path, contract)
+    if not enabled or config.skillbank_mode != SCHEMA:
         return config
     path = cycle_dir / "director_skill_snapshot.v2.json"
     if not path.exists() and (cycle_dir / "solver_rollouts.jsonl").exists():
@@ -1010,15 +1234,95 @@ def freeze_collection(config, cycle_dir: Path):
         )
     store = store_for_config(config)
     store.initialize_seeds()
-    store.snapshot(path)
-    return replace(config, skillbank_path=path)
+    with contextlib.ExitStack() as stack:
+        pats_view = None
+        if pats_enabled:
+            from .pats import PatsController
+
+            # Serialize with normal maintenance through the final snapshot write.
+            # Semantic inference uses its own lock and no SQLite transaction.
+            lock = stack.enter_context(store.path.with_suffix(".pats.lock").open("a"))
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            controller = PatsController(store, config.pats, len)
+            pats_view = controller.snapshot(
+                run=str(cycle_dir.parent.resolve()),
+                next_step=step if not path.exists() else None,
+            )
+            if not path.exists() and semantic_backend is not None:
+                if tokenizer is None:
+                    raise ValueError(
+                        "PATS semantic preflight requires the actual Director tokenizer"
+                    )
+                _semantic_preflight(
+                    store,
+                    config,
+                    cycle_dir,
+                    backend=semantic_backend,
+                    tokenizer=tokenizer,
+                    step=step,
+                )
+                pats_view = controller.snapshot(run=str(cycle_dir.parent.resolve()), next_step=step)
+        if path.exists():
+            _validate_pats_snapshot(config, json.loads(path.read_text(encoding="utf-8")))
+        if not path.exists() and pats_enabled:
+            # Existing snapshots are never rewritten, including on resume. The
+            # token counter is unused by this read-only state snapshot.
+            snapshot = {
+                "schema": SCHEMA,
+                "snapshot_id": uuid.uuid4().hex,
+                "collection_frozen": True,
+                "cards": [r for r in store.cards() if r["status"] in {"seed", "active"}],
+                "pats": pats_view,
+            }
+            atomic_json(path, snapshot)
+        else:
+            store.snapshot(path)
+    return replace(config, skillbank_path=path, skillbank_snapshot_frozen=True)
+
+
+def _validate_pats_snapshot(config, snapshot):
+    from dataclasses import asdict
+
+    enabled = getattr(getattr(config, "pats", None), "enabled", False)
+    frozen = snapshot.get("pats")
+    if enabled != (frozen is not None):
+        raise ValueError(
+            "frozen collection PATS mode differs from configuration; use a fresh cycle"
+        )
+    if enabled and frozen.get("config") != asdict(config.pats):
+        raise ValueError(
+            "frozen collection PATS configuration differs; resume original configuration"
+        )
+    if enabled and frozen.get("selection_revision", "e5_only_v1") not in {
+        "e5_only_v1",
+        "learned_first_v1",
+    }:
+        raise ValueError("unknown PATS selection revision in frozen collection")
+    _validate_semantic_snapshot(frozen)
 
 
 def load_bank(config, *, embedder=None):
-    if config.skillbank_path.exists():
+    if getattr(getattr(config, "pats", None), "enabled", False) and not getattr(
+        config, "skillbank_snapshot_frozen", False
+    ):
+        from .pats import PatsController
+
+        # Live inference reads current scoped state without overwriting a previously
+        # saved bank file. Explicitly frozen collection configs take the path below.
+        store = store_for_config(config)
+        store.initialize_seeds()
+        snapshot = {
+            "schema": SCHEMA,
+            "snapshot_id": uuid.uuid4().hex,
+            "cards": [r for r in store.cards() if r["status"] in {"seed", "active"}],
+            "pats": PatsController(store, config.pats, len).snapshot(),
+        }
+    elif config.skillbank_path.exists():
         snapshot = json.loads(config.skillbank_path.read_text(encoding="utf-8"))
         if snapshot.get("schema") != SCHEMA:
             raise ValueError("legacy skill state requires mode='legacy'; v2 never auto-migrates it")
+        if getattr(config, "skillbank_snapshot_frozen", False):
+            _validate_pats_snapshot(config, snapshot)
     else:
         store = store_for_config(config)
         store.initialize_seeds()
@@ -1076,6 +1380,7 @@ def ingest_rollouts(store: SkillStore, tasks, rows, *, run: str, step: int, cap=
             known = False
         known = known and math.isfinite(reward)
         manifest = metadata.get("skill_context", {})
+        pats_metadata = _pats_accounting_metadata(manifest)
         for used in manifest.get("selected", []):
             store.record_event(
                 {
@@ -1093,6 +1398,7 @@ def ingest_rollouts(store: SkillStore, tasks, rows, *, run: str, step: int, cap=
                     if row["task_id"] in tasks
                     else "",
                     "policy_stage": step,
+                    **pats_metadata,
                 }
             )
         # Keep these outcome records separate from legacy observation events.
@@ -1131,6 +1437,7 @@ def ingest_rollouts(store: SkillStore, tasks, rows, *, run: str, step: int, cap=
                     infrastructure_failure=infra,
                     feedback=feedback,
                     substantive_output=substantive and not format_failure,
+                    **pats_metadata,
                 )
             )
         trace = metadata.get("solver_trace", {})
@@ -1461,7 +1768,9 @@ _background_lock = threading.Lock()
 _background_jobs: dict[str, threading.Thread] = {}
 
 
-def consolidate(config, result, *, step: int, mock: bool, cycle_dir: Path | None):
+def consolidate(config, result, *, step: int, mock: bool, cycle_dir: Path | None, tokenizer=None):
+    if not getattr(config, "skillbank_context_enabled", config.skillbank_enabled):
+        return ()
     store = store_for_config(config)
     store.initialize_seeds()
     if cycle_dir is None:
@@ -1469,6 +1778,52 @@ def consolidate(config, result, *, step: int, mock: bool, cycle_dir: Path | None
         return (("skill_v2", "no_raw_rollouts_skipped"),)
     source = cycle_dir / "solver_rollouts.jsonl"
     rows = [json.loads(line) for line in source.read_text().splitlines() if line.strip()]
+    if getattr(getattr(config, "pats", None), "enabled", False):
+        from .pats import PatsController, apply_metadata_updates
+
+        updates = cycle_dir / "rollout_metadata_updates.jsonl"
+        if updates.exists():
+            rows = apply_metadata_updates(
+                rows,
+                [json.loads(line) for line in updates.read_text().splitlines() if line.strip()],
+            )
+
+        if tokenizer is None:
+            from .selfplay_runtime import ByteTokenizer, HuggingFaceTokenizer
+
+            tokenizer = (
+                ByteTokenizer()
+                if mock
+                else HuggingFaceTokenizer(config.solver_model.base_model_path)
+            )
+        if not mock and getattr(tokenizer, "approximate_token_count", False):
+            raise ValueError("PATS real review requires the actual Director tokenizer")
+        controller = PatsController(
+            store, config.pats, lambda text: len(tokenizer.encode(text, add_special_tokens=False))
+        )
+        backend = None
+        try:
+            if not mock:
+                from .application import _create_runtime_backend
+
+                backend = _create_runtime_backend(
+                    config.runtime_pool()[config.skill_distiller_runtime],
+                    route_name=config.skill_distiller_runtime,
+                )
+            receipt = controller.maintain(
+                {task.task_id: task for task in result.tasks},
+                rows,
+                run=str(cycle_dir.parent.resolve()),
+                step=step,
+                policy_snapshot=result.snapshots.get("solver"),
+                backend=backend,
+                mock=mock,
+            )
+            atomic_json(cycle_dir / "pats_review.json", receipt)
+        finally:
+            close = getattr(backend, "close", None)
+            if callable(close):
+                close()
     ingest_rollouts(
         store,
         {task.task_id: task for task in result.tasks},
@@ -1478,6 +1833,10 @@ def consolidate(config, result, *, step: int, mock: bool, cycle_dir: Path | None
         cap=config.skillbank_pending_queue_max,
     )
     atomic_json(cycle_dir / "skill_usage_summary.json", store.usage_summary())
+    if getattr(getattr(config, "pats", None), "enabled", False):
+        # A single controller owns the scoped training scaffold. Legacy distillation
+        # and global negative-use retirement would race or undo its decisions.
+        return (("pats", "review_recorded"),)
     if step % config.skillbank_update_freq or mock:
         return (("skill_v2", "evidence_saved"),)
     retired = store.retire_negative_usage(

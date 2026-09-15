@@ -38,7 +38,7 @@ from selfplay_graph_flowsteer.observability import (
     TraceEvent,
     VerificationResult,
 )
-from selfplay_graph_flowsteer.rollouts import TokenizedDirectorTrajectory
+from selfplay_graph_flowsteer.rollouts import TokenizedDirectorTrajectory, TrainingSample
 from selfplay_graph_flowsteer.runtime import (
     WorkerWallClockLimitExceeded,
 )
@@ -54,11 +54,14 @@ from selfplay_graph_flowsteer.selfplay_runtime import (
     _freeze_primary_job_schedule,
     _order_primary_jobs,
     _primary_job_rollout_id,
+    _PriorityTrajectoryGate,
     _recovery_decision,
     _rollout_sampling_seed,
     _runtime_owned_model_policy_failure,
     adaptive_result_to_rollout,
+    load_dataset_duration_history,
 )
+from selfplay_graph_flowsteer.training import _relation_call_advantage, token_advantages
 
 
 def _duplicate_swe_read_fixture(*, relation: bool = False, edit: bool = False):
@@ -981,10 +984,13 @@ def test_selfplay_cli_persists_two_policy_batches_and_resumes(tmp_path, capsys) 
     assert manifest["structural_exploration_policies"] == ["off"]
     assert manifest["rollout_batching"] == {
         "mode": "independent_requests_continuous_server_batch",
-        "task_scheduling_policy": "logical_windows",
         "primary_job_order": "round_robin",
         "primary_duration_estimate_version": "20260909-cycle1-14x5-v1",
-        "max_active_task_groups": 1,
+        "historical_duration_priority": False,
+        "duration_history_version": "",
+        "primary_dataset_duration_estimates_s": {},
+        "counterfactual_dataset_duration_estimates_s": {},
+        "slot_refill_policy": "trajectory_completion",
         "curriculum_observation_order": "logical_manifest_windows",
         "logical_window_size": 2,
         "max_active_rollouts": 1,
@@ -1158,6 +1164,128 @@ def test_long_tail_order_starts_every_task_then_prioritizes_slow_datasets() -> N
     ]
 
 
+def test_historical_duration_priority_orders_all_primary_jobs_by_dataset_mean() -> None:
+    def proposal(task_id: str, dataset: str) -> ProposedTask:
+        return ProposedTask(
+            TaskSpec(task_id, dataset, metadata={"dataset": dataset}),
+            response="{}",
+        )
+
+    jobs = [
+        (proposal("fast", "hotpotqa"), 0),
+        (proposal("slow", "alfworld"), 0),
+        (proposal("fast", "hotpotqa"), 1),
+        (proposal("slow", "alfworld"), 1),
+    ]
+
+    ordered = _order_primary_jobs(
+        jobs,
+        "round_robin",
+        historical_duration_priority=True,
+        historical_estimates_s={"hotpotqa": 10.0, "alfworld": 90.0},
+    )
+
+    assert [_primary_job_rollout_id(job) for job in ordered] == [
+        "slow-r0",
+        "slow-r1",
+        "fast-r0",
+        "fast-r1",
+    ]
+
+
+def test_duration_history_keeps_primary_and_counterfactual_means_separate(tmp_path) -> None:
+    cycle = tmp_path / "cycle-0000"
+    cycle.mkdir()
+    (cycle / "tasks.jsonl").write_text(
+        json.dumps(
+            {
+                "task": {
+                    "task_id": "task-a",
+                    "task_type": "qa",
+                    "metadata": {"dataset": "nq-open"},
+                }
+            }
+        )
+        + "\n"
+    )
+    (cycle / "solver_rollouts.jsonl").write_text(
+        json.dumps(
+            {"rollout_id": "task-a-r0", "task_id": "task-a", "metadata": {"duration_s": 30.0}}
+        )
+        + "\n"
+        + json.dumps(
+            {"rollout_id": "task-a-r1", "task_id": "task-a", "metadata": {"duration_s": 50.0}}
+        )
+        + "\n"
+    )
+    (cycle / "rollout_metadata_updates.jsonl").write_text(
+        json.dumps(
+            {
+                "rollout_id": "task-a-r0",
+                "metadata": {
+                    "relation_counterfactual_branches": [
+                        {"branch": "off", "duration_s": 70.0},
+                        {"branch": "on", "duration_s": 90.0},
+                    ]
+                },
+            }
+        )
+        + "\n"
+    )
+
+    history = load_dataset_duration_history(tmp_path, before_cycle=1)
+
+    assert history["primary"]["nq_open"] == {"mean_s": 40.0, "samples": 2}
+    assert history["counterfactual"]["nq_open"] == {"mean_s": 80.0, "samples": 2}
+    assert history["source_cycles"] == [0]
+    assert len(history["version"]) == 64
+
+
+def test_shared_trajectory_gate_admits_pending_primary_before_counterfactual() -> None:
+    gate = _PriorityTrajectoryGate(2, pending_primary=3)
+    assert gate.acquire_primary()
+    assert gate.acquire_primary()
+    counterfactual_started = threading.Event()
+
+    def run_counterfactual() -> None:
+        assert gate.acquire_counterfactual()
+        counterfactual_started.set()
+        gate.release()
+
+    thread = threading.Thread(target=run_counterfactual)
+    thread.start()
+    gate.release()
+    assert gate.acquire_primary()
+    assert not counterfactual_started.wait(timeout=0.05)
+    gate.release()
+    assert counterfactual_started.wait(timeout=1)
+    gate.release()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+
+
+def test_shared_trajectory_gate_prioritizes_slower_counterfactual_dataset() -> None:
+    gate = _PriorityTrajectoryGate(1, pending_primary=0)
+    assert gate.acquire_counterfactual()
+    admitted: list[str] = []
+
+    def acquire(label: str, priority: float) -> None:
+        assert gate.acquire_counterfactual(priority)
+        admitted.append(label)
+        gate.release()
+
+    low = threading.Thread(target=acquire, args=("fast", 10.0))
+    high = threading.Thread(target=acquire, args=("slow", 90.0))
+    low.start()
+    high.start()
+    time.sleep(0.05)
+    gate.release()
+    low.join(timeout=1)
+    high.join(timeout=1)
+
+    assert admitted == ["slow", "fast"]
+
+
 def test_frozen_long_tail_schedule_is_replayed_exactly_on_resume(tmp_path) -> None:
     def proposal(task_id: str, dataset: str) -> ProposedTask:
         return ProposedTask(
@@ -1191,124 +1319,6 @@ def test_frozen_long_tail_schedule_is_replayed_exactly_on_resume(tmp_path) -> No
     payload = json.loads((tmp_path / "rollout_job_schedule.json").read_text())
     assert payload["duration_estimate_version"] == "20260909-cycle1-14x5-v1"
     assert payload["windows"][0]["ordered_rollout_ids"] == first_ids
-
-
-def test_frozen_manifest_dynamic_refills_groups_but_observes_logical_windows(
-    tmp_path,
-) -> None:
-    config = load_adaptive_config(write_config(tmp_path))
-    events: list[str] = []
-    observation_windows: list[list[str]] = []
-
-    class FrozenProposer:
-        def propose(self, seed, *, task_id: str):
-            events.append(f"propose:{task_id}")
-            return _MockProposer().propose(seed, task_id=task_id)
-
-        def observe_many(self, observations):
-            observation_windows.append(
-                [proposal.task.task_id for proposal, _rewards in observations]
-            )
-
-    class RecordingGroupedPool:
-        def __init__(self) -> None:
-            self.calls: list[tuple[list[tuple[str, int]], int]] = []
-
-        def iter_map_grouped(self, function, jobs, *, group_key, max_active_groups):
-            jobs = list(jobs)
-            self.calls.append(
-                (
-                    [
-                        (str(group_key(job)), rollout_index)
-                        for job in jobs
-                        for _proposal, rollout_index in (job,)
-                    ],
-                    max_active_groups,
-                )
-            )
-            return iter(function(job) for job in jobs)
-
-    def application_factory(seed):
-        events.append(f"execute:{seed}")
-        return create_adaptive_application(config, mock=True)
-
-    pool = RecordingGroupedPool()
-    SelfPlayRolloutRunner(
-        proposer=FrozenProposer(),
-        application_factory=application_factory,
-        tokenizer=ByteTokenizer(),
-        snapshots=create_selfplay_snapshots(config),
-        output_dir=tmp_path / "dynamic",
-        config=SelfPlayRunConfig(
-            2,
-            workers=2,
-            task_window=2,
-            require_all_proposals=True,
-            task_scheduling_policy="frozen_manifest_dynamic",
-            max_active_task_groups=2,
-        ),
-        rollout_pool=pool,
-    ).run(["one", "two", "three"])
-
-    first_execute = next(
-        index for index, event in enumerate(events) if event.startswith("execute:")
-    )
-    assert events[:first_execute] == [
-        "propose:task-1",
-        "propose:task-2",
-        "propose:task-3",
-    ]
-    assert len(pool.calls) == 1
-    assert pool.calls[0][1] == 2
-    assert pool.calls[0][0][:3] == [
-        ("task-1", 0),
-        ("task-2", 0),
-        ("task-3", 0),
-    ]
-    assert observation_windows == [["task-1", "task-2"], ["task-3"]]
-    scheduler_events = [
-        json.loads(line)
-        for line in (tmp_path / "dynamic" / "rollout_scheduler_events.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-    ]
-    event_names = [row["event"] for row in scheduler_events]
-    assert event_names.count("job_submitted") == 6
-    assert event_names.count("job_started") == 6
-    assert event_names.count("attempt_started") == 6
-    assert event_names.count("attempt_finished") == 6
-    assert event_names.count("job_finished") == 6
-    assert event_names.count("group_admitted") == 3
-    assert event_names.count("group_released") == 3
-    for task_id in ("task-1", "task-2", "task-3"):
-        admitted = next(
-            index
-            for index, row in enumerate(scheduler_events)
-            if row["event"] == "group_admitted" and row["task_id"] == task_id
-        )
-        released = next(
-            index
-            for index, row in enumerate(scheduler_events)
-            if row["event"] == "group_released" and row["task_id"] == task_id
-        )
-        assert admitted < released
-
-
-def test_frozen_manifest_dynamic_requires_all_proposals(tmp_path) -> None:
-    config = load_adaptive_config(write_config(tmp_path))
-
-    with pytest.raises(ValueError, match="requires require_all_proposals=true"):
-        SelfPlayRolloutRunner(
-            proposer=_MockProposer(),
-            application_factory=lambda seed: create_adaptive_application(config, mock=True),
-            tokenizer=ByteTokenizer(),
-            snapshots=create_selfplay_snapshots(config),
-            output_dir=tmp_path / "invalid-dynamic",
-            config=SelfPlayRunConfig(
-                2,
-                task_scheduling_policy="frozen_manifest_dynamic",
-            ),
-        )
 
 
 def test_resume_cannot_bypass_a_persisted_structural_collapse_stop(tmp_path) -> None:
@@ -2057,13 +2067,12 @@ def test_backend_failure_never_replays_primary_unless_explicit_legacy(tmp_path, 
     assert attempts[0]["recovery_reason"] == "retryable_backend_failure"
     assert attempts[1]["accepted_as_primary"] is True
     assert not (output / "collection_abort.json").exists()
-    # A sleeping failed slot must not hold the only worker. Its successful
-    # sibling is committed first and is not executed again during recovery.
+    # The recovering trajectory retains the only slot until it terminates; the
+    # next independent trajectory is admitted afterwards.
     persisted = [
         json.loads(line) for line in (output / "solver_rollouts.jsonl").read_text().splitlines()
     ]
-    assert persisted[0]["seed"] == 1
-    assert persisted[0]["rollout_id"] != persisted[1]["rollout_id"]
+    assert [row["rollout_id"] for row in persisted] == ["task-1-r0", "task-1-r1"]
     assert attempts_by_seed[1] == 1
     assert sum(attempts_by_seed.values()) == 3
 
@@ -2307,12 +2316,13 @@ def test_swe_non_trainable_attempt_recovers_same_slot_seed_before_primary(
     ).run(["seed"])
 
     assert len(result.solver_batch.samples) == 2
-    assert factory_seeds[:2] == [0, 1]
-    recovery_seed = factory_seeds[2]
+    assert factory_seeds[0] == 0
+    recovery_seed = factory_seeds[1]
     assert recovery_seed not in {0, 1}
+    assert factory_seeds[2] == 1
     assert 599.0 < installed_deadlines[0] <= 600.0
-    assert 599.0 < installed_deadlines[1] <= 600.0
-    assert 0.0 < installed_deadlines[2] < installed_deadlines[0]
+    assert 0.0 < installed_deadlines[1] < installed_deadlines[0]
+    assert 599.0 < installed_deadlines[2] <= 600.0
     rows = [
         json.loads(line) for line in (output / "solver_rollouts.jsonl").read_text().splitlines()
     ]
@@ -3812,6 +3822,110 @@ def test_relation_scheduler_selects_closest_half_trainable_binary_choice() -> No
     assert (first[0].source, first[0].target) == ("a", "c")
 
 
+@pytest.mark.parametrize("terminal_graph", ["missing_output", "missing_model", "complete"])
+def test_counterfactual_preparation_skips_only_unreplayable_terminal_graphs(terminal_graph) -> None:
+    graph = MultiAgentGraph(runtime_routes=("default",))
+    for agent_id in ("a", "b"):
+        graph.add_agent(agent_id)
+        graph.set_prompt(agent_id, agent_id)
+        if terminal_graph != "missing_model" or agent_id != "b":
+            graph.set_model(agent_id, "default")
+    if terminal_graph != "missing_output":
+        graph.set_output("b")
+    prefix = graph.to_dict()
+    graph.set_relation("a", "b", "bidirectional")
+    task = TaskSpec("task", "public prompt")
+    trace = ExecutionTrace(
+        "run",
+        task,
+        [
+            TraceEvent(
+                18,
+                "canvas_step",
+                {
+                    "accepted": True,
+                    "director_turn_index": 0,
+                    "raw_action": "on",
+                    "graph_before": prefix,
+                    "graph": graph.to_dict(),
+                    "relation_decision": _binary_relation_decision("a", "b", "on", 0.6),
+                },
+            )
+        ],
+        graph.to_dict(),
+    )
+    trajectory = TokenizedDirectorTrajectory(
+        "r1",
+        task.task_id,
+        (77, 102),
+        (0, 1),
+        0.0,
+        graph.to_dict(),
+        metadata={
+            "finished": False,
+            "training_eligible": True,
+            "reward_known": True,
+            "relation_choice_token_spans": ((1, 2),),
+        },
+    )
+    primary = SimpleNamespace(
+        application=SimpleNamespace(
+            supports_graph_counterfactual=lambda _task: {"supported": True, "reason": "ready"}
+        ),
+        proposal=ProposedTask(task, ""),
+        result=SimpleNamespace(solver_result=SimpleNamespace(trace=trace)),
+        rollout=SolverRollout(trajectory, graph),
+        rollout_seed=17,
+        executor_seed=17,
+        decisions=(),
+        counterfactual_cancellation_event=None,
+        close=lambda: None,
+    )
+    runner = object.__new__(SelfPlayRolloutRunner)
+    runner.config = SelfPlayRunConfig(2, counterfactuals_per_rollout=1)
+    runner.application_factory = lambda _seed: pytest.fail("unfinished graph reached a Worker")
+    # The accepted binary action is otherwise auditable in all three cases.
+    assert len(schedule_relation_decisions(trace, action_token_spans=((1, 2),))) == 1
+
+    runner._prepare_counterfactual(primary)
+
+    if terminal_graph == "complete":
+        assert len(primary.decisions) == 1
+        assert trajectory.metadata["relation_counterfactual_candidate_count"] == 1
+        assert "relation_counterfactual_skip_reason" not in trajectory.metadata
+        evaluated = []
+
+        def evaluate(branch, seed):
+            assert branch.output_agent == "b"
+            assert all(node.configured for node in branch.nodes.values())
+            evaluated.append((bool(branch.bidirectional_edges), seed))
+            return float(bool(branch.bidirectional_edges))
+
+        credit = evaluate_relation_decision(
+            primary.decisions[0], rollout_id="r1", seed=17, evaluate=evaluate
+        )
+        assert evaluated == [(False, 17), (True, 17)]
+        assert (credit.q_absent, credit.q_present) == (0.0, 1.0)
+    else:
+        assert primary.decisions == ()
+        assert trajectory.metadata["relation_counterfactual_candidate_count"] == 0
+        assert (
+            trajectory.metadata["relation_counterfactual_skip_reason"]
+            == "incomplete_terminal_graph"
+        )
+        rollout, credits = runner._collect_counterfactual(primary)
+        assert credits == []
+        assert "relation_counterfactual_errors" not in rollout.trajectory.metadata
+        assert rollout.trajectory.reward == trajectory.reward == 0.0
+        assert rollout.trajectory.action_mask == trajectory.action_mask == (0, 1)
+        assert rollout.trajectory.metadata["training_eligible"] is True
+        assert rollout.trajectory.metadata["reward_known"] is True
+        assert rollout.graph.to_dict() == trace.final_graph
+        sample = TrainingSample("r1", task.task_id, (77, 102), (0, 1), 0.0, -0.75)
+        assert token_advantages(sample, credits)[1] == -0.75
+        assert _relation_call_advantage(sample, credits, 0, 1.0) == -0.75
+
+
 def test_counterfactual_failure_keeps_completed_primary_rollout(tmp_path, monkeypatch) -> None:
     config = replace(load_adaptive_config(write_config(tmp_path)), verifier="exact_match")
     runner = SelfPlayRolloutRunner(
@@ -3940,7 +4054,6 @@ def test_counterfactual_pipeline_overlaps_next_primary_and_preserves_results(
             task_window=1,
             counterfactuals_per_rollout=1,
             pipeline_counterfactuals=True,
-            counterfactual_workers=1,
         ),
     )
     original_primary = pipeline_runner._collect_primary
@@ -3995,14 +4108,18 @@ def test_counterfactual_pipeline_overlaps_next_primary_and_preserves_results(
     ]
     manifest = json.loads((pipeline_output / "run_manifest.json").read_text())
     assert manifest["rollout_batching"]["counterfactual_pipeline"] == (
-        "global_queue_as_each_primary_rollout_completes"
+        "shared_priority_queue_as_each_primary_rollout_completes"
+    )
+    assert manifest["rollout_batching"]["shared_trajectory_slots"] == 1
+    assert manifest["rollout_batching"]["trajectory_priority"] == (
+        "primary_before_counterfactual"
     )
     assert manifest["rollout_batching"]["final_training_barrier"] == (
         "wait_for_bounded_counterfactual_completion"
     )
 
 
-def test_dynamic_counterfactual_pipeline_overlaps_remaining_primary_rollouts(
+def test_counterfactual_pipeline_overlaps_remaining_primary_rollouts(
     tmp_path, monkeypatch
 ) -> None:
     config = replace(load_adaptive_config(write_config(tmp_path)), verifier="exact_match")
@@ -4028,12 +4145,9 @@ def test_dynamic_counterfactual_pipeline_overlaps_remaining_primary_rollouts(
             workers=1,
             task_window=3,
             task_execution_window=1,
-            task_scheduling_policy="frozen_manifest_dynamic",
-            max_active_task_groups=3,
             require_all_proposals=True,
             counterfactuals_per_rollout=1,
             pipeline_counterfactuals=True,
-            counterfactual_workers=1,
         ),
     )
     original_primary = runner._collect_primary
@@ -4059,13 +4173,13 @@ def test_dynamic_counterfactual_pipeline_overlaps_remaining_primary_rollouts(
     ]
     streamed = [event for event in events if event["event"] == "counterfactual_rollout_started"]
     assert streamed
-    assert all(event["scheduling"] == "after_primary_rollout" for event in streamed)
+    assert all(event["scheduling"] == "shared_trajectory_pool" for event in streamed)
     boundaries = [event for event in events if event["event"] == "counterfactual_update_boundary"]
     assert len(boundaries) == 1
     assert boundaries[0]["submitted"] == 6
     manifest = json.loads((tmp_path / "dynamic" / "run_manifest.json").read_text())
     assert manifest["rollout_batching"]["counterfactual_pipeline"] == (
-        "global_queue_as_each_primary_rollout_completes"
+        "shared_priority_queue_as_each_primary_rollout_completes"
     )
 
 
@@ -4090,7 +4204,9 @@ def test_counterfactual_pair_uses_one_independent_shared_deadline(tmp_path, monk
     primary.primary_duration_s = 899.0
     primary.rollout.trajectory.metadata["action_token_spans"] = ((0, 1),)
     primary.decisions = (RelationDecision(0, "a", "b", 0.5, {}, True),)
+    primary.counterfactual_trajectory_gate = _PriorityTrajectoryGate(2, 0)
     deadlines = []
+    both_branches_started = threading.Barrier(2)
 
     def branch_factory(seed):
         branch = create_adaptive_application(config, mock=True)
@@ -4101,19 +4217,22 @@ def test_counterfactual_pair_uses_one_independent_shared_deadline(tmp_path, monk
             install(deadline)
 
         branch.set_rollout_deadline = capture
-        branch.evaluate_graph = lambda *_args, **_kwargs: 1.0
+        def evaluate_graph(*_args, **_kwargs):
+            both_branches_started.wait(timeout=2)
+            return 1.0
+
+        branch.evaluate_graph = evaluate_graph
         return branch
 
     runner.application_factory = branch_factory
 
-    def evaluate_pair(_decision, *, seed, evaluate, **_kwargs):
-        evaluate(primary.rollout.graph, seed)
-        evaluate(primary.rollout.graph, seed)
+    def evaluate_pair_decision(_decision, *, seed, evaluate_pair, **_kwargs):
+        assert evaluate_pair(primary.rollout.graph, primary.rollout.graph, seed) == (1.0, 1.0)
         return None
 
     monkeypatch.setattr(
         "selfplay_graph_flowsteer.selfplay_runtime.evaluate_relation_decision",
-        evaluate_pair,
+        evaluate_pair_decision,
     )
     rollout, credits = runner._collect_counterfactual(primary)
 
@@ -4122,6 +4241,13 @@ def test_counterfactual_pair_uses_one_independent_shared_deadline(tmp_path, monk
     assert deadlines[0] is deadlines[1]
     assert deadlines[0].total_timeout_s == 17
     assert deadlines[0].absolute_wall_timeout_s == 17
+    assert [
+        row["branch"]
+        for row in rollout.trajectory.metadata["relation_counterfactual_branches"]
+    ] == [
+        "off",
+        "on",
+    ]
     assert rollout.trajectory.metadata["relation_counterfactual_budget"] == {
         "scope": "independent_off_on_pair",
         "pair_wall_budget_s": 17,
@@ -4146,7 +4272,6 @@ def test_update_boundary_waits_for_bounded_running_credit_before_training(
             task_window=1,
             counterfactuals_per_rollout=1,
             pipeline_counterfactuals=True,
-            counterfactual_workers=1,
             rollout_wall_time_s=900,
             stateful_rollout_wall_time_s=900,
             swe_rollout_wall_time_s=900,
@@ -4845,6 +4970,12 @@ def test_uncertain_zero_cli_default_and_opt_out():
     assert not parser.parse_args(
         ["selfplay-experiment", "--output", "unused", "--no-uncertain-attribution-zero-reward"]
     ).uncertain_attribution_zero_reward
+    assert not parser.parse_args(
+        ["selfplay-experiment", "--output", "unused"]
+    ).historical_duration_priority
+    assert parser.parse_args(
+        ["selfplay-experiment", "--output", "unused", "--historical-duration-priority"]
+    ).historical_duration_priority
 
 
 @pytest.mark.parametrize("score", [0.0, 1.0, 0.37])
@@ -5156,6 +5287,60 @@ def test_direct_retryable_backend_request_retries_the_same_slot(tmp_path) -> Non
         json.loads(line) for line in (output / "rollout_attempts.jsonl").read_text().splitlines()
     ]
     assert attempts[0]["recovery_reason"] == "retryable_backend_failure"
+
+
+def test_exhausted_endpoint_pool_opens_the_logical_route_circuit(tmp_path) -> None:
+    config = load_adaptive_config(write_config(tmp_path))
+    health_path = tmp_path / "route-health.json"
+
+    class ExhaustedJudgePoolApplication:
+        @property
+        def solver(self):
+            return SimpleNamespace(verifier=None)
+
+        def solve(self, *args, **kwargs):
+            raise BackendRequestError(
+                BackendFailureClassification(
+                    backend_failure=True,
+                    origin="endpoint_pool",
+                    kind="endpoint_pool_exhausted",
+                    retryable=False,
+                    counts_toward_route_circuit=True,
+                    disable_route=True,
+                    stage="endpoint_pool",
+                    route="gpt_judge",
+                ),
+                request_events=[
+                    {
+                        "schema_version": 1,
+                        "event": "backend_request_failure",
+                        "route": "gpt_judge",
+                        "kind": "endpoint_pool_exhausted",
+                        "counts_toward_route_circuit": True,
+                        "disable_route": True,
+                        "will_retry": False,
+                    }
+                ],
+            )
+
+        def close(self) -> None:
+            return None
+
+    runner = SelfPlayRolloutRunner(
+        proposer=_MockProposer(),
+        application_factory=lambda seed: ExhaustedJudgePoolApplication(),
+        tokenizer=ByteTokenizer(),
+        snapshots=create_selfplay_snapshots(config),
+        output_dir=tmp_path / "judge-pool-circuit",
+        config=SelfPlayRunConfig(1, route_health_path=health_path, evaluation_only=True),
+    )
+
+    with pytest.raises(RuntimeError, match="backend failure circuit opened"):
+        runner.run(["seed"])
+
+    state = json.loads(health_path.read_text())
+    assert state["routes"]["gpt_judge"]["status"] == "open"
+    assert state["routes"]["gpt_judge"]["last_failure_type"] == "endpoint_pool_exhausted"
 
 
 @pytest.mark.parametrize("tool_failed", [False, True])

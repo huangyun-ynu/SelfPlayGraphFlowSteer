@@ -645,11 +645,8 @@ def _retry_backend_request(
     deadline: RolloutDeadline | None = None,
 ) -> bool:
     rate_limited = error.classification.kind == "rate_limit"
-    if _ENDPOINT_FAILOVER_ACTIVE.get() and not rate_limited:
-        return False  # The pool owns failover for other transport failures.
-    # Capacity rejection needs backoff even inside a pool: sibling endpoints
-    # can share the same account quota. The endpoint request deadline still
-    # bounds all local attempts; exhausted requests return to pool failover.
+    if _ENDPOINT_FAILOVER_ACTIVE.get():
+        return False  # The pool owns endpoint failover and whole-pool retry.
     retry_limit = RATE_LIMIT_MAX_RETRIES if rate_limited else 1
     if attempt > retry_limit or not error.classification.retryable:
         return False
@@ -1200,6 +1197,21 @@ class OpenAICompatibleBackend:
         for client in clients.values():
             client.close()
 
+    def generate_json(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        role: str,
+        schema: dict[str, Any],
+    ) -> LLMResponse:
+        """Constrain Skill Refiner output through the ordinary request gateway."""
+
+        if role != "skill-distiller":
+            raise ValueError("JSON schema responses are limited to skill-distiller")
+        if not isinstance(schema, dict):
+            raise TypeError("response JSON schema must be an object")
+        return self.generate(messages, role=role, response_json_schema=schema)
+
     @director_guard
     def generate(
         self,
@@ -1210,7 +1222,10 @@ class OpenAICompatibleBackend:
         temperature: float | None = None,
         max_tokens: int | None = None,
         enable_thinking: bool | None = None,
+        response_json_schema: dict[str, Any] | None = None,
     ) -> LLMResponse:
+        if response_json_schema is not None and (role != "skill-distiller" or actions):
+            raise ValueError("JSON schema responses require skill-distiller without tool actions")
         deadline = getattr(self, "rollout_deadline", None)
         request_events: list[dict[str, Any]] = []
         if deadline is not None:
@@ -1221,6 +1236,10 @@ class OpenAICompatibleBackend:
         role_config = self.config.roles.get(role, self.config.roles.get("worker"))
         if role_config is None:
             raise KeyError(f"model role is not configured: {role}")
+        if response_json_schema is not None and role_config.api_surface != "chat_completions":
+            raise NotImplementedError(
+                "Skill Refiner JSON schema responses require the chat-completions surface"
+            )
         if role_config.api_surface == "responses":
             return self._generate_response(
                 messages,
@@ -1254,6 +1273,15 @@ class OpenAICompatibleBackend:
             "temperature": sent_temperature,
             "top_p": role_config.top_p,
         }
+        if response_json_schema is not None:
+            request["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "pats_skill_review",
+                    "strict": True,
+                    "schema": response_json_schema,
+                },
+            }
         if self.config.sampling_seed is not None:
             request["seed"] = int(self.config.sampling_seed)
         exact_policy_trace_requested = bool(
@@ -1451,6 +1479,8 @@ class OpenAICompatibleBackend:
                 "temperature": sent_temperature,
                 "top_p": role_config.top_p,
             }
+            if response_json_schema is not None:
+                retry_request["response_format"] = request["response_format"]
             retry_request[
                 "max_completion_tokens" if self.config.route_name == "minimax" else "max_tokens"
             ] = requested_max_tokens if actions else min(512, requested_max_tokens)
