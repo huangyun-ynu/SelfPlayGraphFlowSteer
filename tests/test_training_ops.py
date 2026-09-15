@@ -1655,9 +1655,17 @@ def test_alternating_trainer_resumes_at_solver_without_repeating_proposer(tmp_pa
 
 
 def test_role_cuda_device_is_bound_before_model_initialization(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+
     torch = pytest.importorskip("torch")
 
     from selfplay_graph_flowsteer import training
+
+    # The probe stops at model loading, before any tokenizer is constructed.
+    transformers = ModuleType("transformers")
+    transformers.AutoTokenizer = object
+    monkeypatch.setitem(sys.modules, "transformers", transformers)
 
     events = []
     monkeypatch.setattr(torch.cuda, "set_device", lambda device: events.append(device))
