@@ -7,7 +7,10 @@ import ipaddress
 import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import urlopen as local_urlopen
+from urllib.request import ProxyHandler, build_opener
+
+
+_DIRECT_OPENER = build_opener(ProxyHandler({}))
 
 
 def model_proxy(base_url: str, network_path: str = "configured_proxy") -> str | None:
@@ -37,7 +40,9 @@ def model_urlopen(request, *, timeout):
     """urllib-shaped transport for Gemini; preserve existing HTTP error handling."""
     proxy = model_proxy(request.full_url)
     if proxy is None:
-        return local_urlopen(request, timeout=timeout)
+        # urllib's module-level urlopen still honors HTTP(S)_PROXY.  Local and
+        # explicitly direct model routes must bypass inherited proxy settings.
+        return _DIRECT_OPENER.open(request, timeout=timeout)
     import httpx
 
     with httpx.Client(proxy=proxy, trust_env=False, timeout=timeout) as client:
