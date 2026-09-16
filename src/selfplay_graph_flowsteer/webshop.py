@@ -14,10 +14,12 @@ from dataclasses import dataclass, field
 from http.client import HTTPException
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from .backend_failures import EnvironmentServiceError
 from .observability import TaskSpec, VerificationResult
+
+_DIRECT_OPENER = build_opener(ProxyHandler({}))
 
 _PUBLIC_SEARCH_EVIDENCE_SEMANTICS = {
     "title_variant_scope": "default_preview_only",
@@ -178,7 +180,9 @@ class WebShopHTTPClient:
             headers={"Content-Type": "application/json", **extra_headers},
         )
         try:
-            with urlopen(request, timeout=timeout) as response:  # noqa: S310
+            # The sidecar is a local service.  Never let inherited proxy
+            # variables redirect these requests through an external gateway.
+            with _DIRECT_OPENER.open(request, timeout=timeout) as response:  # noqa: S310
                 text = response.read().decode("utf-8")
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:1000]
