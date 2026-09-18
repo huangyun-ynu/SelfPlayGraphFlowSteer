@@ -122,7 +122,7 @@ max_tool_rounds = 3
 enabled = true
 service_url = "http://127.0.0.1:18020"
 timeout_s = 240.0
-max_observation_chars = 4000
+max_observation_chars = 0
 max_query_chars = 500
 max_initial_calls = 12
 max_revision_calls = 4
@@ -130,7 +130,7 @@ max_total_calls = 16
 staged_commit_enabled = true
 max_pending_sessions = 8
 pending_ttl_s = 900.0
-search_observation_mode = "structured_only"
+search_observation_mode = "retain_page_text"
 
 # Local assets are present; the formal environment installs the alfworld extra.
 [alfworld]

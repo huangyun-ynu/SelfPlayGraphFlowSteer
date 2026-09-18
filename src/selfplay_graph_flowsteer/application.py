@@ -352,7 +352,6 @@ class WebShopConfig:
         if (
             min(
                 self.timeout_s,
-                self.max_observation_chars,
                 self.max_query_chars,
                 self.max_pending_sessions,
                 self.pending_ttl_s,
@@ -360,6 +359,8 @@ class WebShopConfig:
             <= 0
         ):
             raise ValueError("webshop limits and timeout must be positive")
+        if self.max_observation_chars < 0:
+            raise ValueError("webshop.max_observation_chars must be non-negative")
         budgets = (
             self.max_initial_calls,
             self.max_revision_calls,

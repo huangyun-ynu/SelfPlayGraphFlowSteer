@@ -820,8 +820,12 @@ class WebShopSessionLifecycle:
             and str(result.get("page_type", "")) == "search_results"
         ):
             page_text = _compact_search_results_text(page_text)
-        result["page_text"] = page_text[: self.max_observation_chars]
-        result["observation_truncated"] = len(page_text) > self.max_observation_chars
+        if self.max_observation_chars > 0:
+            result["page_text"] = page_text[: self.max_observation_chars]
+            result["observation_truncated"] = len(page_text) > self.max_observation_chars
+        else:
+            result["page_text"] = page_text
+            result["observation_truncated"] = False
         return result
 
 
