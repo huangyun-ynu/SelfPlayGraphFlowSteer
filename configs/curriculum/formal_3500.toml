@@ -10,7 +10,7 @@ candidate_count = 8
 # Two tasks per dataset; dispatch all fourteen groups without serial windows.
 # Worker concurrency is an admission ceiling, not a GPU batch size.
 task_window = 14
-rollout_workers = 35
+rollout_workers = 24
 # Project invariant: keep five sibling graph rollouts per task.
 rollouts_per_task = 5
 

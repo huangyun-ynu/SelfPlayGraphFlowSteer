@@ -780,12 +780,12 @@ class WebShopSessionLifecycle:
             raise RuntimeError("WebShop valid_subactions must be a list")
         if self.search_observation_mode == "legacy":
             result["valid_subactions"] = [
-                _legacy_webshop_subaction(item) for item in subactions[:100]
+                _legacy_webshop_subaction(item) for item in subactions
             ]
             result.pop("search_evidence_semantics", None)
         else:
             structured_subactions: list[object] = []
-            for item in subactions[:100]:
+            for item in subactions:
                 if isinstance(item, dict):
                     copied = dict(item)
                     if copied.get("kind") == "open_product":
@@ -974,7 +974,7 @@ def _webshop_current_action_surface(current: object) -> dict[str, Any]:
                 for key in ("target_id", "kind", "label", "asin", "option_name", "option_value")
                 if key in item
             }
-            for item in actions[:100]
+            for item in actions
             if isinstance(item, dict)
         ],
     }

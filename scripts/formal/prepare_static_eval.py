@@ -56,6 +56,44 @@ def protocol_rows(population: str) -> list[tuple[dict[str, Any], dict[str, Any]]
     return [(row, private[str(row["source_id"])]) for row in public]
 
 
+def validate_alfworld_binding(
+    task: dict[str, Any], private: dict[str, Any], trajectory: dict[str, Any]
+) -> None:
+    """Reject public/private ALFWorld pairings that do not describe one source trajectory."""
+
+    relative = Path(str(private["trajectory_relative_path"]))
+    if len(relative.parts) < 2:
+        raise ValueError("ALFWorld trajectory path has no encoded task directory")
+    encoded = relative.parts[-2].rsplit("-", 4)
+    if len(encoded) != 5:
+        raise ValueError("ALFWorld task directory does not encode task parameters")
+    task_type, object_target, middle_target, destination_target, _ = encoded
+    params = trajectory.get("pddl_params", {})
+    expected_destination = (
+        params.get("toggle_target", "")
+        if task_type == "look_at_obj_in_light"
+        else params.get("parent_target", "")
+    )
+    expected = (
+        str(trajectory.get("task_type", "")),
+        str(params.get("object_target", "")),
+        str(params.get("mrecep_target", "") or "None"),
+        str(expected_destination),
+    )
+    actual = (task_type, object_target, middle_target, destination_target)
+    if actual != expected:
+        raise ValueError(f"ALFWorld path/PDDL mismatch: encoded={actual!r}, pddl={expected!r}")
+    query = " ".join(str(task.get("query", "")).casefold().split())
+    annotations = trajectory.get("turk_annotations", {}).get("anns", ())
+    descriptions = {
+        " ".join(str(item.get("task_desc", "")).casefold().split())
+        for item in annotations
+        if isinstance(item, dict)
+    }
+    if not query or query not in descriptions:
+        raise ValueError("ALFWorld public query is not an annotation of its bound trajectory")
+
+
 def qa_row(
     public: dict[str, Any],
     private: dict[str, Any],
@@ -158,6 +196,7 @@ def alfworld_population(population: str, source_split: str) -> list[dict[str, An
         trajectory_path = ALFWORLD_ROOT / relative / "traj_data.json"
         game_path = ALFWORLD_ROOT / relative / "game.tw-pddl"
         trajectory = json.loads(trajectory_path.read_text(encoding="utf-8"))
+        validate_alfworld_binding(task, private, trajectory)
         rows.append(
             {
                 "dataset": "alfworld",

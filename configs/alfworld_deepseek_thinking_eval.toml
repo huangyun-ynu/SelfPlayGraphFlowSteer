@@ -108,13 +108,13 @@ max_initial_calls = 3
 max_revision_calls = 1
 max_total_calls = 4
 
-# Pinned Search-R1 Wiki-18 E5/FAISS service shared by NQ-open and HotpotQA.
-# The launcher validates the backend identity before admitting formal runs.
+# Online English Wikipedia, queried on demand with local evidence caching.
+# This is not the fixed Wiki-18 E5/FAISS benchmark setting.
 [retrieval]
 enabled = true
 service_url = "http://127.0.0.1:18010/retrieve"
 top_k = 5
-timeout_s = 240.0
+timeout_s = 120.0
 max_tool_rounds = 3
 
 # The formal launcher owns the pinned official WebShop sidecar on port 18020.
@@ -285,7 +285,7 @@ served_model = "deepseek-flash"
 request_profile = "generic"
 api_surface = "chat_completions"
 network_path = "direct"
-enable_thinking = false
+enable_thinking = true
 reasoning_effort = "low"
 max_concurrency = 20
 timeout_s = 240.0

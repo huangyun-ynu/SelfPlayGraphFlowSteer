@@ -430,6 +430,21 @@ def test_director_prompt_keeps_agent_count_neutral() -> None:
     assert "compact Agent" not in prompt
 
 
+def test_director_prompt_uses_actual_canvas_round_limit() -> None:
+    canvas = GraphCanvas(
+        task="test",
+        runtime=MultiAgentRuntime(RecordingExecutor()),
+        config=CanvasConfig(max_rounds=7),
+    )
+    backend = MockBackend(["not JSON"] * 4)
+
+    GraphDirector(backend=backend, canvas=canvas).run()
+
+    system_prompt = backend.calls[0]["messages"][0]["content"]
+    assert "at most 7 Director turns" in system_prompt
+    assert "at most 20 Director turns" not in system_prompt
+
+
 def test_director_v2_control_prompt_preserves_archived_shrink_prior() -> None:
     base, hints = director_prompt_components("v2")
 
@@ -1078,7 +1093,12 @@ def test_canvas_appends_webshop_purchase_contract() -> None:
     ]
     assert "No purchase is automatically chosen" in node.prompt
     assert "no candidate or evidence-coverage order is selected" in node.prompt
-    assert "The official environment determines the score" in node.prompt
+    assert "Manage the remaining budget" in node.prompt
+    assert "Purchase early only when public evidence supports" in node.prompt
+    assert "continue investigating instead of buying a partial match" in node.prompt
+    assert "Accept a partial match as a fallback only" in node.prompt
+    assert "A candidate need not satisfy every requirement" not in node.prompt
+    assert "Record unsupported or conflicting requirements honestly" in node.prompt
     assert "joined/spaced spelling alternate" not in node.prompt
     assert "task-independent sibling evidence-coverage comparison" not in node.prompt
     assert "latest environment observation" in node.prompt
@@ -2381,6 +2401,160 @@ def test_selected_output_recovery_does_not_read_transitive_bidirectional_peer() 
     assert executor.calls[0]["revision"] is True
     assert executor.calls[0]["prior"] == "a"
     assert executor.calls[0]["peers"] == ["b"]
+
+
+def test_alfworld_feedback_preserves_public_reset_task_without_rewriting_dataset_task():
+    from selfplay_graph_flowsteer.contracts import ExecutionReport
+
+    canvas = GraphCanvas(
+        task="Hold a yellow disc", runtime=MultiAgentRuntime(RecordingExecutor()),
+        dataset="alfworld",
+    )
+    goal = "look at vase under the desklamp."
+    artifact = AgentArtifact(artifact_id="a:1", agent_id="a", answer="Still searching")
+    artifact.environment_result = {"public_task_statement": goal, "won": False}
+    report = ExecutionReport(artifacts={"a": artifact}, executed_agents=["a"])
+    feedback = canvas._feedback("Executed", report)
+    assert goal in feedback
+    assert "public reset task for a" in feedback
+    assert canvas.task == "Hold a yellow disc"
+    artifact.environment_result = {}
+    assert "public reset task" not in canvas._feedback("Executed", report)
+
+
+def _alfworld_selected_output_canvas():
+    canvas = GraphCanvas(
+        task="Complete the public environment task",
+        runtime=MultiAgentRuntime(RecordingExecutor()),
+        dataset="alfworld",
+    )
+    assert canvas.step('{"action":"add_agent","agent_id":"solver"}').accepted
+    assert canvas.step(json.dumps({
+        "action": "set_prompt", "target": "solver", "role": "Executor",
+        "objective": "Complete the task", "scope": "Use public observations",
+        "expected_output": "Return the official result",
+    })).accepted
+    artifact = canvas.runtime.artifacts["solver"]
+    artifact.unresolved_issues = ["Environment remains unsolved after repeated actions"]
+    artifact.environment_result = {
+        "environment_completed": True, "done": False, "won": False, "steps": 34,
+    }
+    assert canvas.step('{"action":"set_output","target":"solver"}').accepted
+    return canvas
+
+
+@pytest.mark.parametrize("result", [
+    {},
+    {"environment_completed": True, "done": False, "won": False},
+    {"environment_completed": True, "done": True, "won": False},
+    {"environment_completed": False, "won": True},
+])
+def test_alfworld_output_selection_does_not_automatically_abandon_task(result):
+    canvas = _alfworld_selected_output_canvas()
+    canvas.runtime.artifacts["solver"].environment_result = result
+    history_length = len(canvas.history)
+    assert "set_prompt" in canvas.control_snapshot()["allowed_actions"]
+    assert canvas.recover_finish_only() is None
+    assert len(canvas.history) == history_length
+    assert canvas.state is CanvasState.BUILDING
+    explicit = canvas.step('{"action":"finish"}')
+    assert explicit.accepted and not explicit.protocol_recovery
+
+
+def test_alfworld_director_can_revise_selected_unsolved_output():
+    canvas = _alfworld_selected_output_canvas()
+    backend = MockBackend([
+        json.dumps({
+            "action": "set_prompt", "target": "solver", "role": "Executor",
+            "objective": "Reassess the public observations and complete the task",
+            "scope": "Use the same environment session",
+            "expected_output": "Report the official outcome",
+            "revision_basis": "unresolved_issue", "evidence_agent_ids": ["solver"],
+        }),
+        '{"action":"finish"}',
+    ])
+    run = GraphDirector(backend=backend, canvas=canvas).run()
+    assert len(run.turns) == 2
+    assert all(turn.accepted for turn in run.turns)
+    assert len(canvas.runtime.executor.calls) == 2
+    assert run.finished
+    assert not canvas.history[-1].protocol_recovery
+
+
+def test_alfworld_finish_only_frozen_state_still_closes():
+    canvas = _alfworld_selected_output_canvas()
+    canvas.topology_edits_frozen = True
+    assert canvas.control_snapshot()["allowed_actions"] == ["finish"]
+    result = canvas.recover_finish_only()
+    assert result is not None and result.accepted and result.protocol_recovery
+    assert canvas.state is CanvasState.FINISHED
+
+
+def test_alfworld_trusted_success_still_automatically_finishes():
+    canvas = _alfworld_selected_output_canvas()
+    canvas.runtime.artifacts["solver"].environment_result = {
+        "environment_completed": True, "done": True, "won": True,
+    }
+    run = GraphDirector(backend=MockBackend([]), canvas=canvas).run()
+    assert run.finished and not run.turns
+    assert canvas.history[-1].accepted and canvas.history[-1].protocol_recovery
+
+
+def test_alfworld_official_success_is_locked_and_disconnected_failure_is_pruned() -> None:
+    executor = RecordingExecutor()
+    adapter = DatasetActionAdapter(
+        adapter_id="alfworld",
+        datasets=("alfworld",),
+        action_names=(),
+        initial_action_budget=0,
+        revision_action_budget=0,
+        total_action_budget=0,
+        environment_state="stateful",
+        session_scope="per_agent",
+        action_execution="sequential",
+    )
+    canvas = GraphCanvas(
+        task="move object",
+        runtime=MultiAgentRuntime(executor),
+        action_adapter=adapter,
+        dataset="alfworld",
+    )
+    for agent_id in ("failed", "winner"):
+        assert canvas.step(json.dumps({"action": "add_agent", "agent_id": agent_id})).accepted
+        assert canvas.step(
+            json.dumps(
+                {
+                    "action": "set_prompt",
+                    "target": agent_id,
+                    "role": "Executor",
+                    "objective": "Complete the environment task.",
+                    "scope": "Use the visible environment.",
+                    "expected_output": "Return the official outcome.",
+                }
+            )
+        ).accepted
+    canvas.runtime.artifacts["failed"].environment_result = {
+        "environment_completed": True,
+        "won": False,
+        "attempt_index": 1,
+    }
+    canvas.runtime.artifacts["winner"].environment_result = {
+        "environment_completed": True,
+        "won": True,
+        "attempt_index": 2,
+    }
+
+    recovered = canvas.recover_trusted_alfworld_success()
+
+    assert canvas.state is CanvasState.FINISHED
+    assert canvas.graph.output_agent == "winner"
+    assert set(canvas.graph.nodes) == {"winner"}
+    assert [step.action.action_type for step in recovered] == [
+        ActionType.SET_OUTPUT,
+        ActionType.DELETE_AGENT,
+        ActionType.FINISH,
+    ]
+    assert all(step.accepted and step.protocol_recovery for step in recovered)
 
 
 def test_director_round_limit_returns_typed_failure_when_nothing_is_recoverable() -> None:

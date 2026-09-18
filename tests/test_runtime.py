@@ -231,6 +231,38 @@ def test_all_existing_dataset_adapters_receive_public_task_separately_from_deleg
         assert "PUBLIC TASK Q WITHOUT PRIVATE GOLD" in serialized
 
 
+@pytest.mark.parametrize("dataset", ["nq_open", "hotpotqa"])
+def test_short_qa_without_retrieval_adapter_still_receives_public_task(dataset: str) -> None:
+    backend = MockBackend([json.dumps({"answer": "public-answer"})])
+    node = AgentNode(
+        "worker",
+        "BOUNDED DIRECTOR RESPONSIBILITY",
+        metadata={
+            "system_managed_contract": {
+                "version": "dataset-output-contract-v1",
+                "dataset": dataset,
+                "rule_ids": ["concise_answer_span"],
+            }
+        },
+    )
+
+    ModelAgentExecutor(backend).execute(
+        task="PUBLIC TASK Q WITHOUT PRIVATE GOLD",
+        node=node,
+        upstream=[],
+        peers=[],
+        revision=False,
+        seed=0,
+    )
+
+    context = json.loads(backend.calls[0]["messages"][-1]["content"])
+    instruction = backend.calls[0]["messages"][0]["content"]
+    assert context["assigned_task"] == "BOUNDED DIRECTOR RESPONSIBILITY"
+    assert context["public_task_context"] == "PUBLIC TASK Q WITHOUT PRIVATE GOLD"
+    assert "complete trusted public question" in instruction
+    assert "assigned_task field is the only task visible" not in instruction
+
+
 def test_worker_prefers_native_action_call_and_returns_native_tool_result() -> None:
     backend = MockBackend(
         [

@@ -7,8 +7,8 @@ from typing import Any
 
 from .canvas import CanvasState, GraphCanvas
 from .director_timeline import (
-    TIMELINE_CONTEXT_MODES,
     DELTA_CONTEXT_MODE,
+    TIMELINE_CONTEXT_MODES,
     director_context_mode,
     timeline_assistant_content,
     timeline_prefix_audit,
@@ -590,6 +590,10 @@ class GraphDirector:
             ),
         )
         base_prompt, problem_type_hints = director_prompt_components(self.prompt_variant)
+        base_prompt = base_prompt.replace(
+            "at most 20 Director turns",
+            f"at most {self.canvas.config.max_rounds} Director turns",
+        )
         system_prompt = (
             base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
         )
@@ -675,6 +679,12 @@ class GraphDirector:
                 stalled_turns = stalled_turns + 1 if current_signature == progress_signature else 0
                 observed_turns = len(turns)
             progress_signature = current_signature
+            trusted_success = self.canvas.recover_trusted_alfworld_success()
+            if trusted_success:
+                feedback = trusted_success[-1].feedback
+                if self.canvas.state in {CanvasState.FINISHED, CanvasState.FAILED}:
+                    break
+                continue
             # Safe lifecycle closure: this changes only Canvas terminal state and
             # never selects/mutates an Agent, relation, prompt, layer, or output.
             forced_finish = self.canvas.recover_finish_only()

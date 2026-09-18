@@ -22,7 +22,7 @@
     "path": "data/formal/eval/webshop_official_test_128.jsonl",
     "rows": 128,
     "selection_seed": "spgfs-webshop-official-test-128-v1",
-    "sha256": "4f91ed8ae2e6214b163c44e8d7ecdc3509a3f6d83bfb477299b75a11ad4de8f5",
+    "sha256": "35fbda3aef098050f649ca569a8c8e1c8f3a4dbf0e8c800ba3fade74f7335328",
     "unique_source_rows": 128
   }
 }

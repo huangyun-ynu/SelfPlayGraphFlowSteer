@@ -245,12 +245,14 @@ class FixedRuntimeConfig:
             self.api_surface != "chat_completions" or self.request_profile != "generic"
         ):
             raise ValueError("runtime.stream requires generic Chat Completions")
-        if self.request_profile not in {"qwen", "generic", "gemini"}:
-            raise ValueError("runtime.request_profile must be 'qwen', 'generic' or 'gemini'")
+        if self.request_profile not in {"qwen", "generic", "gemini", "responses_text"}:
+            raise ValueError("runtime.request_profile must be qwen, generic, gemini or responses_text")
         if self.api_surface not in {"chat_completions", "responses"}:
             raise ValueError("runtime.api_surface must be chat_completions or responses")
-        if self.api_surface == "responses" and self.request_profile != "generic":
-            raise ValueError("Responses runtimes require the generic request profile")
+        if self.request_profile == "responses_text" and self.api_surface != "responses":
+            raise ValueError("responses_text requires the Responses API")
+        if self.api_surface == "responses" and self.request_profile not in {"generic", "responses_text"}:
+            raise ValueError("Responses runtimes require generic or responses_text")
         if self.healthbench_grader_reasoning_effort not in {None, "low", "medium", "high"}:
             raise ValueError(
                 "runtime.healthbench_grader_reasoning_effort must be low, medium, or high"
@@ -1353,6 +1355,12 @@ def _fixed_runtime(payload: object, root: Path) -> FixedRuntimeConfig:
 def _api_key(payload: dict[str, Any]) -> str:
     """Resolve API credentials without requiring secrets in TOML files."""
 
+    key_file = str(payload.get("api_key_file", "")).strip()
+    if key_file:
+        value = Path(key_file).expanduser().read_text().strip()
+        if not value:
+            raise ValueError("API key file is empty")
+        return value
     env_name = str(payload.get("api_key_env", "")).strip()
     if env_name:
         value = os.environ.get(env_name, "").strip()

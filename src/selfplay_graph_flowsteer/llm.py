@@ -864,6 +864,11 @@ def _openai_response_create(
     request: dict[str, Any],
     deadline: RolloutDeadline | None,
 ):
+    if config.request_profile == "responses_text":
+        return _openai_response_attempt(
+            client, config, request, deadline, attempt=1,
+            request_budget_cap_s=_logical_request_budget_s(config, deadline),
+        )
     sequence_started = time.monotonic()
     sequence_budget_s = _logical_request_budget_s(config, deadline)
     for attempt in range(1, RATE_LIMIT_MAX_RETRIES + 2):
@@ -1780,7 +1785,8 @@ class OpenAICompatibleBackend:
         deadline: RolloutDeadline | None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
-        request_messages = _responses_messages(messages)
+        text_actions = self.config.request_profile == "responses_text"
+        request_messages = _text_action_messages(messages, actions) if text_actions else _responses_messages(messages)
         if role_config.system_prompt:
             request_messages = [
                 {"role": "developer", "content": role_config.system_prompt},
@@ -1791,7 +1797,7 @@ class OpenAICompatibleBackend:
             "input": request_messages,
             "store": False,
         }
-        if actions:
+        if actions and not text_actions:
             request["tools"] = [
                 {
                     "type": "function",
@@ -1888,6 +1894,34 @@ class OpenAICompatibleBackend:
             if role == "worker":
                 deadline.mark_progress("worker_response")
         return result
+
+
+def _text_action_messages(messages: Sequence[dict[str, Any]], actions: Sequence[ActionSpec]) -> list[dict[str, Any]]:
+    """Use plain conversation items for gateways that prohibit native tools."""
+    converted = []
+    if actions:
+        converted.append({"role": "developer", "content": (
+            'To execute a local action, output only JSON: '
+            '{"action_calls":[{"name":"ACTION_NAME","arguments":{}}]}. '
+            'Choose one available action and conform to its parameters. '
+            'Do not invent execution results; wait for the subsequent observation. '
+            'When finished, return the requested final answer. Available actions: '
+            + json.dumps([_openai_tool(action)["function"] for action in actions])
+        )})
+    for message in _openai_messages(messages):
+        role = message.get("role", "user")
+        content = message.get("content") or ""
+        calls = message.get("tool_calls", [])
+        if calls:
+            content = json.dumps({"action_calls": [
+                {"name": call["function"]["name"],
+                 "arguments": json.loads(call["function"]["arguments"])} for call in calls
+            ]})
+        if role == "tool":
+            role = "user"
+            content = "Local action observation: " + str(content)
+        converted.append({"role": role, "content": content})
+    return converted
 
 
 def _responses_messages(messages: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:

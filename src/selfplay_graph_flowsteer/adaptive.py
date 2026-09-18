@@ -580,11 +580,32 @@ class AdaptiveWorkflowSolver:
             for lifecycle in active_webshop_lifecycles:
                 lifecycle.close_all()
         if action_adapter is not None and action_adapter.adapter_id == "alfworld":
+            winning_artifacts = [
+                artifact
+                for artifact in self.runtime.artifacts.values()
+                if artifact.environment_result.get("environment_completed") is True
+                and artifact.environment_result.get("won") is True
+            ]
+            preserved_winner = min(
+                winning_artifacts,
+                key=lambda artifact: (
+                    int(artifact.environment_result.get("attempt_index", 0) or 0),
+                    artifact.agent_id,
+                ),
+            ) if winning_artifacts else None
             environment_result = (
                 dict(output_artifact.environment_result)
                 if output_artifact and output_artifact.environment_result
                 else active_alfworld_lifecycles[0].result_for(canvas.graph.output_agent)
             )
+            if preserved_winner is not None and not bool(environment_result.get("won")):
+                environment_result = dict(preserved_winner.environment_result)
+                task.metadata["environment_result_preservation"] = {
+                    "source": "trusted_winning_episode",
+                    "agent_id": preserved_winner.agent_id,
+                    "selected_output_agent": canvas.graph.output_agent,
+                    "graph_mutated": False,
+                }
             if not canvas.graph.output_agent:
                 completed_artifacts = [
                     artifact

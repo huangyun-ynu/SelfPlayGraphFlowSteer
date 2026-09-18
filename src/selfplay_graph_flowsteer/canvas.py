@@ -1457,6 +1457,92 @@ class GraphCanvas:
             },
         )
 
+    def recover_trusted_alfworld_success(self) -> list[CanvasStep]:
+        """Lock and finalize an Agent whose ALFWorld episode officially succeeded."""
+
+        if (
+            self.state in {CanvasState.FINISHED, CanvasState.FAILED}
+            or self.action_adapter is None
+            or self.action_adapter.adapter_id != "alfworld"
+        ):
+            return []
+        winners = [
+            artifact
+            for artifact in self.runtime.artifacts.values()
+            if artifact.environment_result.get("environment_completed") is True
+            and artifact.environment_result.get("won") is True
+            and artifact.agent_id in self.graph.nodes
+        ]
+        if not winners:
+            return []
+        current = self.graph.output_agent
+        winner = next(
+            (artifact for artifact in winners if artifact.agent_id == current),
+            min(
+                winners,
+                key=lambda artifact: (
+                    int(artifact.environment_result.get("attempt_index", 0) or 0),
+                    artifact.agent_id,
+                ),
+            ),
+        )
+        recovered: list[CanvasStep] = []
+        if current != winner.agent_id:
+            selected = self.step(
+                json.dumps(
+                    {
+                        "action": "set_output",
+                        "target": winner.agent_id,
+                        "expected_version": self.graph.version,
+                    }
+                ),
+                count_round=False,
+            )
+            selected.protocol_recovery = True
+            selected.rejection_details = {
+                "recovery_scope": "trusted_alfworld_success",
+                "reason_code": "official_environment_success",
+            }
+            recovered.append(selected)
+            if not selected.accepted:
+                return recovered
+
+        for agent_id in sorted(self._unreachable_to_output()):
+            legal = self._legal_action_parameters()[ActionType.DELETE_AGENT.value]["targets"]
+            if agent_id not in legal:
+                break
+            deleted = self.step(
+                json.dumps(
+                    {
+                        "action": "delete_agent",
+                        "target": agent_id,
+                        "expected_version": self.graph.version,
+                    }
+                ),
+                count_round=False,
+            )
+            deleted.protocol_recovery = True
+            deleted.rejection_details = {
+                "recovery_scope": "trusted_alfworld_success",
+                "reason_code": "prune_nonwinning_branch",
+            }
+            recovered.append(deleted)
+            if not deleted.accepted:
+                return recovered
+
+        if self.graph.output_agent == winner.agent_id and not self.graph.validate(final=True):
+            finished = self.step(
+                json.dumps({"action": "finish", "expected_version": self.graph.version}),
+                count_round=False,
+            )
+            finished.protocol_recovery = True
+            finished.rejection_details = {
+                "recovery_scope": "trusted_alfworld_success",
+                "reason_code": "official_environment_success",
+            }
+            recovered.append(finished)
+        return recovered
+
     def recover_finish_only(self) -> CanvasStep | None:
         """Finish a ready graph without spending another model turn."""
 
@@ -1470,6 +1556,15 @@ class GraphCanvas:
                 return None
         snapshot = self.control_snapshot()
         finish_is_only_action = snapshot["allowed_actions"] == [ActionType.FINISH.value]
+        if self.dataset == "alfworld" and not finish_is_only_action:
+            artifact = self.runtime.artifacts.get(self.graph.output_agent)
+            result = artifact.environment_result if artifact is not None else {}
+            # Selecting output is not a decision to abandon an unsolved episode.
+            # Preserve the next Director turn whenever other legal actions remain.
+            if not (
+                result.get("environment_completed") is True and result.get("won") is True
+            ):
+                return None
         graph_is_ready = bool(
             self.graph.output_agent
             and not self.graph.validate(final=True)
@@ -3078,6 +3173,15 @@ class GraphCanvas:
                 artifact = report.artifacts.get(agent_id)
                 if artifact is None:
                     continue
+                if self.dataset == "alfworld":
+                    public_task = (artifact.environment_result or {}).get("public_task_statement")
+                    if public_task:
+                        facts.append(
+                            f"ALFWorld public reset task for {agent_id}: "
+                            + json.dumps(public_task, ensure_ascii=False)
+                            + ". This is the environment's public task statement; "
+                            "the original dataset task remains unchanged."
+                        )
                 tool_errors = int(artifact.runtime_tool_evidence.get("failed_count", 0) or 0)
                 summary = self._one_line(
                     artifact.summary or artifact.answer,

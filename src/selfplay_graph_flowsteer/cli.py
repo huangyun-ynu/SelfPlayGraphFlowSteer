@@ -272,6 +272,10 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--director-api-key")
     benchmark.add_argument("--director-model")
     benchmark.add_argument(
+        "--worker-route",
+        help="restrict fixed evaluation Workers to one configured logical runtime route",
+    )
+    benchmark.add_argument(
         "--director-thinking",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -1319,6 +1323,10 @@ def benchmark(args: argparse.Namespace) -> int:
         args,
         training=False,
     )
+    if args.worker_route is not None:
+        if args.worker_route not in config.runtime_pool():
+            raise ValueError(f"unknown Worker route: {args.worker_route}")
+        config = replace(config, worker_runtime_routes=(args.worker_route,))
     director_overrides = {
         key: value
         for key, value in (

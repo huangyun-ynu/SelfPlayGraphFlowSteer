@@ -3,6 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+if [[ ! -f .env ]]; then
+  printf 'Missing %s/.env\n' "$ROOT" >&2
+  exit 2
+fi
+set -a
+source .env
+set +a
 source scripts/formal/environment.sh
 mkdir -p "$TMPDIR"
 mkdir -p \
@@ -32,21 +39,48 @@ if [[ "$ASYNC_ROLLOUT_GPU_ID" == "$PROPOSER_GPU_ID" \
 fi
 
 WEBSHOP_PID=""
-cleanup_webshop() {
+RETRIEVAL_PID=""
+cleanup_services() {
   if [[ -n "$WEBSHOP_PID" ]] && kill -0 "$WEBSHOP_PID" 2>/dev/null; then
     kill "$WEBSHOP_PID" 2>/dev/null || true
     wait "$WEBSHOP_PID" 2>/dev/null || true
   fi
+  if [[ -n "$RETRIEVAL_PID" ]] && kill -0 "$RETRIEVAL_PID" 2>/dev/null; then
+    kill "$RETRIEVAL_PID" 2>/dev/null || true
+    wait "$RETRIEVAL_PID" 2>/dev/null || true
+  fi
 }
-trap cleanup_webshop EXIT
+trap cleanup_services EXIT
+
+retrieval_healthy() {
+  python scripts/formal/check_retrieval_service.py
+}
+
+if [[ "${SPGFS_ENABLE_LOCAL_RETRIEVAL:-1}" == "1" ]] && ! retrieval_healthy; then
+  mkdir -p state/formal-training/retrieval
+  scripts/formal/run_retrieval_service.sh \
+    >state/formal-training/retrieval/service.log 2>&1 &
+  RETRIEVAL_PID=$!
+  for _ in $(seq 1 "${SPGFS_RETRIEVAL_STARTUP_SECONDS:-1800}"); do
+    retrieval_healthy && break
+    kill -0 "$RETRIEVAL_PID" 2>/dev/null || break
+    sleep 1
+  done
+  if ! retrieval_healthy; then
+    printf 'Retrieval service failed to start; see retrieval/service.log.\n' >&2
+    exit 3
+  fi
+fi
 
 webshop_healthy() {
   python - <<'PY'
 import json
+import os
 from urllib.request import urlopen
 
 try:
-    with urlopen("http://127.0.0.1:8020/health", timeout=2.0) as response:
+    port = int(os.environ["SPGFS_WEBSHOP_PORT"])
+    with urlopen(f"http://127.0.0.1:{port}/health", timeout=2.0) as response:
         payload = json.load(response)
 except Exception:
     raise SystemExit(1)
@@ -54,6 +88,7 @@ raise SystemExit(
     0
     if payload.get("status") == "ok"
     and payload.get("idempotency_protocol") == "webshop-request-v1"
+    and payload.get("index_path") == os.path.realpath(os.environ["SPGFS_WEBSHOP_INDEX"])
     else 1
 )
 PY
@@ -62,7 +97,7 @@ PY
 if ! webshop_healthy; then
   mkdir -p state/formal-training/webshop_sidecar
   python -m selfplay_graph_flowsteer.webshop_sidecar \
-    --host 127.0.0.1 --port 8020 \
+    --host 127.0.0.1 --port "$SPGFS_WEBSHOP_PORT" \
     --interpreter "$SPGFS_WEBSHOP_INTERPRETER" \
     --worker-script "$SPGFS_WEBSHOP_WORKER" \
     --source-root "$SPGFS_WEBSHOP_SOURCE_ROOT" \

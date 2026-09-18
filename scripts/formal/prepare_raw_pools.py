@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
@@ -36,6 +37,7 @@ COUNT = 512
 WEBSHOP_TEST_COUNT = 128
 WEBSHOP_TEST_STOP = 500
 WEBSHOP_EVAL_STOP = 1500
+WEBSHOP_OFFICIAL_SHUFFLE_SEED = 233
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -53,6 +55,12 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def official_webshop_goals(goals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    shuffled = list(goals)
+    random.Random(WEBSHOP_OFFICIAL_SHUFFLE_SEED).shuffle(shuffled)
+    return shuffled
 
 
 def selected(
@@ -220,8 +228,9 @@ def alfworld_pool() -> list[dict[str, Any]]:
 
 def webshop_rows(goals: list[dict[str, Any]], indices: range, *, split: str) -> list[dict[str, Any]]:
     rows = []
+    official_goals = official_webshop_goals(goals)
     for goal_index in indices:
-        goal = goals[goal_index]
+        goal = official_goals[goal_index]
         source_id = f"webshop/goal-{goal_index:05d}"
         row = base_row(
             task_id=source_id,
@@ -240,6 +249,7 @@ def webshop_rows(goals: list[dict[str, Any]], indices: range, *, split: str) -> 
                     "benchmark_id": "webshop",
                     "source_version": "official-12087-instruction-release",
                     "source_split": split,
+                    "goal_order": "official_random_seed_233",
                     "official_goal_index_ranges": {
                         "test": [0, WEBSHOP_TEST_STOP - 1],
                         "eval": [WEBSHOP_TEST_STOP, WEBSHOP_EVAL_STOP - 1],

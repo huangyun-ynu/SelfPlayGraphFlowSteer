@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
+import re
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -114,7 +116,7 @@ class LocalALFWorldClient:
 
 @dataclass
 class ALFWorldSessionLifecycle:
-    """Bind a trusted task and isolate one fresh ALFWorld attempt per Worker execution."""
+    """Keep an independent, continuous episode for each Worker in a bound task."""
 
     client: ALFWorldClient
     data_root: Path
@@ -134,6 +136,10 @@ class ALFWorldSessionLifecycle:
     _results: dict[str, dict[str, Any]] = field(default_factory=dict)
     _rollout_steps: int = 0
     _attempt_index: int = 0
+    _active_attempt_index: int = 0
+    _sessions: dict[str, tuple[str, dict[str, Any], dict[str, str], int]] = field(
+        default_factory=dict
+    )
     _lock: threading.RLock = field(default_factory=threading.RLock)
 
     @property
@@ -157,7 +163,26 @@ class ALFWorldSessionLifecycle:
         with self._lock:
             if self._task is None or self._game_path is None:
                 raise RuntimeError("ALFWorld lifecycle has no bound task")
-            self._close_active()
+            if self._active_session is not None:
+                raise RuntimeError("ALFWorld lifecycle already has an active Worker execution")
+            agent_id = str(agent_id)
+            saved = self._sessions.get(agent_id)
+            if saved is not None:
+                if self._results.get(agent_id, {}).get("termination_reason") == "environment_step_failed":
+                    raise RuntimeError("ALFWorld session state is uncertain after an environment failure")
+                session_id, state, action_map, attempt_index = self._sessions.pop(agent_id)
+                self._active_agent = agent_id
+                self._active_session = session_id
+                self._active_state = state
+                self._action_map = action_map
+                self._active_attempt_index = attempt_index
+                self._results[agent_id]["revision"] = bool(revision)
+                if not state.get("done"):
+                    self._results[agent_id]["termination_reason"] = "running"
+                state["remaining_rollout_env_steps"] = max(
+                    0, self.max_rollout_steps - self._rollout_steps
+                )
+                return dict(state)
             if self._rollout_steps >= self.max_rollout_steps:
                 raise RuntimeError("ALFWorld rollout environment-step budget is exhausted")
             payload = self.client.create_session(
@@ -169,6 +194,7 @@ class ALFWorldSessionLifecycle:
             self._active_agent = str(agent_id)
             self._active_session = session_id
             self._attempt_index += 1
+            self._active_attempt_index = self._attempt_index
             state = self._public_state(payload, step=0)
             self._active_state = state
             self._results[self._active_agent] = self._result(
@@ -244,11 +270,22 @@ class ALFWorldSessionLifecycle:
                         }
                     )
                 self._results[self._active_agent] = current
-            self._close_active()
+            if self._active_agent and self._active_session:
+                self._sessions[self._active_agent] = (
+                    self._active_session, self._active_state,
+                    self._action_map, self._active_attempt_index,
+                )
+                self._active_session = None
+                self._active_agent = None
+                self._active_state = {}
+                self._action_map = {}
 
     def close_all(self) -> None:
         with self._lock:
             self._close_active()
+            for agent_id, (session_id, _, _, _) in list(self._sessions.items()):
+                self.client.close_session(session_id)
+                del self._sessions[agent_id]
             self._task = None
             self._game_path = None
             self._game_fingerprint = ""
@@ -287,6 +324,14 @@ class ALFWorldSessionLifecycle:
             f"s{step:04d}:a{index:03d}": command for index, command in enumerate(commands)
         }
         observation = str(payload.get("observation", ""))
+        if step == 0:
+            initial_observation = observation[: self.max_observation_chars]
+            # Extract before truncation: the public reset goal follows the room description.
+            _, marker, public_task = observation.partition("Your task is to:")
+            public_task_statement = public_task.strip()[: self.max_observation_chars] if marker else ""
+        else:
+            initial_observation = str(self._active_state.get("initial_observation", ""))
+            public_task_statement = str(self._active_state.get("public_task_statement", ""))
         state: dict[str, Any] = {
             "status": (
                 "success"
@@ -297,6 +342,8 @@ class ALFWorldSessionLifecycle:
             ),
             "step": step,
             "observation": observation[: self.max_observation_chars],
+            "initial_observation": initial_observation,
+            "public_task_statement": public_task_statement,
             "observation_truncated": len(observation) > self.max_observation_chars,
             "reward": float(payload.get("reward", 0.0)),
             "score": float(payload.get("score", payload.get("reward", 0.0))),
@@ -315,6 +362,12 @@ class ALFWorldSessionLifecycle:
         }
         if executed_command:
             state["executed_command"] = executed_command
+        state["factual_memory"] = _update_factual_memory(
+            self._active_state.get("factual_memory", {}) if step else {},
+            command=executed_command,
+            observation=observation[: self.max_observation_chars],
+            step=step,
+        )
         return state
 
     def _result(
@@ -328,7 +381,7 @@ class ALFWorldSessionLifecycle:
         return {
             "adapter": self.adapter_id,
             "game_fingerprint": self._game_fingerprint,
-            "attempt_index": self._attempt_index,
+            "attempt_index": self._active_attempt_index,
             "revision": bool(revision),
             "done": bool(state.get("done", False)),
             "won": bool(state.get("success", False)),
@@ -337,6 +390,7 @@ class ALFWorldSessionLifecycle:
             "termination_reason": termination_reason,
             "budget_truncated": "budget_exhausted" in termination_reason,
             "environment_completed": bool(environment_completed),
+            "public_task_statement": str(state.get("public_task_statement", "")),
         }
 
 
@@ -519,6 +573,49 @@ def _alfworld_internal_goal_contract(task: TaskSpec) -> dict[str, Any]:
         "requires_lit_examination": task_type == "look_at_obj_in_light",
         "requires_slicing": bool(params.get("object_sliced", False)),
     }
+
+
+def _update_factual_memory(
+    previous: dict[str, Any], *, command: str, observation: str, step: int
+) -> dict[str, Any]:
+    """Keep public observations, never infer task goals or unseen object state."""
+    memory = copy.deepcopy(previous) if previous else {
+        "current_location": "",
+        "visited_locations": [],
+        "opened_receptacles": [],
+        "location_observations": {},
+        "object_interactions": {},
+        "recent_interactions": [],
+    }
+    arrival = re.search(r"You arrive at (.+?)\.", observation)
+    if arrival:
+        location = arrival.group(1)
+        memory["current_location"] = location
+        if location not in memory["visited_locations"]:
+            memory["visited_locations"].append(location)
+    opened = re.search(r"You open the (.+?)\.", observation)
+    if opened and opened.group(1) not in memory["opened_receptacles"]:
+        memory["opened_receptacles"].append(opened.group(1))
+    location = memory["current_location"]
+    # These are dated observations, not assertions that objects remain there.
+    # Keep inspection evidence separate from subsequent manipulation feedback.
+    if location and (arrival or opened or command.startswith("examine ")):
+        memory["location_observations"][location] = {
+            "step": step, "command": command, "observation": observation,
+        }
+    if command:
+        if command.startswith(("take ", "move ", "clean ", "cool ", "heat ")):
+            # Retain each object's dated feedback even after recent history rotates.
+            object_name = re.split(r" from | to | with ", command.split(" ", 1)[1])[0]
+            memory["object_interactions"].setdefault(object_name, []).append({
+                "step": step, "command": command, "observation": observation,
+            })
+        memory["recent_interactions"].append({
+            "step": step, "location": location,
+            "command": command, "observation": observation,
+        })
+        memory["recent_interactions"] = memory["recent_interactions"][-32:]
+    return memory
 
 
 def _first(value: Any) -> Any:

@@ -154,8 +154,8 @@ DELEGATION_FIELD_LIMITS = {
 DELEGATION_TOTAL_LIMIT = 700
 
 _WEBSHOP_EXPECTED_OUTPUT = (
-    "Choose a product and requested options using public evidence; decide whether to call "
-    "latest Buy Now. Record uncertainty honestly; never claim an unresolved constraint is verified."
+    "Stage purchase of the best observed relevant product within the action budget; "
+    "select requested options and honestly report unresolved constraints."
 )
 
 _DATASET_OUTPUT_CONTRACTS: dict[str, tuple[tuple[str, str], ...]] = {
@@ -208,7 +208,24 @@ _DATASET_OUTPUT_CONTRACTS: dict[str, tuple[tuple[str, str], ...]] = {
         ),
         (
             "agent_purchase_authority",
-            "The Agent decides whether to inspect, compare, purchase or report a blocker. Purchase evidence records that decision and its unresolved constraints; it is not an oracle correctness check. The official environment determines the score.",
+            "Your objective is to complete a purchase that best satisfies the user's request "
+            "within the available action budget. Purchase early only when public evidence supports "
+            "the requested product type, attributes, price and requested options, with those options "
+            "selected. If an important requirement is contradicted or unverified and enough budget "
+            "remains for a useful search, comparison or inspection plus completing a purchase, "
+            "continue investigating instead of buying a partial match. Prioritize resolving known "
+            "mismatches; do not repeat uninformative actions or explore merely to use all steps. "
+            "Manage the remaining budget so you can select "
+            "the requested options and execute Buy Now. Include navigation back to the product "
+            "page when needed. When the remaining budget is only enough to finish purchasing "
+            "the best candidate you have observed, stop further exploration. Use public "
+            "evidence to compare candidates, select the closest available requested options, "
+            "and execute Buy Now. Accept a partial match as a fallback only when further useful "
+            "investigation would leave insufficient budget to complete the best observed purchase. "
+            "Record unsupported or conflicting requirements honestly in "
+            "purchase_evidence.unresolved_constraints. Do not claim they are verified. "
+            "Return without staging a purchase only when no executable purchase path remains "
+            "or no observed product is relevant to the request.",
         ),
         (
             "complete_environment_purchase",

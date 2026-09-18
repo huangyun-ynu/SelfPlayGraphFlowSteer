@@ -33,6 +33,7 @@ from .llm import (
     request_token_credit,
     worker_finalization_request,
 )
+from .qa_submission import is_short_qa_dataset
 from .webshop_budget import execution_accounting, request_budget_quote
 
 WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
@@ -46,7 +47,7 @@ _SWE_FINAL_FIX_INSPECTION_BUDGET = 16
 _SWE_FINAL_FIX_ACTION_RESERVE = 2
 _SWE_POLICY_FAILURE_REJECTION_THRESHOLD = 4
 _ALFWORLD_SEMANTIC_STALL_SOFT_WARNING_THRESHOLD = 2
-_ALFWORLD_SEMANTIC_STALL_FUSE_THRESHOLD = 4
+_ALFWORLD_SEMANTIC_STALL_FUSE_THRESHOLD = 18
 _WEBSHOP_PROGRESS_MAX_CHARS = 6_000
 _WEBSHOP_PROGRESS_MAX_QUERIES = 8
 _WEBSHOP_PROGRESS_MAX_PRODUCTS = 12
@@ -801,12 +802,18 @@ class ModelAgentExecutor:
                 ),
             },
         }
-        if action_adapter:
-            # Every Dataset Adapter follows the guide's (q, p_v, visible messages, T)
-            # contract. The public task q is distinct from the Director's bounded
-            # responsibility p_v. The caller renders q from the trusted public
-            # TaskSpec before it reaches the runtime; verifier-only payloads are not
-            # part of this string.
+        system_managed_contract = node.metadata.get("system_managed_contract")
+        contract_dataset = (
+            str(system_managed_contract.get("dataset", ""))
+            if isinstance(system_managed_contract, dict)
+            else ""
+        )
+        public_task_visible = bool(action_adapter) or is_short_qa_dataset(contract_dataset)
+        if public_task_visible:
+            # Dataset adapters and short QA follow the guide's (q, p_v, visible
+            # messages, T) contract. The public task q is distinct from the
+            # Director's bounded responsibility p_v. The caller renders q from the
+            # trusted public TaskSpec; verifier-only payloads are not part of it.
             context["public_task_context"] = task
         instruction = (
             "Revise the prior_artifact after comparing it with the peer_packets. "
@@ -874,6 +881,13 @@ class ModelAgentExecutor:
                 "conversation shared with Workers; use both, plus visible upstream, prior, "
                 "and peer evidence. No external Actions are available. Never infer private "
                 "rubrics, physician responses, canaries, or verifier metadata. "
+            )
+        elif is_short_qa_dataset(contract_dataset):
+            instruction += (
+                "The assigned_task field defines your delegated responsibility. The "
+                "public_task_context field is the complete trusted public question and any "
+                "trusted evidence supplied with it; use both, plus visible upstream, prior, "
+                "and peer evidence. Never infer reference answers or private verifier data. "
             )
         elif action_adapter:
             instruction += (
@@ -4553,6 +4567,7 @@ def _webshop_public_product_state(payload: dict[str, Any]) -> dict[str, Any]:
             "asin": str(product.get("asin", "")).casefold(),
             "title": str(product.get("title", "")),
             "price": product.get("price"),
+            **{key: product[key] for key in ("price_min", "price_max", "price_text") if key in product},
         }
         if isinstance(product, dict)
         else {}
@@ -5266,11 +5281,14 @@ def _alfworld_context_for_prompt(
         state = environment.get("state")
         if isinstance(state, dict) and guidance_policy != "legacy_full_v1":
             state.pop("goal_contract", None)
+        memory = state.pop("factual_memory", None) if isinstance(state, dict) else None
         progress = environment.get("alfworld_progress")
         if guidance_policy == "raw_state_v1":
             environment.pop("alfworld_progress", None)
         elif guidance_policy == "factual_memory_v1" and isinstance(progress, dict):
             environment["alfworld_progress"] = _alfworld_factual_memory_for_prompt(progress)
+            if isinstance(memory, dict):
+                environment["alfworld_progress"].update(memory)
     for key in ("upstream_packets", "peer_packets"):
         packets = projected.get(key)
         if isinstance(packets, list):
@@ -5405,8 +5423,27 @@ def _worker_output_instruction(available_actions: object, *, action_adapter: str
             "pages, selected_options and sparse selected=true "
             "Action fields are the authoritative current selections even when legacy page_text "
             "does not visually mark an option containing quote characters. "
-            "Unknown required constraints are not verified. You decide whether to purchase "
-            "given the public support, conflicts, remaining uncertainty and inspection budget. "
+            "Your objective is to complete a purchase that best satisfies the user's request "
+            "within the available action budget. Purchase early only when public evidence supports "
+            "the requested product type, attributes, price and requested options, with those options "
+            "selected. If an important requirement is contradicted or unverified and enough budget "
+            "remains for a useful search, comparison or inspection plus completing a purchase, "
+            "continue investigating instead of buying a partial match. Prioritize resolving known "
+            "mismatches; do not repeat uninformative actions or explore merely to use all steps. "
+            "Manage the remaining budget so you can select "
+            "the requested options and execute Buy Now. Include navigation back to the product "
+            "page when needed. When the remaining budget is only enough to finish purchasing "
+            "the best candidate you have observed, stop further exploration. Use public "
+            "evidence to compare candidates, select the closest available requested options, "
+            "and execute Buy Now. Accept a partial match as a fallback only when further useful "
+            "investigation would leave insufficient budget to complete the best observed purchase. "
+            "Record unsupported or conflicting requirements honestly in "
+            "purchase_evidence.unresolved_constraints. Do not claim they are verified. "
+            "Return without staging a purchase only when no executable purchase path remains "
+            "or no observed product is relevant to the request. "
+            "A public price range is not a confirmed transaction price. If price_min is below "
+            "the budget but price_max exceeds it, record price as unresolved, not verified. "
+            "When budget permits, compare alternatives with a confirmed affordable price. "
             "A Buy Now call must include purchase_evidence with concise verified_requirements "
             "grounded in public observations and an honest unresolved_constraints list, which "
             "may be nonempty. Do not invent evidence to justify purchasing. "
@@ -6801,7 +6838,7 @@ def _webshop_public_constraint_matrix(
 
     request = " ".join(str(public_task).split())
     price_match = re.search(
-        r"(?:under|below|less\s+than|no\s+more\s+than|at\s+most|maximum(?:\s+of)?)"
+        r"(?:under|below|(?:less|lower)\s+than|no\s+more\s+than|at\s+most|maximum(?:\s+of)?)"
         r"\s*(?:\$|usd\s*)?(\d+(?:\.\d+)?)|"
         r"(?:\$|usd\s*)(\d+(?:\.\d+)?)\s*(?:or\s+less|max(?:imum)?)",
         request,
@@ -6816,6 +6853,16 @@ def _webshop_public_constraint_matrix(
     current_product = product.get("product", {})
     current_price = current_product.get("price") if isinstance(current_product, dict) else None
     price_status = "not_declared"
+    price_min = current_product.get("price_min") if isinstance(current_product, dict) else None
+    price_max = current_product.get("price_max") if isinstance(current_product, dict) else None
+    if ceiling is not None:
+        price_status = "unknown_public_price"
+    if ceiling is not None and isinstance(price_min, (int, float)) and isinstance(price_max, (int, float)):
+        price_status = (
+            "within_public_ceiling" if price_max <= ceiling
+            else "exceeds_public_ceiling" if price_min > ceiling
+            else "uncertain_price_range"
+        )
     if (
         ceiling is not None
         and isinstance(current_price, (int, float))
@@ -6834,6 +6881,8 @@ def _webshop_public_constraint_matrix(
         "price": {
             "maximum": ceiling,
             "current": current_price,
+            "minimum": price_min,
+            "maximum_public_price": price_max,
             "status": price_status,
         },
         "current_product": copy.deepcopy(current_product),
@@ -6917,7 +6966,7 @@ def _webshop_finalization_state(state: object) -> dict[str, Any]:
     if isinstance(product, dict):
         result["product"] = {
             key: str(product[key])[:600] if isinstance(product[key], str) else product[key]
-            for key in ("asin", "title", "price")
+            for key in ("asin", "title", "price", "price_min", "price_max", "price_text")
             if key in product
         }
     selected = state.get("selected_options")

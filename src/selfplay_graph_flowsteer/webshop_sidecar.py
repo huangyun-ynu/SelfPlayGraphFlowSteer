@@ -25,7 +25,6 @@ _IDEMPOTENCY_PROTOCOL = "webshop-request-v1"
 _GOAL_ID = re.compile(r"^(?:webshop/)?goal[-/:](\d+)$", re.IGNORECASE)
 _ASIN = re.compile(r"^[A-Z0-9]{10}$", re.IGNORECASE)
 _PRICE = re.compile(r"\$\s*([0-9]+(?:\.[0-9]+)?)")
-_OPTION_ASIN = re.compile(r"/dp/([A-Z0-9]{10})(?:/|$)", re.IGNORECASE)
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
@@ -236,8 +235,12 @@ class WebShopSession:
             if raw_action is None:
                 raise SidecarError("target_id is not valid in the current WebShop state")
             kind = str(target_id).split(":", 1)[0]
+            returns_to_results = kind == "previous_page" and "buy now" in self.targets.values()
             self._track_click(kind, raw_action)
             result = self.worker.request("step", {"action": f"click[{raw_action}]"})
+            if returns_to_results:
+                self.current_asin = ""
+                self.selected_options = {}
             return self._project(result, action_kind=kind, action_value=raw_action)
 
     def commit(self, target_id: str, commit_id: str) -> dict[str, Any]:
@@ -259,23 +262,14 @@ class WebShopSession:
     def _track_click(self, kind: str, raw_action: str) -> None:
         if kind == "open_product":
             self.current_asin = raw_action.upper()
-            self.selected_options = self._default_options(self.products.product(self.current_asin))
+            # The official environment records only options explicitly clicked in
+            # this session. Catalog display defaults are not purchase selections.
+            self.selected_options = {}
         elif kind == "select_option":
             product = self.products.product(self.current_asin)
             for name, values in _option_groups(product).items():
                 if any(str(item.get("value", "")).casefold() == raw_action.casefold() for item in values):
                     self.selected_options[name.casefold()] = raw_action
-                    variant = next(
-                        (
-                            str(item.get("url", ""))
-                            for item in values
-                            if str(item.get("value", "")).casefold() == raw_action.casefold()
-                        ),
-                        "",
-                    )
-                    match = _OPTION_ASIN.search(variant)
-                    if match:
-                        self.current_asin = match.group(1).upper()
                     break
         elif kind == "back_to_search":
             self.current_asin = ""
@@ -312,12 +306,11 @@ class WebShopSession:
             payload["action_effect"] = {"kind": action_kind, "value": action_value}
         if page_type in {"product", "product_section"} and self.current_asin:
             product = self.products.product(self.current_asin)
-            price = _product_price(product)
             payload.update(
                 {
                     "product": {
                         "asin": self.current_asin,
-                        "price": price,
+                        **_public_price_fields(product),
                         "title": str(product.get("name") or product.get("Title") or ""),
                     },
                     "purchase_visible": "click[buy now]" in actions,
@@ -337,12 +330,12 @@ class WebShopSession:
         if terminal:
             return "done"
         raw = {action.removeprefix("click[").removesuffix("]") for action in actions}
-        if any(_ASIN.fullmatch(value) for value in raw):
-            return "search_results"
         if self.current_asin and "buy now" in raw:
             return "product"
         if self.current_asin:
             return "product_section"
+        if any(_ASIN.fullmatch(value) for value in raw):
+            return "search_results"
         return "search"
 
     def _subactions(
@@ -374,6 +367,7 @@ class WebShopSession:
                     "kind": "open_product",
                     "label": str(preview.get("title", asin)),
                     "price": preview.get("price"),
+                    **{key: preview[key] for key in ("price_min", "price_max", "price_text") if key in preview},
                     "target_id": target,
                     "title": str(preview.get("title", asin)),
                 }
@@ -411,18 +405,15 @@ class WebShopSession:
             targets[target] = value
         return output, targets
 
-    @staticmethod
-    def _default_options(product: dict[str, Any]) -> dict[str, str]:
-        selected: dict[str, str] = {}
-        for name, values in _option_groups(product).items():
-            for item in values:
-                if item.get("is_selected"):
-                    selected[name.casefold()] = str(item.get("value", ""))
-                    break
-        return selected
-
-
 def _option_groups(product: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    # The official environment renders normalized options, not catalog labels.
+    normalized = product.get("options")
+    if isinstance(normalized, dict):
+        return {
+            str(name): [{"value": str(value)} for value in values]
+            for name, values in normalized.items()
+            if isinstance(values, list)
+        }
     value = product.get("customization_options", {})
     if not isinstance(value, dict):
         return {}
@@ -434,11 +425,26 @@ def _option_groups(product: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
 
 
 def _product_price(product: dict[str, Any]) -> float | None:
+    return _public_price_fields(product)["price"]
+
+
+def _public_price_fields(product: dict[str, Any]) -> dict[str, Any]:
+    """Expose only public catalog prices, never the evaluator's sampled price."""
     pricing = product.get("pricing")
-    if isinstance(pricing, list) and pricing and isinstance(pricing[0], int | float):
-        return float(pricing[0])
-    match = _PRICE.search(str(product.get("Price", "")))
-    return float(match.group(1)) if match else None
+    text = str(product.get("Price", ""))
+    values = (
+        [float(value) for value in pricing if isinstance(value, (int, float)) and not isinstance(value, bool)]
+        if isinstance(pricing, list) else []
+    )
+    if not values:
+        values = [float(value) for value in _PRICE.findall(text)]
+    if not values:
+        return {"price": None}
+    low, high = min(values), max(values)
+    if low == high:
+        return {"price": low}
+    return {"price": None, "price_min": low, "price_max": high,
+            "price_text": text or f"${low} to ${high}"}
 
 
 def _search_products(text: str) -> dict[str, dict[str, Any]]:
@@ -449,9 +455,8 @@ def _search_products(text: str) -> dict[str, dict[str, Any]]:
             continue
         title = parts[index + 1] if index + 1 < len(parts) else part
         price_text = parts[index + 2] if index + 2 < len(parts) else ""
-        match = _PRICE.search(price_text)
         output[part.upper()] = {
-            "price": float(match.group(1)) if match else None,
+            **_public_price_fields({"Price": price_text}),
             "title": title,
         }
     return output
@@ -558,6 +563,7 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "goal_fingerprint": state.goal_fingerprint,
+                "index_path": str(state.args.index.resolve()),
                 "idempotency_protocol": _IDEMPOTENCY_PROTOCOL,
                 "request_epoch": state.epoch,
                 "session_count": session_count,
