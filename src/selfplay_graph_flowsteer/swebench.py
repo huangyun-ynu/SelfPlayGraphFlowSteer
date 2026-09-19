@@ -12,10 +12,13 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import UTC, datetime
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from .contracts import CodeArtifactRef
 from .observability import TaskSpec, VerificationResult
@@ -79,6 +82,8 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{7,64}$")
 _INSTANCE_RE = re.compile(r"^[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+-[0-9]+$")
 _CACHE_FETCH_LOCKS: dict[Path, threading.Lock] = {}
 _CACHE_FETCH_LOCKS_GUARD = threading.Lock()
+_CVM_LEASES: dict[tuple[str, str, str, str, str], "TencentCVMLease"] = {}
+_CVM_LEASES_GUARD = threading.Lock()
 
 
 class SWEWorkspaceProvisioningError(RuntimeError):
@@ -122,6 +127,226 @@ def _validate_identity(instance_id: str, repo: str, base_commit: str) -> None:
         raise ValueError(f"invalid SWE repo: {repo!r}")
     if not _COMMIT_RE.fullmatch(base_commit):
         raise ValueError(f"invalid SWE base_commit: {base_commit!r}")
+
+
+class TencentCVMError(RuntimeError):
+    """A Tencent Cloud CVM lifecycle operation failed."""
+
+
+class TencentCVMClient:
+    """Minimal TC3-SHA256 CVM client used for the SWE verifier lease.
+
+    The implementation intentionally uses the official HTTP API directly so
+    enabling this feature does not add a cloud SDK (and its transitive
+    dependencies) to every training environment.
+    """
+
+    def __init__(
+        self,
+        *,
+        secret_id: str,
+        secret_key: str,
+        region: str,
+        instance_id: str,
+        endpoint: str = "cvm.tencentcloudapi.com",
+        timeout_s: float = 30.0,
+    ) -> None:
+        self.secret_id = str(secret_id).strip()
+        self.secret_key = str(secret_key).strip()
+        self.region = str(region).strip()
+        self.instance_id = str(instance_id).strip()
+        self.endpoint = str(endpoint).strip()
+        self.timeout_s = float(timeout_s)
+        if not all((self.secret_id, self.secret_key, self.region, self.instance_id)):
+            raise ValueError("Tencent CVM credentials, region, and instance_id are required")
+        if not re.fullmatch(r"[A-Za-z0-9.-]+", self.endpoint):
+            raise ValueError("invalid Tencent CVM API endpoint")
+        if self.timeout_s <= 0:
+            raise ValueError("Tencent CVM API timeout must be positive")
+
+    @staticmethod
+    def _hmac(key: bytes, value: str) -> bytes:
+        import hmac
+
+        return hmac.new(key, value.encode("utf-8"), hashlib.sha256).digest()
+
+    def _request(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
+        body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        timestamp = int(time.time())
+        date = datetime.fromtimestamp(timestamp, UTC).strftime("%Y-%m-%d")
+        service = "cvm"
+        content_type = "application/json; charset=utf-8"
+        payload_hash = hashlib.sha256(body).hexdigest()
+        canonical_headers = f"content-type:{content_type}\nhost:{self.endpoint}\n"
+        signed_headers = "content-type;host"
+        canonical_request = "\n".join(
+            ("POST", "/", "", canonical_headers, signed_headers, payload_hash)
+        )
+        credential_scope = f"{date}/{service}/tc3_request"
+        string_to_sign = "\n".join(
+            (
+                "TC3-HMAC-SHA256",
+                str(timestamp),
+                credential_scope,
+                hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+            )
+        )
+        secret_date = self._hmac(("TC3" + self.secret_key).encode("utf-8"), date)
+        secret_service = self._hmac(secret_date, service)
+        secret_signing = self._hmac(secret_service, "tc3_request")
+        import hmac
+
+        signature = hmac.new(
+            secret_signing, string_to_sign.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        authorization = (
+            "TC3-HMAC-SHA256 "
+            f"Credential={self.secret_id}/{credential_scope}, "
+            f"SignedHeaders={signed_headers}, Signature={signature}"
+        )
+        request = Request(
+            f"https://{self.endpoint}",
+            data=body,
+            headers={
+                "Authorization": authorization,
+                "Content-Type": content_type,
+                "Host": self.endpoint,
+                "X-TC-Action": action,
+                "X-TC-Version": "2017-03-12",
+                "X-TC-Region": self.region,
+                "X-TC-Timestamp": str(timestamp),
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_s) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            raise TencentCVMError(f"{action} request failed: {type(exc).__name__}") from exc
+        if not isinstance(result, dict):
+            raise TencentCVMError(f"{action} returned a non-object response")
+        error = result.get("Response", {}).get("Error")
+        if error:
+            code = str(error.get("Code", "unknown"))
+            message = str(error.get("Message", ""))[:300]
+            raise TencentCVMError(f"{action} failed: {code}: {message}")
+        return result.get("Response", {})
+
+    def state(self) -> str:
+        response = self._request(
+            "DescribeInstances", {"InstanceIds": [self.instance_id]}
+        )
+        instances = response.get("InstanceSet") or []
+        if not instances:
+            raise TencentCVMError("DescribeInstances returned no matching instance")
+        state = str(instances[0].get("InstanceState", "")).strip().casefold()
+        return state
+
+    def wait_for(self, expected: str, *, timeout_s: float, poll_s: float) -> None:
+        deadline = time.monotonic() + timeout_s
+        expected = expected.casefold()
+        while time.monotonic() < deadline:
+            if self.state() == expected:
+                return
+            time.sleep(max(0.1, poll_s))
+        raise TencentCVMError(f"CVM did not reach {expected} before timeout")
+
+    def start(self, *, timeout_s: float, poll_s: float) -> None:
+        state = self.state()
+        if state == "running":
+            return
+        if state not in {"stopped", "stopping"}:
+            if state == "starting":
+                self.wait_for("running", timeout_s=timeout_s, poll_s=poll_s)
+                return
+            raise TencentCVMError(f"cannot start CVM from state {state or 'unknown'}")
+        if state == "stopping":
+            self.wait_for("stopped", timeout_s=timeout_s, poll_s=poll_s)
+        self._request("StartInstances", {"InstanceIds": [self.instance_id]})
+        self.wait_for("running", timeout_s=timeout_s, poll_s=poll_s)
+
+    def stop(self, *, timeout_s: float, poll_s: float) -> None:
+        state = self.state()
+        if state == "stopped":
+            return
+        if state not in {"running", "starting"}:
+            raise TencentCVMError(f"cannot stop CVM from state {state or 'unknown'}")
+        if state == "starting":
+            self.wait_for("running", timeout_s=timeout_s, poll_s=poll_s)
+        self._request("StopInstances", {"InstanceIds": [self.instance_id]})
+        self.wait_for("stopped", timeout_s=timeout_s, poll_s=poll_s)
+
+
+class TencentCVMLease:
+    """Process-shared reference-counted lease for concurrent SWE evaluations."""
+
+    def __init__(
+        self,
+        client: TencentCVMClient,
+        *,
+        timeout_s: float,
+        poll_s: float,
+        stop_when_idle: bool,
+    ) -> None:
+        self.client = client
+        self.timeout_s = float(timeout_s)
+        self.poll_s = float(poll_s)
+        self.stop_when_idle = bool(stop_when_idle)
+        self._users = 0
+        self._started_by_us = False
+        self._lock = threading.RLock()
+
+    def acquire(self) -> None:
+        with self._lock:
+            if self._users == 0:
+                before = self.client.state()
+                if before != "running":
+                    self.client.start(timeout_s=self.timeout_s, poll_s=self.poll_s)
+                self._started_by_us = before != "running"
+            self._users += 1
+
+    def release(self) -> None:
+        with self._lock:
+            if self._users <= 0:
+                return
+            self._users -= 1
+            if self._users == 0 and self._started_by_us and self.stop_when_idle:
+                try:
+                    self.client.stop(timeout_s=self.timeout_s, poll_s=self.poll_s)
+                finally:
+                    self._started_by_us = False
+
+
+def shared_tencent_cvm_lease(
+    *,
+    secret_id: str,
+    secret_key: str,
+    region: str,
+    instance_id: str,
+    endpoint: str,
+    timeout_s: float,
+    poll_s: float,
+    stop_when_idle: bool = True,
+) -> TencentCVMLease:
+    key = (secret_id, region, instance_id, endpoint, str(bool(stop_when_idle)))
+    with _CVM_LEASES_GUARD:
+        lease = _CVM_LEASES.get(key)
+        if lease is None:
+            lease = TencentCVMLease(
+                TencentCVMClient(
+                    secret_id=secret_id,
+                    secret_key=secret_key,
+                    region=region,
+                    instance_id=instance_id,
+                    endpoint=endpoint,
+                    timeout_s=min(timeout_s, 60.0),
+                ),
+                timeout_s=timeout_s,
+                poll_s=poll_s,
+                stop_when_idle=stop_when_idle,
+            )
+            _CVM_LEASES[key] = lease
+        return lease
 
 
 @dataclass(frozen=True)
@@ -465,6 +690,7 @@ class SSHSWEHarnessBackend:
         max_patch_bytes: int = 2_000_000,
         ssh_executable: str = "ssh",
         log_path: str | Path | None = None,
+        server_lease: TencentCVMLease | None = None,
     ) -> None:
         self.host = str(host).strip()
         self.user = str(user).strip()
@@ -476,6 +702,7 @@ class SSHSWEHarnessBackend:
         self.max_patch_bytes = int(max_patch_bytes)
         self.ssh_executable = str(ssh_executable)
         self.log_path = Path(log_path).resolve() if log_path is not None else None
+        self.server_lease = server_lease
         if not self._HOST_RE.fullmatch(self.host):
             raise ValueError("invalid SWE verifier SSH host")
         if not self._USER_RE.fullmatch(self.user):
@@ -506,6 +733,18 @@ class SSHSWEHarnessBackend:
             "dataset_revision": self.dataset_revision,
             "patch_b64": base64.b64encode(patch).decode("ascii"),
         }
+        lease_acquired = False
+        if self.server_lease is not None:
+            try:
+                self.server_lease.acquire()
+                lease_acquired = True
+            except (TencentCVMError, ValueError) as exc:
+                result = self._infrastructure_result(
+                    f"cvm_control_error:{type(exc).__name__}"
+                )
+                result["control_error"] = str(exc)[:500]
+                self._log(request, patch, result, time.monotonic() - started)
+                return result
         command = [
             self.ssh_executable,
             "-T",
@@ -528,38 +767,42 @@ class SSHSWEHarnessBackend:
             f"{self.user}@{self.host}",
         ]
         try:
-            completed = subprocess.run(
-                command,
-                input=json.dumps(request, separators=(",", ":")).encode() + b"\n",
-                capture_output=True,
-                timeout=self.request_timeout_s,
-                check=False,
-                start_new_session=True,
-            )
-        except subprocess.TimeoutExpired:
-            result = self._infrastructure_result("ssh_request_timeout", status="timeout")
+            try:
+                completed = subprocess.run(
+                    command,
+                    input=json.dumps(request, separators=(",", ":")).encode() + b"\n",
+                    capture_output=True,
+                    timeout=self.request_timeout_s,
+                    check=False,
+                    start_new_session=True,
+                )
+            except subprocess.TimeoutExpired:
+                result = self._infrastructure_result("ssh_request_timeout", status="timeout")
+                self._log(request, patch, result, time.monotonic() - started)
+                return result
+            except OSError as exc:
+                result = self._infrastructure_result(f"ssh_process_error:{type(exc).__name__}")
+                self._log(request, patch, result, time.monotonic() - started)
+                return result
+            if completed.returncode != 0:
+                result = self._infrastructure_result(f"ssh_exit_{completed.returncode}")
+                result["transport_stderr"] = completed.stderr.decode("utf-8", errors="replace")[-2000:]
+                self._log(request, patch, result, time.monotonic() - started)
+                return result
+            if len(completed.stdout) > 100_000:
+                result = self._infrastructure_result("oversized_verifier_response")
+                self._log(request, patch, result, time.monotonic() - started)
+                return result
+            try:
+                response = json.loads(completed.stdout)
+                result = self._validated_response(request, response)
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+                result = self._infrastructure_result(f"invalid_verifier_response:{type(exc).__name__}")
             self._log(request, patch, result, time.monotonic() - started)
             return result
-        except OSError as exc:
-            result = self._infrastructure_result(f"ssh_process_error:{type(exc).__name__}")
-            self._log(request, patch, result, time.monotonic() - started)
-            return result
-        if completed.returncode != 0:
-            result = self._infrastructure_result(f"ssh_exit_{completed.returncode}")
-            result["transport_stderr"] = completed.stderr.decode("utf-8", errors="replace")[-2000:]
-            self._log(request, patch, result, time.monotonic() - started)
-            return result
-        if len(completed.stdout) > 100_000:
-            result = self._infrastructure_result("oversized_verifier_response")
-            self._log(request, patch, result, time.monotonic() - started)
-            return result
-        try:
-            response = json.loads(completed.stdout)
-            result = self._validated_response(request, response)
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            result = self._infrastructure_result(f"invalid_verifier_response:{type(exc).__name__}")
-        self._log(request, patch, result, time.monotonic() - started)
-        return result
+        finally:
+            if lease_acquired:
+                self.server_lease.release()
 
     def _validated_response(self, request: dict[str, Any], response: object) -> dict[str, Any]:
         if not isinstance(response, dict) or set(response) != self._RESPONSE_KEYS:

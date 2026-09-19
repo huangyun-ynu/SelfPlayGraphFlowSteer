@@ -109,13 +109,13 @@ max_initial_calls = 3
 max_revision_calls = 1
 max_total_calls = 4
 
-# Pinned Search-R1 Wiki-18 E5/FAISS service shared by NQ-open and HotpotQA.
-# The launcher validates the backend identity before admitting formal runs.
+# Online English Wikipedia, queried on demand with local evidence caching.
+# This is not the fixed Wiki-18 E5/FAISS benchmark setting.
 [retrieval]
 enabled = true
 service_url = "http://127.0.0.1:18010/retrieve"
 top_k = 5
-timeout_s = 240.0
+timeout_s = 120.0
 max_tool_rounds = 3
 
 # The formal launcher owns the pinned official WebShop sidecar on port 18020.
@@ -131,7 +131,7 @@ max_total_calls = 16
 staged_commit_enabled = true
 max_pending_sessions = 8
 pending_ttl_s = 900.0
-search_observation_mode = "retain_page_text"
+search_observation_mode = "legacy"
 
 # Local assets are present; the formal environment installs the alfworld extra.
 [alfworld]
@@ -159,17 +159,6 @@ verifier_host = "43.134.20.27"
 verifier_user = "sweeval"
 verifier_identity_file = "state/formal-training/private/swe/identity"
 verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
-# Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
-# TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
-cvm_auto_start = false
-cvm_auto_stop = false
-cvm_region = "ap-singapore"
-cvm_instance_id = "ins-5n1zolfw"
-cvm_secret_id_env = "TENCENTCLOUD_SECRET_ID"
-cvm_secret_key_env = "TENCENTCLOUD_SECRET_KEY"
-cvm_endpoint = "cvm.tencentcloudapi.com"
-cvm_timeout_s = 600.0
-cvm_poll_s = 5.0
 dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
 local_test_timeout_s = 60.0
 max_output_chars = 12000
@@ -189,12 +178,12 @@ runtime_route = "gpt_judge"
 expected_model = "gpt-5.5"
 
 [resources]
-proposer_gpu_id = 0
-solver_gpu_id = 1
-allocated_gpu_ids = [0, 1, 2]
-allow_policy_gpu_colocation = false
-proposer_service_gpu_memory_utilization = 0.38
-solver_service_gpu_memory_utilization = 0.80
+proposer_gpu_id = 4
+solver_gpu_id = 4
+allocated_gpu_ids = [4]
+allow_policy_gpu_colocation = true
+proposer_service_gpu_memory_utilization = 0.20
+solver_service_gpu_memory_utilization = 0.40
 
 # Dedicated between-cycle Skill Distiller route.
 [runtimes.skill_refiner]
@@ -297,7 +286,7 @@ served_model = "deepseek-flash"
 request_profile = "generic"
 api_surface = "chat_completions"
 network_path = "direct"
-enable_thinking = false
+enable_thinking = true
 reasoning_effort = "low"
 max_concurrency = 20
 timeout_s = 240.0
@@ -312,7 +301,7 @@ served_model = "MiniMax-M2.7"
 request_profile = "generic"
 api_surface = "chat_completions"
 network_path = "direct"
-enable_thinking = false
+enable_thinking = true
 reasoning_effort = "low"
 max_concurrency = 30
 timeout_s = 240.0

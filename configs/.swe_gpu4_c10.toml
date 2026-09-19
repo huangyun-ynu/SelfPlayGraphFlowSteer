@@ -159,8 +159,8 @@ verifier_host = "43.134.20.27"
 verifier_user = "sweeval"
 verifier_identity_file = "state/formal-training/private/swe/identity"
 verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
-# Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
-# TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
+# Set these to true (or export SPGFS_SWE_CVM_AUTO_START/STOP=1) after adding
+# the private Tencent CAM credentials to the environment.
 cvm_auto_start = false
 cvm_auto_stop = false
 cvm_region = "ap-singapore"
@@ -189,12 +189,12 @@ runtime_route = "gpt_judge"
 expected_model = "gpt-5.5"
 
 [resources]
-proposer_gpu_id = 0
-solver_gpu_id = 1
-allocated_gpu_ids = [0, 1, 2]
-allow_policy_gpu_colocation = false
-proposer_service_gpu_memory_utilization = 0.38
-solver_service_gpu_memory_utilization = 0.80
+proposer_gpu_id = 4
+solver_gpu_id = 4
+allocated_gpu_ids = [4]
+allow_policy_gpu_colocation = true
+proposer_service_gpu_memory_utilization = 0.15
+solver_service_gpu_memory_utilization = 0.20
 
 # Dedicated between-cycle Skill Distiller route.
 [runtimes.skill_refiner]

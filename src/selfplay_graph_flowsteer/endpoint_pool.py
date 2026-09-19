@@ -28,15 +28,17 @@ class EndpointPoolBackend:
         *,
         pool_retry_attempts: int = 0,
         retry_backoff_s: float = 0.0,
+        member_queue_wait_s: float = 0.5,
     ):
         if not members:
             raise ValueError("endpoint pool must not be empty")
-        if pool_retry_attempts < 0 or retry_backoff_s < 0:
+        if pool_retry_attempts < 0 or retry_backoff_s < 0 or member_queue_wait_s < 0:
             raise ValueError("endpoint pool retry settings must be non-negative")
         self.name = name
         self.members = tuple(members.items())
         self.pool_retry_attempts = int(pool_retry_attempts)
         self.retry_backoff_s = float(retry_backoff_s)
+        self.member_queue_wait_s = float(member_queue_wait_s)
         self.config = self.members[0][1].config
         signature = repr([(key, backend.config.base_url) for key, backend in self.members])
         self.counter_path = state_dir / (
@@ -134,7 +136,13 @@ class EndpointPoolBackend:
                     request_remaining_s=max(0.0, end - attempt_started),
                 )
                 try:
-                    with endpoint_failover_scope(end):
+                    # A saturated member must not hold the logical request in
+                    # its local queue while another pool member has capacity.
+                    # Give short bursts a bounded grace period, then surface a
+                    # retryable local queue timeout and immediately fail over.
+                    with endpoint_failover_scope(
+                        end, queue_wait_cap_s=self.member_queue_wait_s
+                    ):
                         response = backend.generate(replay, **kwargs)
                 except Exception as exc:
                     failure = classify_backend_failure(exc, stage="endpoint_pool", route=key)

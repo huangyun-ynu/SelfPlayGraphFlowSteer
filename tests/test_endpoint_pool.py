@@ -254,6 +254,47 @@ def test_failover_scope_disables_nested_retries_and_restores_context():
     assert not _ENDPOINT_FAILOVER_ACTIVE.get()
 
 
+def test_pool_caps_member_queue_wait_and_fails_over_immediately(tmp_path):
+    from selfplay_graph_flowsteer.backend_failures import (
+        BackendFailureClassification,
+        BackendRequestError,
+    )
+    from selfplay_graph_flowsteer.llm import _ENDPOINT_QUEUE_WAIT_CAP_S
+
+    observed_caps = []
+
+    class SaturatedThenHealthy(Backend):
+        def generate(self, messages, **kwargs):
+            observed_caps.append((self.config.route_name, _ENDPOINT_QUEUE_WAIT_CAP_S.get()))
+            if self.config.route_name == "a":
+                raise BackendRequestError(
+                    BackendFailureClassification(
+                        backend_failure=True,
+                        origin="local_queue",
+                        kind="queue_timeout",
+                        retryable=True,
+                        counts_toward_route_circuit=False,
+                        stage="backend_queue",
+                        route="a",
+                    )
+                )
+            return super().generate(messages, **kwargs)
+
+    pool = EndpointPoolBackend(
+        "gpt",
+        {"a": SaturatedThenHealthy("a"), "b": SaturatedThenHealthy("b")},
+        tmp_path,
+        member_queue_wait_s=0.5,
+    )
+
+    result = pool.generate([{"content": "same"}], role="worker")
+
+    assert observed_caps == [("a", 0.5), ("b", 0.5)]
+    assert result.metadata["endpoint_pool_member"] == "b"
+    assert result.metadata["endpoint_pool_failovers"] == 1
+    assert _ENDPOINT_QUEUE_WAIT_CAP_S.get() is None
+
+
 def test_cancelled_rollout_does_not_try_another_endpoint(tmp_path):
     from selfplay_graph_flowsteer.deadline import WorkerWallClockLimitExceeded
 

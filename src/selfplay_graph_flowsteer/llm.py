@@ -32,6 +32,7 @@ from .webshop_budget import request_admission, request_budget_quote
 
 _ENDPOINT_FAILOVER_ACTIVE = ContextVar("endpoint_failover_active", default=False)
 _ENDPOINT_REQUEST_END = ContextVar("endpoint_request_end", default=None)
+_ENDPOINT_QUEUE_WAIT_CAP_S = ContextVar("endpoint_queue_wait_cap_s", default=None)
 _REQUEST_DATASET = ContextVar("request_dataset", default="")
 
 
@@ -45,12 +46,14 @@ def request_dataset(dataset: object):
 
 
 @contextmanager
-def endpoint_failover_scope(end):
+def endpoint_failover_scope(end, *, queue_wait_cap_s: float | None = None):
     active = _ENDPOINT_FAILOVER_ACTIVE.set(True)
     budget = _ENDPOINT_REQUEST_END.set(end)
+    queue_cap = _ENDPOINT_QUEUE_WAIT_CAP_S.set(queue_wait_cap_s)
     try:
         yield
     finally:
+        _ENDPOINT_QUEUE_WAIT_CAP_S.reset(queue_cap)
         _ENDPOINT_REQUEST_END.reset(budget)
         _ENDPOINT_FAILOVER_ACTIVE.reset(active)
 
@@ -537,7 +540,11 @@ def _request_slot(
         if request_budget_cap_s is not None:
             request_budget_s = min(request_budget_s, request_budget_cap_s)
         request_budget_s = max(0.001, request_budget_s)
-        acquired = gate.acquire(priority=priority, timeout=request_budget_s)
+        queue_wait_s = request_budget_s
+        queue_wait_cap_s = _ENDPOINT_QUEUE_WAIT_CAP_S.get()
+        if queue_wait_cap_s is not None:
+            queue_wait_s = min(queue_wait_s, max(0.0, float(queue_wait_cap_s)))
+        acquired = gate.acquire(priority=priority, timeout=queue_wait_s)
         if not acquired:
             _credit_failed_request(deadline, TimeoutError("backend queue timeout"), request_started)
             if deadline is not None:
@@ -1438,9 +1445,52 @@ class OpenAICompatibleBackend:
             choice.message,
             thinking_prefilled=self.config.request_profile == "qwen" and thinking_enabled,
         )
+        split_director_action_retry = False
+        if (
+            role == "graph-director"
+            and self.config.request_profile == "qwen"
+            and thinking_enabled
+            and raw_reasoning_text.strip()
+            and not raw_action_text.strip()
+            and not _openai_action_calls(choice.message)
+            and os.environ.get("SPGFS_QWEN_DIRECTOR_ACTION_RETRY") == "1"
+        ):
+            # Qwen3.5 can stop after writing the requested JSON inside its
+            # private reasoning channel.  That is not a typed Director action:
+            # replay the same authoritative Canvas prompt with thinking off so
+            # the model emits only the externally visible JSON action.  Keep
+            # the first call's reasoning for inference audit, but mark the
+            # resulting split trace non-trainable below because its token IDs
+            # and log-probabilities do not form one contiguous policy sample.
+            action_retry_request = dict(request)
+            action_retry_extra = dict(action_retry_request.get("extra_body", {}))
+            action_retry_template = dict(action_retry_extra.get("chat_template_kwargs", {}))
+            action_retry_template["enable_thinking"] = False
+            action_retry_template.pop("thinking_budget", None)
+            action_retry_extra["chat_template_kwargs"] = action_retry_template
+            action_retry_extra.pop("thinking_token_budget", None)
+            action_retry_request["extra_body"] = action_retry_extra
+            action_retry_request["max_tokens"] = min(
+                1024, int(action_retry_request.get("max_tokens", requested_max_tokens))
+            )
+            with _capture_request_events(request_events, role=role):
+                action_retry = _openai_completion_create(
+                    self._client_for_request(), self.config, action_retry_request, deadline
+                )
+            record_generation(action_retry, action_retry_request["max_tokens"])
+            retry_choice = action_retry.choices[0]
+            retry_reasoning, retry_action = response_policy_parts(
+                retry_choice.message,
+                thinking_prefilled=False,
+            )
+            if retry_action.strip() or _openai_action_calls(retry_choice.message):
+                split_director_action_retry = True
+                completion, choice = action_retry, retry_choice
+                raw_reasoning_text = raw_reasoning_text + retry_reasoning
+                raw_action_text = retry_action
         text = response_content(
             choice.message,
-            enable_thinking=thinking_enabled,
+            enable_thinking=thinking_enabled and not split_director_action_retry,
             reasoning_fallback=self.config.request_profile != "qwen",
         )
         native_calls = _openai_action_calls(choice.message)
@@ -1537,6 +1587,8 @@ class OpenAICompatibleBackend:
             int(value) for value in (getattr(completion, "prompt_token_ids", None) or ())
         )
         exact_sample_trace = bool(
+            not split_director_action_retry
+            and
             prompt_token_ids
             and sampled_token_ids
             and sampled_log_probs
@@ -1580,6 +1632,7 @@ class OpenAICompatibleBackend:
                 ),
                 "backend_request_events": request_events,
                 "generation_attempts": generation_attempts,
+                "split_director_action_retry": split_director_action_retry,
                 "runtime_managed_finalization": _FINALIZATION_REQUEST.get(),
                 "sampling_seed": self.config.sampling_seed,
             },

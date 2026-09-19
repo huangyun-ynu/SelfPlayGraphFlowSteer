@@ -35,6 +35,7 @@ skill_distiller = "skill_refiner"
 health_cooldown_s = 600.0
 pool_retry_attempts = 2
 pool_retry_backoff_s = 1.0
+pool_member_queue_wait_s = 0.5
 
 [runtime_routing.endpoint_pools]
 gpt = ["gpt", "gpt_eco"]

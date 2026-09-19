@@ -94,6 +94,7 @@ from .swebench import (
     SWEWorkspaceLifecycle,
     TrustedSWEVerifierRegistry,
     public_swe_evaluation,
+    shared_tencent_cvm_lease,
     swe_lifecycles,
     swe_tools,
 )
@@ -442,6 +443,15 @@ class SWEConfig:
     verifier_known_hosts_file: Path = Path(
         "state/deployments/20260824-swe-verifier-tencent/known_hosts"
     )
+    cvm_auto_start: bool = False
+    cvm_auto_stop: bool = False
+    cvm_region: str = "ap-singapore"
+    cvm_instance_id: str = "ins-5n1zolfw"
+    cvm_secret_id_env: str = "TENCENTCLOUD_SECRET_ID"
+    cvm_secret_key_env: str = "TENCENTCLOUD_SECRET_KEY"
+    cvm_endpoint: str = "cvm.tencentcloudapi.com"
+    cvm_timeout_s: float = 600.0
+    cvm_poll_s: float = 5.0
     dataset_revision: str = ""
     connect_timeout_s: float = 10.0
     request_timeout_s: float = 720.0
@@ -485,6 +495,15 @@ class SWEConfig:
             raise ValueError("swe.dataset_revision must be a pinned hexadecimal revision")
         if not self.verifier_host.strip() or not self.verifier_user.strip():
             raise ValueError("swe verifier host and user cannot be empty")
+        if self.cvm_auto_start or self.cvm_auto_stop:
+            if self.cvm_auto_stop and not self.cvm_auto_start:
+                raise ValueError("swe.cvm_auto_stop requires swe.cvm_auto_start")
+            if not self.cvm_region.strip() or not self.cvm_instance_id.strip():
+                raise ValueError("SWE CVM region and instance_id are required when enabled")
+            if not self.cvm_secret_id_env.strip() or not self.cvm_secret_key_env.strip():
+                raise ValueError("SWE CVM credential environment variable names are required")
+            if min(self.cvm_timeout_s, self.cvm_poll_s) <= 0:
+                raise ValueError("SWE CVM timeout and poll interval must be positive")
         if (
             min(
                 self.connect_timeout_s,
@@ -541,6 +560,7 @@ class AdaptiveApplicationConfig:
     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
     endpoint_pool_retry_attempts: int = 2
     endpoint_pool_retry_backoff_s: float = 1.0
+    endpoint_pool_member_queue_wait_s: float = 0.5
     skill_distiller_runtime: str = "default"
     route_health_path: Path = Path("state/route_health.json")
     route_health_cooldown_s: float = 600.0
@@ -658,7 +678,11 @@ class AdaptiveApplicationConfig:
             configs = [runtime_pool[member] for member in (logical, *members)]
             if len({(item.served_model, item.reasoning_effort) for item in configs}) != 1:
                 raise ValueError("endpoint pool must use the same model and effort")
-        if self.endpoint_pool_retry_attempts < 0 or self.endpoint_pool_retry_backoff_s < 0:
+        if (
+            self.endpoint_pool_retry_attempts < 0
+            or self.endpoint_pool_retry_backoff_s < 0
+            or self.endpoint_pool_member_queue_wait_s < 0
+        ):
             raise ValueError("endpoint pool retry settings must be non-negative")
         if (
             self.healthbench_judge_runtime_route is not None
@@ -887,6 +911,9 @@ class AdaptiveApplicationConfig:
                 },
                 "endpoint_pool_retry_attempts": self.endpoint_pool_retry_attempts,
                 "endpoint_pool_retry_backoff_s": self.endpoint_pool_retry_backoff_s,
+                "endpoint_pool_member_queue_wait_s": (
+                    self.endpoint_pool_member_queue_wait_s
+                ),
                 "skill_distiller": self.skill_distiller_runtime,
                 "health_state_path": str(self.route_health_path),
                 "health_cooldown_s": self.route_health_cooldown_s,
@@ -1039,6 +1066,9 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         },
         endpoint_pool_retry_attempts=int(runtime_routing.get("pool_retry_attempts", 2)),
         endpoint_pool_retry_backoff_s=float(runtime_routing.get("pool_retry_backoff_s", 1.0)),
+        endpoint_pool_member_queue_wait_s=float(
+            runtime_routing.get("pool_member_queue_wait_s", 0.5)
+        ),
         skill_distiller_runtime=str(runtime_routing.get("skill_distiller", runtime_name)),
         route_health_path=_path(
             runtime_routing.get("health_state_path"), root, "state/route_health.json"
@@ -1247,6 +1277,21 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
                 root,
                 "state/deployments/20260824-swe-verifier-tencent/known_hosts",
             ),
+            cvm_auto_start=bool(swe.get("cvm_auto_start", False))
+            or os.environ.get("SPGFS_SWE_CVM_AUTO_START", "").strip() == "1",
+            cvm_auto_stop=bool(swe.get("cvm_auto_stop", False))
+            or os.environ.get("SPGFS_SWE_CVM_AUTO_STOP", "").strip() == "1",
+            cvm_region=str(swe.get("cvm_region", "ap-singapore")),
+            cvm_instance_id=str(swe.get("cvm_instance_id", "ins-5n1zolfw")),
+            cvm_secret_id_env=str(
+                swe.get("cvm_secret_id_env", "TENCENTCLOUD_SECRET_ID")
+            ),
+            cvm_secret_key_env=str(
+                swe.get("cvm_secret_key_env", "TENCENTCLOUD_SECRET_KEY")
+            ),
+            cvm_endpoint=str(swe.get("cvm_endpoint", "cvm.tencentcloudapi.com")),
+            cvm_timeout_s=float(swe.get("cvm_timeout_s", 600.0)),
+            cvm_poll_s=float(swe.get("cvm_poll_s", 5.0)),
             dataset_revision=str(swe.get("dataset_revision", "")),
             connect_timeout_s=float(swe.get("connect_timeout_s", 10.0)),
             request_timeout_s=float(swe.get("request_timeout_s", 720.0)),
@@ -2124,6 +2169,25 @@ def create_adaptive_application(
         verifier_registry = TrustedSWEVerifierRegistry(config.swe.verifier_registry_path)
         if verifier_registry.dataset_revision != config.swe.dataset_revision:
             raise ValueError("SWE config and trusted registry dataset revisions differ")
+        server_lease = None
+        if config.swe.cvm_auto_start or config.swe.cvm_auto_stop:
+            secret_id = os.environ.get(config.swe.cvm_secret_id_env, "").strip()
+            secret_key = os.environ.get(config.swe.cvm_secret_key_env, "").strip()
+            if not secret_id or not secret_key:
+                raise ValueError(
+                    "SWE CVM auto lifecycle requires credentials in "
+                    f"{config.swe.cvm_secret_id_env} and {config.swe.cvm_secret_key_env}"
+                )
+            server_lease = shared_tencent_cvm_lease(
+                secret_id=secret_id,
+                secret_key=secret_key,
+                region=config.swe.cvm_region,
+                instance_id=config.swe.cvm_instance_id,
+                endpoint=config.swe.cvm_endpoint,
+                timeout_s=config.swe.cvm_timeout_s,
+                poll_s=config.swe.cvm_poll_s,
+                stop_when_idle=config.swe.cvm_auto_stop,
+            )
         swe_lifecycle = SWEWorkspaceLifecycle(
             repo_cache_root=config.swe.repo_cache_root,
             workspace_root=config.swe.workspace_root,
@@ -2143,6 +2207,7 @@ def create_adaptive_application(
                 request_timeout_s=config.swe.request_timeout_s,
                 max_patch_bytes=config.swe.max_patch_bytes,
                 log_path=config.swe.verifier_log_path,
+                server_lease=server_lease,
             ),
             verifier_registry=verifier_registry,
         )
@@ -2217,6 +2282,7 @@ def create_adaptive_application(
                     config.route_health_path.parent / "endpoint_pools",
                     pool_retry_attempts=config.endpoint_pool_retry_attempts,
                     retry_backoff_s=config.endpoint_pool_retry_backoff_s,
+                    member_queue_wait_s=config.endpoint_pool_member_queue_wait_s,
                 )
                 # Install the shared rollout clock on the pool wrapper too,
                 # not only on its physical clients.
