@@ -70,8 +70,8 @@ ALFWorld、SWE、按数据集图复验流水线、Proposer/Solver 并行训练�
 - WebShop 正式配置使用 `search_observation_mode = "retain_page_text"`、
   `max_observation_chars = 0`，即保留完整页面文本；`.alfworld_webshop_gpu4.toml`
   是兼容旧协议的 legacy 配置，使用前要明确选择它。
-- NQ-open 和 HotpotQA 使用配置中的 Search-R1 检索服务；启动前必须验证
-  Wiki-18 语料、E5/FAISS 索引和服务身份。
+- NQ-open 使用配置中的 Search-R1 检索服务；HotpotQA 直接使用数据集上下文。
+  NQ-open 启动前必须验证 Wiki-18 语料、E5/FAISS 索引和服务身份。
 - Qwen3.5 Director 推理评测若遇到 reasoning 通道有内容但 action 通道为空，
   可设置 `SPGFS_QWEN_DIRECTOR_ACTION_RETRY=1` 启用一次短 JSON action 补发。
   该补发轨迹保留推理审计，但不作为连续的可训练 token 轨迹。

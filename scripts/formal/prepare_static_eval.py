@@ -159,7 +159,7 @@ def nq_open() -> list[dict[str, Any]]:
                     "source_split": "dev",
                     "split": "test",
                     "task_type": "factual_qa",
-                    "verifier": "multi_answer_exact_match",
+                    "verifier": "flowsteer_qa",
                 },
                 "prompt": str(item["question"]),
                 "reference": answers[0],
@@ -167,7 +167,7 @@ def nq_open() -> list[dict[str, Any]]:
                 "split": "test",
                 "target_answers": answers,
                 "task_type": "factual_qa",
-                "verifier": "multi_answer_exact_match",
+                "verifier": "flowsteer_qa",
             }
         )
     return select(rows, "nq_open", 128)
@@ -180,7 +180,7 @@ def hotpotqa() -> list[dict[str, Any]]:
             private,
             dataset="hotpotqa",
             task_type="multi_hop_qa",
-            verifier="multi_answer_exact_match",
+            verifier="flowsteer_qa",
             source_split="dev_distractor",
         )
         for public, private in protocol_rows("hotpotqa-v1.1-dev-distractor")

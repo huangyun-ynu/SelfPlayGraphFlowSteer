@@ -28,7 +28,7 @@ export SPGFS_VENV="${SPGFS_VENV:-$ROOT/../.venvs/spgfs-pats-gpu}"
 export PATH="$SPGFS_VENV/bin:$PATH"
 export SPGFS_FORMAL_TASK_POOL="${SPGFS_FORMAL_TASK_POOL:-$ROOT/state/formal-data/validated_task_pool.jsonl}"
 export SPGFS_RETRIEVAL_INDEX="${SPGFS_RETRIEVAL_INDEX:-$ROOT/state/formal-data/retrieval/nq_open_wikipedia.sqlite3}"
-# Formal NQ-open and HotpotQA runs share the pinned Search-R1 Wiki-18
+# Formal NQ-open runs use the pinned Search-R1 Wiki-18
 # E5/FAISS corpus.  The online Wikipedia backend remains available only when
 # explicitly requested for diagnostics.
 export SPGFS_RETRIEVAL_BACKEND="${SPGFS_RETRIEVAL_BACKEND:-faiss}"

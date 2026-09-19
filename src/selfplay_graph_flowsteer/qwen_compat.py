@@ -94,7 +94,11 @@ def response_content(
     content = str(getattr(message, "content", "") or "").strip()
     if content:
         return content
-    reasoning = str(getattr(message, "reasoning_content", "") or "").strip()
+    reasoning = str(
+        getattr(message, "reasoning_content", "")
+        or getattr(message, "reasoning", "")
+        or ""
+    ).strip()
     if enable_thinking and reasoning:
         lines = [line.strip() for line in reasoning.splitlines() if line.strip()]
         return lines[-1] if lines else reasoning
@@ -112,7 +116,14 @@ def response_policy_parts(message: Any, *, thinking_prefilled: bool = False) -> 
     boundary.
     """
 
-    reasoning = str(getattr(message, "reasoning_content", "") or "")
+    # vLLM/Qwen deployments have used both ``reasoning_content`` and
+    # ``reasoning`` for the separate private channel.  Treat them identically
+    # so a one-request reasoning+action response is parsed consistently.
+    reasoning = str(
+        getattr(message, "reasoning_content", "")
+        or getattr(message, "reasoning", "")
+        or ""
+    )
     content = str(getattr(message, "content", "") or "")
     # Some Qwen/vLLM combinations return the reasoning channel inline rather
     # than in ``reasoning_content``. Preserve every provider-authored character,

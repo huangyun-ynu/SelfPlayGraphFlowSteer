@@ -76,6 +76,8 @@ VERIFIERS = (
     "auto",
     "exact_match",
     "multi_answer_exact_match",
+    "flowsteer_qa",
+    "token_f1",
     "numeric",
     "multiple_choice",
     "healthbench_rubric",

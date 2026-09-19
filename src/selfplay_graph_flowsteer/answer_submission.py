@@ -114,6 +114,38 @@ class AnswerFinalizer:
 
         formatter_token_in = formatter_token_out = 0
         try:
+            evidence_mode = str(task.metadata.get("evidence_mode", "")).strip().casefold()
+            context_documents = task.metadata.get("context_documents", [])
+            if not isinstance(context_documents, list):
+                context_documents = []
+            use_evidence_spans = is_short_answer_qa(task) and evidence_mode in {
+                "provided_context",
+                "provided_context_inline",
+            }
+            visible_context = (
+                [
+                    {
+                        "id": str(doc.get("id", f"D{i + 1}")),
+                        "text": str(doc.get("text", "")),
+                    }
+                    for i, doc in enumerate(context_documents[:20])
+                    if isinstance(doc, dict) and str(doc.get("text", "")).strip()
+                ]
+                if use_evidence_spans
+                else []
+            )
+            original_question = str(task.metadata.get("original_question", "")).strip()
+            if not original_question:
+                original_question = _question_from_inline_prompt(task.prompt)
+            question_type = _nq_question_type(original_question)
+            grounding_instruction = (
+                "For provided-context QA, choose the answer from the supplied evidence passages. "
+                "The answer must be copied as one shortest contiguous span from a passage; do "
+                "not invent or paraphrase it. The raw answer is only a proposal and may be "
+                "wrong. "
+                if visible_context
+                else "The answer must be copied from the supplied raw answer, not summary. "
+            )
             response = self.qa_backend.generate(
                 [
                     {
@@ -121,7 +153,10 @@ class AnswerFinalizer:
                         "content": (
                             "Extract the shortest answer span that directly answers the question. "
                             "Do not solve the question again, add facts, or use outside knowledge. "
-                            "The answer must be copied from the supplied raw answer, not summary. "
+                            f"{grounding_instruction}"
+                            f"Question type is {question_type}; select only an answer of this "
+                            "type (person, date, location, number, yes/no, or explicitly "
+                            "requested list). Never select a merely related entity. "
                             "Extract only an unambiguous answer committed to by the original author. "
                             "Preserve necessary units, date ranges, qualifications and precision. "
                             "Do not choose among conflicting candidates or regional dates, prefer "
@@ -134,9 +169,11 @@ class AnswerFinalizer:
                         "role": "user",
                         "content": json.dumps(
                             {
-                                "question": task.prompt,
+                                "question": original_question,
                                 "raw_answer": raw,
                                 "raw_summary": str(raw_summary or ""),
+                                "evidence_passages": visible_context,
+                                "question_type": question_type,
                             },
                             ensure_ascii=False,
                         ),
@@ -155,9 +192,16 @@ class AnswerFinalizer:
                 raise ValueError("formatter returned no answer")
             # This safety boundary is mandatory for short QA even in old
             # configurations that disabled the optional generic span check.
+            source_text = raw
+            if visible_context:
+                source_text += "\n" + "\n".join(
+                    str(doc.get("text", ""))
+                    for doc in task.metadata.get("context_documents", [])
+                    if isinstance(doc, dict)
+                )
             if (
                 is_short_answer_qa(task) or self.config.require_source_span
-            ) and not _is_source_span(candidate, raw):
+            ) and not _is_source_span(candidate, source_text):
                 raise ValueError("formatter answer is not grounded in the source artifact")
             _validate_qa_format_only(raw, candidate)
             return AnswerSubmission(
@@ -185,6 +229,31 @@ class AnswerFinalizer:
             )
 
 
+def _nq_question_type(question: str) -> str:
+    """Coarse answer-type hint used only to constrain final span selection."""
+    q = str(question or "").strip().casefold()
+    if re.match(r"^(who|which person|whose)\b", q):
+        return "person/entity"
+    if re.match(r"^(when|what year|what date|in what year)\b", q):
+        return "date/year"
+    if re.match(r"^(where|what city|what country|what state)\b", q):
+        return "location"
+    if re.match(r"^(how many|how much|what number|what percentage)\b", q):
+        return "number"
+    if re.match(r"^(did|does|is|are|was|were|has|have|can|could|will)\b", q):
+        return "yes/no or short fact"
+    if any(word in q for word in ("list", "which countries", "what are the", "who are the")):
+        return "explicit list"
+    return "short entity/date/location/phrase"
+
+
+def _question_from_inline_prompt(prompt: str) -> str:
+    """Recover the question from the frozen-context prompt when metadata is old."""
+    text = str(prompt or "")
+    match = re.search(r"(?:^|\n)Question:\s*(.+?)(?:\nAnswer:\s*|$)", text, re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip() if match else text.strip()
+
+
 def submission_kind(task: TaskSpec) -> str:
     if is_short_answer_qa(task):
         return "qa"
@@ -193,7 +262,7 @@ def submission_kind(task: TaskSpec) -> str:
         return "numeric"
     if requested in {"multiple_choice"}:
         return "multiple_choice"
-    if requested in {"exact_match", "multi_answer_exact_match"}:
+    if requested in {"exact_match", "multi_answer_exact_match", "flowsteer_qa"}:
         return "qa"
     task_type = task.task_type.casefold()
     if any(value in task_type for value in ("math", "numeric", "number")):

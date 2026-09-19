@@ -88,7 +88,9 @@ PRIMARY_DATASET_DURATION_ESTIMATES_S = {
     "hotpotqa": 88.0,
 }
 PRIMARY_DURATION_ESTIMATE_VERSION = "20260909-cycle1-14x5-v1"
-_BINARY_OUTCOME_DATASETS = frozenset({"aime", "nq_open", "hotpotqa", "alfworld", "swe_bench"})
+# QA uses FlowSteer's continuous 1.0/0.7/0.4/0.2 reward buckets.  The
+# evaluation pass flag remains independently defined by Token-F1 >= 0.5.
+_BINARY_OUTCOME_DATASETS = frozenset({"aime", "alfworld", "swe_bench"})
 
 
 class _PriorityTrajectoryGate:

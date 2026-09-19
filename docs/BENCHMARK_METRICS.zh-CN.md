@@ -18,8 +18,8 @@
 | 数据集 | benchmark.metrics |
 | --- | --- |
 | AIME | accuracy |
-| NQ-open | answer_em、answer_f1、success_rate |
-| HotpotQA | answer_em、answer_f1、support_em、support_f1、joint_em、joint_f1 |
+| NQ-open | flowsteer_eval_f1、flowsteer_eval_accuracy、flowsteer_reward、answer_em、answer_f1、success_rate |
+| HotpotQA | flowsteer_eval_f1、flowsteer_eval_accuracy、flowsteer_reward、answer_f1、answer_em、support_em、support_f1、joint_em、joint_f1 |
 | WebShop | score、success_rate |
 | ALFWorld | success_rate |
 | SWE-bench | resolved_rate，另有 swe_status 数量汇总 |
@@ -46,6 +46,11 @@ QA precision/recall、提取后 EM/F1、HealthBench 答案字符数与正负 rub
 评分器不从答案、轨迹或参考证据反推模型引用。缺失金标准时 support/joint 为 null，
 报告 evidence_coverage。存在金标准但未合法提交证据时按零分处理。
 
+当前 HotpotQA 直接使用数据集提供的 distractor context，不调用 Search-R1。NQ-open 和 HotpotQA
+均提供 `flowsteer_qa`：评测通过标志采用 FlowSteer `eval_only.py` 风格的归一化 token-F1，
+`F1 >= 0.5` 计入 FlowSteer-compatible evaluation accuracy；训练和 Proposer 使用同一 verifier
+返回的 1.0/0.7/0.4/0.2 `flowsteer_reward`。它不冒充官方 EM。官方 `answer_em`/`answer_f1`
+继续单独保留，便于与论文严格指标比较。
 当前正式物化 HotpotQA 池未保留 supporting_facts；现有运行仍是 Answer-only。
 要报告完整 joint 成绩，需要另行从对应官方样本恢复私有金标准和带句号编号的上下文，
 并给模型启用此提交协议后重新评测。新增评分路径本身不能补出既有运行的证据成绩。

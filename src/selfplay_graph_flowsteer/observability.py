@@ -6,6 +6,7 @@ import re
 import string
 import threading
 import unicodedata
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -138,6 +139,84 @@ class MultiAnswerExactMatchVerifier(ExactMatchVerifier):
     name = "multi_answer_exact_match"
 
 
+class FlowSteerQAVerifier:
+    """FlowSteer's ``eval_only.py`` QA metric for NQ-open and HotpotQA.
+
+    The primary score is normalized token-F1 and evaluation passes at F1 >=
+    0.5.  The reward bucket used by FlowSteer's training path is retained in
+    the detail string, so the 0.7 partial reward is observable without being
+    confused with the evaluation pass criterion.
+    """
+
+    name = "flowsteer_qa"
+
+    def verify(self, task: TaskSpec, prediction: str) -> VerificationResult:
+        references = (
+            task.reference if isinstance(task.reference, (list, tuple, set)) else [task.reference]
+        )
+        actual_candidates = _normalized_qa_candidates(prediction)
+        best = 0.0
+        best_reward = 0.0
+        for actual in actual_candidates:
+            for reference in references:
+                expected = _normalize_answer("" if reference is None else str(reference))
+                if not actual or not expected:
+                    continue
+                if actual == expected:
+                    best_reward = max(best_reward, 1.0)
+                elif actual in expected or expected in actual:
+                    best_reward = max(best_reward, 0.7)
+                predicted_tokens = set(actual.split())
+                expected_tokens = set(expected.split())
+                common = len(predicted_tokens & expected_tokens)
+                if common:
+                    precision = common / len(predicted_tokens)
+                    recall = common / len(expected_tokens)
+                    f1 = 2.0 * precision * recall / (precision + recall)
+                    best = max(best, f1)
+                    if f1 >= 0.8:
+                        best_reward = max(best_reward, 1.0)
+                    elif f1 >= 0.5:
+                        best_reward = max(best_reward, 0.7)
+                    elif f1 >= 0.3:
+                        best_reward = max(best_reward, 0.4)
+                    elif f1 >= 0.1:
+                        best_reward = max(best_reward, 0.2)
+        passed = best >= 0.5
+        return VerificationResult(
+            best_reward,
+            passed,
+            self.name,
+            f"token_f1={best:.12g}; flowsteer_reward={best_reward:.12g}; "
+            f"eval_pass_f1_ge_0.5={int(passed)}",
+        )
+
+
+class TokenF1Verifier:
+    """Official SQuAD/HotpotQA answer Token-F1 over dataset aliases."""
+
+    name = "token_f1"
+
+    def verify(self, task: TaskSpec, prediction: str) -> VerificationResult:
+        references = (
+            task.reference if isinstance(task.reference, (list, tuple, set)) else [task.reference]
+        )
+        predicted = _normalize_answer(prediction).split()
+        best = 0.0
+        for reference in references:
+            expected = _normalize_answer("" if reference is None else str(reference)).split()
+            if not predicted or not expected:
+                continue
+            common = sum((Counter(predicted) & Counter(expected)).values())
+            if not common:
+                continue
+            precision = common / len(predicted)
+            recall = common / len(expected)
+            best = max(best, 2.0 * precision * recall / (precision + recall))
+        passed = math.isclose(best, 1.0, rel_tol=0.0, abs_tol=1e-12)
+        return VerificationResult(best, passed, self.name, f"token_f1={best:.12g}")
+
+
 class NumericVerifier:
     name = "numeric"
 
@@ -226,6 +305,8 @@ class AutoVerifier:
         verifier: Verifier | None = {
             "exact_match": ExactMatchVerifier(),
             "multi_answer_exact_match": MultiAnswerExactMatchVerifier(),
+            "flowsteer_qa": FlowSteerQAVerifier(),
+            "token_f1": TokenF1Verifier(),
             "numeric": NumericVerifier(),
             "multiple_choice": MultipleChoiceVerifier(),
             **self.adapters,
@@ -260,6 +341,8 @@ def task_requires_reference(task: TaskSpec) -> bool:
         return requested in {
             "exact_match",
             "multi_answer_exact_match",
+            "flowsteer_qa",
+            "token_f1",
             "numeric",
             "multiple_choice",
         }

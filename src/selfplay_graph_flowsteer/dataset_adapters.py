@@ -191,6 +191,8 @@ def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = Fals
     if dataset == "healthbench_professional" or verifier == "healthbench_rubric":
         task_text = _structured_conversation_text(task.metadata.get("conversation")) or task.prompt
         return f"{task_text}\n\n{contract}" if contract else task_text
+    if str(task.metadata.get("evidence_mode", "")).strip().casefold() == "provided_context_inline":
+        return f"{task_text}\n\n{contract}" if contract else task_text
     documents = task.metadata.get("context_documents") or []
     if not isinstance(documents, list) or not documents:
         return f"{task_text}\n\n{contract}" if contract else task_text

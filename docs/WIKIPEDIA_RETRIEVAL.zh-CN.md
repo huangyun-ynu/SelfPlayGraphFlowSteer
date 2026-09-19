@@ -1,6 +1,6 @@
 # 在线 Wikipedia 检索
 
-当前正式配置为在线英文 Wikipedia，供 NQ-open 和 HotpotQA 的 Worker 按需调用。
+当前在线 Wikipedia 后端仅供 NQ-open 的 Worker 按需调用；HotpotQA 按 FlowSteer 设置直接使用数据集提供的 distractor context。
 不下载固定语料、不预先读取测试问题、不使用本地 E5/FAISS。
 这与 Wiki-18 固定语料评测不同；结果必须注明 online Wikipedia，不能混入原固定语料结果。
 

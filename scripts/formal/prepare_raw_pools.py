@@ -174,7 +174,7 @@ def nq_pool() -> list[dict[str, Any]]:
             source_id=source_id,
             dataset="nq_open",
             task_type="factual_qa",
-            verifier="multi_answer_exact_match",
+            verifier="flowsteer_qa",
             prompt=str(item["question"]),
             metadata={
                 "source_lineage": {
@@ -347,7 +347,7 @@ def main() -> None:
             "hotpotqa-v1.1-train-main",
             "hotpotqa",
             "multi_hop_qa",
-            "multi_answer_exact_match",
+            "flowsteer_qa",
         ),
         "webshop": webshop_pool,
         "alfworld": alfworld_pool,

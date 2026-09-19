@@ -26,11 +26,11 @@ cd /home/bedicloud/sharestore2/iclr-users/owner/SelfPlayGraphFlowSteer
   --storage-ip 47.96.203.70 --storage-ip 47.96.203.71
 ```
 
-此固定语料后端是正式 NQ-open 与 HotpotQA 的默认检索设置。在线 Wikipedia
+此固定语料后端是正式 NQ-open 的默认检索设置。HotpotQA 按 FlowSteer 方案直接使用数据集提供的 distractor context。在线 Wikipedia
 后端仅保留为显式诊断选项；如需使用，必须设置
 `SPGFS_RETRIEVAL_BACKEND=wikipedia`。
 
-NQ-open 与 HotpotQA 共用 Search-R1 的固定 Wiki-18 语料及配套 E5 索引。
+NQ-open 使用 Search-R1 的固定 Wiki-18 语料及配套 E5 索引；HotpotQA 不调用该检索服务。
 这个设置应标为 Search-R1 Wiki-18；它不等同于 HotpotQA 官方 2017 全维基设置，
 也不等同于使用 DPR 编码器。不能仅凭恢复检索就声称与所有论文设置可比。
 

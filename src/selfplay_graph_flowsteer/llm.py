@@ -1453,7 +1453,13 @@ class OpenAICompatibleBackend:
             and raw_reasoning_text.strip()
             and not raw_action_text.strip()
             and not _openai_action_calls(choice.message)
-            and os.environ.get("SPGFS_QWEN_DIRECTOR_ACTION_RETRY") == "1"
+            # A thinking response without a visible action cannot be sent to
+            # Canvas: the strict policy parser quite correctly turns it into
+            # ``{"action":"invalid"}``.  This recovery used to be opt-in,
+            # which made Director thinking fail repeatedly unless an obscure
+            # environment variable was set.  Keep an explicit opt-out for
+            # experiments, but make the safe retry the default.
+            and os.environ.get("SPGFS_QWEN_DIRECTOR_ACTION_RETRY", "1") != "0"
         ):
             # Qwen3.5 can stop after writing the requested JSON inside its
             # private reasoning channel.  That is not a typed Director action:

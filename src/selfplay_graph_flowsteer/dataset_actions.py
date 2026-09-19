@@ -156,6 +156,14 @@ class DatasetActionRegistry:
 
     def resolve(self, task: TaskSpec) -> DatasetActionAdapter | None:
         dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+        # Frozen-context NQ keeps the canonical dataset name (so metrics and
+        # budgets remain comparable) but deliberately has no runtime search.
+        if dataset == "nq_open" and str(task.metadata.get("evidence_mode", "")).strip().casefold() in {
+            "provided_context",
+            "frozen_retrieval",
+            "provided_context_inline",
+        }:
+            return self._by_id.get("nq_open_context")
         return self._by_dataset.get(dataset)
 
     def get(self, adapter_id: str) -> DatasetActionAdapter | None:
@@ -193,7 +201,35 @@ def default_dataset_action_registry(
             commit_policy=CommitPolicy.NONE,
             commit_activation=CommitActivation.NONE,
             supports_parallel_reads=True,
-        )
+        ),
+        DatasetActionAdapter(
+            adapter_id="hotpotqa_context",
+            datasets=("hotpotqa",),
+            action_names=(),
+            initial_action_budget=0,
+            revision_action_budget=0,
+            total_action_budget=0,
+            environment_state=EnvironmentState.STATELESS,
+            session_scope=SessionScope.NONE,
+            action_execution=ActionExecution.BATCH,
+            commit_policy=CommitPolicy.NONE,
+            commit_activation=CommitActivation.NONE,
+            supports_parallel_reads=True,
+        ),
+        DatasetActionAdapter(
+            adapter_id="nq_open_context",
+            datasets=("nq_open_context",),
+            action_names=(),
+            initial_action_budget=0,
+            revision_action_budget=0,
+            total_action_budget=0,
+            environment_state=EnvironmentState.STATELESS,
+            session_scope=SessionScope.NONE,
+            action_execution=ActionExecution.BATCH,
+            commit_policy=CommitPolicy.NONE,
+            commit_activation=CommitActivation.NONE,
+            supports_parallel_reads=True,
+        ),
     ]
     aime_actions = ("symbolic_compute", "finite_search", "python_exec")
     if set(aime_actions) <= available_set:
@@ -211,7 +247,7 @@ def default_dataset_action_registry(
         adapters.append(
             DatasetActionAdapter(
                 adapter_id="retrieval_qa",
-                datasets=("nq_open", "hotpotqa"),
+                datasets=("nq_open",),
                 action_names=("search",),
                 initial_action_budget=retrieval_initial_budget,
                 revision_action_budget=1,

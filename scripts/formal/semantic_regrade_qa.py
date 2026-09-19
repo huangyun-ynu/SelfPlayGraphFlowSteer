@@ -46,8 +46,9 @@ def judge(item, endpoint, model, timeout):
     payload = {'model': model, 'temperature': 0, 'max_tokens': 256,
                'chat_template_kwargs': {'enable_thinking': False},
                'messages': [{'role': 'user', 'content': PROMPT.format(question=question, gold=gold, pred=pred)}]}
+    api_key = (os.environ.get('DEEPSEEK_API_KEY') or os.environ.get('OPENAI_API_KEY') or 'local')
     req = Request(endpoint.rstrip('/') + '/chat/completions', data=json.dumps(payload).encode(),
-                  headers={'Content-Type': 'application/json', 'Authorization': 'Bearer local'})
+                  headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + api_key})
     semantic = None; raw = ''
     if strict:
         semantic = 1
@@ -70,7 +71,8 @@ def judge(item, endpoint, model, timeout):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--run-dir', required=True)
     ap.add_argument('--output', default='semantic-regrade-qwen35-9b.jsonl')
-    ap.add_argument('--endpoint', default='http://127.0.0.1:18603/v1'); ap.add_argument('--model', default='Qwen3.5-9B')
+    ap.add_argument('--endpoint', default=os.environ.get('SPGFS_SEMANTIC_JUDGE_ENDPOINT', 'https://api.deepseek.com/v1'))
+    ap.add_argument('--model', default=os.environ.get('SPGFS_SEMANTIC_JUDGE_MODEL', 'deepseek-flash'))
     ap.add_argument('--workers', type=int, default=2); ap.add_argument('--timeout', type=int, default=180)
     args = ap.parse_args(); out = Path(args.run_dir) / args.output
     items = [json.load(open(p)) for p in glob.glob(str(Path(args.run_dir) / 'samples' / '*.json'))]

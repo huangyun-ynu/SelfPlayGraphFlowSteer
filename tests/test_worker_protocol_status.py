@@ -82,6 +82,23 @@ def test_missing_answer_is_distinct_from_invalid_json():
     assert result["error_code"] == "missing_answer"
 
 
+def test_string_tool_summary_is_normalized_without_protocol_retry():
+    payload, error = check_artifact(
+        '{"answer":"Dash Parr","tool_summary":"No tools were available or used."}'
+    )
+    assert error == {}
+    assert payload["tool_summary"] == ["No tools were available or used."]
+
+
+def test_no_tool_metadata_object_is_normalized_to_empty_summary():
+    payload, error = check_artifact(
+        '{"answer":"October 6, 2017","tool_summary":'
+        '{"actions_available":false,"actions_used":[]}}'
+    )
+    assert error == {}
+    assert payload["tool_summary"] == []
+
+
 def test_missing_legacy_recovery_information_is_not_invented():
     result = summarize_worker_protocol(
         answer="WORKER_PROTOCOL_FAILURE", raw_response="", diagnostics=[]

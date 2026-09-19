@@ -105,6 +105,28 @@ def check_artifact(text: str) -> tuple[dict | None, dict]:
             "field": "answer",
             "expected": "task artifact, not boolean",
         }
+    # Models commonly emit the optional tool summary as a single sentence
+    # instead of the documented array.  The artifact contract already treats
+    # this field as a string-list downstream, so normalize this harmless
+    # representation before validation rather than forcing a second remote
+    # generation request during finalization.
+    tool_summary = payload.get("tool_summary")
+    if isinstance(tool_summary, str):
+        payload = dict(payload)
+        payload["tool_summary"] = [tool_summary]
+    elif isinstance(tool_summary, dict):
+        # Some models serialize the no-tool state as metadata rather than the
+        # documented string array.  Preserve a real action summary when one
+        # exists; otherwise the canonical representation is an empty list.
+        actions_used = tool_summary.get("actions_used")
+        if tool_summary.get("actions_available") is False and not actions_used:
+            payload = dict(payload)
+            payload["tool_summary"] = []
+        else:
+            payload = dict(payload)
+            payload["tool_summary"] = [
+                json.dumps(tool_summary, ensure_ascii=False, sort_keys=True)
+            ]
     normalized = re.sub(r"[.!。！]+$", "", str(answer).strip().casefold())
     if normalized in {
         "acknowledged",

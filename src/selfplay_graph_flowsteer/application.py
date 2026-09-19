@@ -58,10 +58,12 @@ from .llm import (
 from .observability import (
     AutoVerifier,
     ExactMatchVerifier,
+    FlowSteerQAVerifier,
     JSONLTraceStore,
     MultiAnswerExactMatchVerifier,
     MultipleChoiceVerifier,
     NumericVerifier,
+    TokenF1Verifier,
     TaskSpec,
     VerificationResult,
     Verifier,
@@ -810,6 +812,8 @@ class AdaptiveApplicationConfig:
             "auto",
             "exact_match",
             "multi_answer_exact_match",
+            "flowsteer_qa",
+            "token_f1",
             "numeric",
             "multiple_choice",
             "healthbench_rubric",
@@ -1669,6 +1673,8 @@ class AdaptiveSolverApplication:
         needs_reference = self.config.verifier in {
             "exact_match",
             "multi_answer_exact_match",
+            "flowsteer_qa",
+            "token_f1",
             "numeric",
             "multiple_choice",
         } or (self.config.verifier == "auto" and task_requires_reference(prospective_task))
@@ -2707,6 +2713,8 @@ def _verifier(
         "auto": AutoVerifier(adapters, aliases=aliases),
         "exact_match": ExactMatchVerifier(),
         "multi_answer_exact_match": MultiAnswerExactMatchVerifier(),
+        "flowsteer_qa": FlowSteerQAVerifier(),
+        "token_f1": TokenF1Verifier(),
         "numeric": NumericVerifier(),
         "multiple_choice": MultipleChoiceVerifier(),
     }

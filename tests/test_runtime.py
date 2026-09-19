@@ -166,7 +166,7 @@ def test_worker_receives_action_schema_and_action_observation_protocol() -> None
     [
         ("aime", "aime"),
         ("retrieval_qa", "nq_open"),
-        ("retrieval_qa", "hotpotqa"),
+        ("hotpotqa_context", "hotpotqa"),
         ("webshop", "webshop"),
         ("alfworld", "alfworld"),
     ],
