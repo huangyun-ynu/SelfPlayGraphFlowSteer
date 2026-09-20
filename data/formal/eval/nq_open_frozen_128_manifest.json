@@ -1,0 +1,12 @@
+{
+  "dataset": "nq_open",
+  "schema": "spgfs-nq-frozen-inline-context-v1",
+  "path": "state/experiments/nq-frozen-v1/nq_open_128.jsonl",
+  "rows": 128,
+  "sha256": "c680d99b3ad4bdde4afa8758a2e546054b48b0f90626e61ecf777fcd94f6a511",
+  "bytes": 1552696,
+  "source_split": "dev",
+  "evidence_mode": "provided_context_inline",
+  "retrieval_service_required_at_inference": false,
+  "note": "Frozen experiment input with eight cached context documents per question; this is not the official NQ test split."
+}

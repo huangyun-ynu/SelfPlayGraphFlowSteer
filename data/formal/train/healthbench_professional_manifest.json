@@ -1,0 +1,15 @@
+{
+  "dataset": "healthbench_professional",
+  "schema": "spgfs-healthbench-professional-derived-train-v1",
+  "path": "data/formal/train/healthbench_professional.jsonl",
+  "rows": 512,
+  "sha256": "98055e0018fa575d586eecd25cdf5fa800ec5c6c9121421a0962708b200825f3",
+  "source_dataset": "openai/healthbench-professional",
+  "source_revision": "349962fd46dd02343a0d8a606491baf59154ea1a",
+  "source_split": "test",
+  "difficulty_counts": {
+    "difficult": 256,
+    "typical": 256
+  },
+  "note": "This repository contains the derived 512-row training pool. The official public release does not expose a separate public train split."
+}
