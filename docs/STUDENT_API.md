@@ -2,9 +2,10 @@
 
 The optional `gpt_student` runtime in `configs/formal_training.toml` uses
 `https://flowsteer.org:2087/v1`, model `lab-gpt-5.5-2`, Responses API,
-direct networking, no streaming, concurrency 10, and a 600-second timeout.
-Existing GPT routes and the default Worker route pool are unchanged. Select
-`gpt_student` explicitly when running an experiment with this gateway.
+direct networking, no streaming, endpoint concurrency 5, and a 600-second timeout.
+It is a member of the existing `gpt` worker endpoint pool, so it shares the
+pool's queue, health cooldown, retry, and round-robin selection logic. Its own
+endpoint concurrency cap is 5; the other GPT routes are unchanged.
 
 Credentials are read from `~/.config/student-api/flowsteer.key`; the parent
 directory must be private and the key file should have mode 600. Never commit

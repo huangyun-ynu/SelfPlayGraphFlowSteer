@@ -18,6 +18,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 from .backend_failures import EnvironmentServiceError
 from .observability import TaskSpec, VerificationResult
+from .webshop_identity import visible_product_asin
 
 _DIRECT_OPENER = build_opener(ProxyHandler({}))
 
@@ -230,6 +231,7 @@ class WebShopSessionLifecycle:
     pending_ttl_s: float = 900.0
     stage_purchases: bool = True
     search_observation_mode: str = "structured_only"
+    env_feedback_enabled: bool = False
     _task: TaskSpec | None = None
     _owner_agent: str | None = None
     _active_agent: str | None = None
@@ -243,6 +245,8 @@ class WebShopSessionLifecycle:
     # journal keeps the public search/inspection/evidence history continuous as
     # well.  It is cleared with the bound task and is never sent to the sidecar.
     _transaction_journals: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Executed public actions only; survives Worker revisions in the same episode.
+    _visible_action_history: list[str] = field(default_factory=list)
     _committer_agent: str | None = None
     _purchase_committed_by: str | None = None
     _environment_fingerprint: str = ""
@@ -286,6 +290,7 @@ class WebShopSessionLifecycle:
                         "goal_id": goal_id,
                         "goal_fingerprint": status.get("goal_fingerprint", ""),
                         "search_observation_mode": self.search_observation_mode,
+                        **({"env_feedback_enabled": True} if self.env_feedback_enabled else {}),
                     },
                     sort_keys=True,
                     separators=(",", ":"),
@@ -360,6 +365,13 @@ class WebShopSessionLifecycle:
                 "session_id": self._active_session,
                 "official_remaining_steps": max(0, remaining),
             }
+
+    def runtime_transaction_journal_for(self, agent_id: str) -> dict[str, Any] | None:
+        """Return the current owner's journal without opening/mutating a session."""
+        with self._lock:
+            if self._owner_agent != str(agent_id):
+                return None
+            return self._transaction_journals.get(str(agent_id))
 
     def begin_execution(self, *, agent_id: str, seed: int, revision: bool) -> dict[str, Any]:
         with self._lock:
@@ -453,6 +465,7 @@ class WebShopSessionLifecycle:
             session_id, agent_id = self._active()
             self._active_pending_target = None
             result = self._bounded(self.client.search(session_id, query))
+            self._append_env_feedback(result, f"search[{query}]")
             self._results[agent_id] = result
             return result
 
@@ -496,6 +509,7 @@ class WebShopSessionLifecycle:
                 if rejection is not None:
                     rejected = dict(current)
                     rejected.pop("action_effect", None)
+                    rejected.pop("env_feedback", None)
                     rejected.update(
                         {
                             "commit_pending": False,
@@ -524,6 +538,7 @@ class WebShopSessionLifecycle:
                 # its action_effect forward would falsely attribute (for example)
                 # the previous option selection to the purchase-stage request.
                 staged.pop("action_effect", None)
+                staged.pop("env_feedback", None)
                 staged.update(
                     {
                         "commit_pending": True,
@@ -547,6 +562,12 @@ class WebShopSessionLifecycle:
                 return dict(staged)
             self._active_pending_target = None
             result = self._bounded(self.client.click(session_id, target_id))
+            # Use the resolved public label, never opaque transport IDs or goal data.
+            label = str(target.get("label", "")) if target else ""
+            kind = str(target.get("kind", "")) if target else ""
+            if kind == "back_to_search" or label.casefold() == "back to search":
+                label = "Back to Search"
+            self._append_env_feedback(result, f"click[{label}]", previous=current)
             result["commit_pending"] = False
             result["commit_ready"] = False
             if validated_purchase_evidence is not None:
@@ -705,7 +726,54 @@ class WebShopSessionLifecycle:
             self._active_agent = None
             self._execution_open = False
             self._transaction_journals = {}
+            self._visible_action_history = []
             self._task = None
+
+    def _append_env_feedback(
+        self,
+        result: dict[str, Any],
+        action: str,
+        *,
+        previous: dict[str, Any] | None = None,
+    ) -> None:
+        """SkillFlow-style factual feedback, without constraining the next action.
+
+        Unlike SkillFlow's text-only wrapper, our observation exposes the product
+        being left. Use that public state instead of guessing from the last four
+        clicks. Keep the note separate from page_text so prompt truncation cannot
+        discard it. Call only after a successful environment operation.
+        """
+        if not self.env_feedback_enabled:
+            return
+        history = self._visible_action_history
+        note = ""
+        if action.startswith("search[") and action in history:
+            if "click[Back to Search]" in history[-3:]:
+                note = (
+                    "same search query was reused after Back; this is a repeated "
+                    "query from the visible action history."
+                )
+            else:
+                note = "same search query was already used earlier in the visible action history."
+        elif action == "click[Back to Search]":
+            state = previous or {}
+            product = state.get("product")
+            asin = product.get("asin", "") if isinstance(product, dict) else ""
+            if asin and state.get("page_type") in {"product", "product_section"}:
+                note = (
+                    f"returned from product page to search after inspecting ASIN {asin}; "
+                    "that ASIN is now part of the visible action history."
+                )
+            elif history and history[-1].startswith("search["):
+                note = (
+                    "clicked Back immediately after a search result page; the result "
+                    "list is no longer visible in the current observation."
+                )
+            else:
+                note = "returned to search from the previous visible page state."
+        if note:
+            result["env_feedback"] = "[WEBSHOP ENV FEEDBACK] " + note
+        history.append(action)
 
     def _active(self) -> tuple[str, str]:
         if not self._execution_open or not self._active_session or not self._active_agent:
@@ -907,7 +975,7 @@ def _resolve_visible_target_id(
             str(item.get("target_id", ""))
             for item in items
             if str(item.get("kind", "")) == "open_product"
-            and str(item.get("asin", "")).strip().casefold() == requested_asin
+            and visible_product_asin(item) == requested_asin
             and str(item.get("target_id", "")) in visible
         ]
         if len(asin_matches) == 1:

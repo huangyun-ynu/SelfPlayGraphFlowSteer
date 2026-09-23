@@ -38,8 +38,13 @@ pool_retry_backoff_s = 1.0
 pool_member_queue_wait_s = 0.5
 
 [runtime_routing.endpoint_pools]
-gpt = ["gpt", "gpt_eco"]
+gpt = ["gpt", "gpt_eco", "gpt_student"]
 gpt_judge = ["gpt_judge", "gpt_judge_eco"]
+
+# HealthBench uses the student gateway whenever the Director selects the GPT
+# Worker route. Other selected routes, and all other datasets, are unchanged.
+[runtime_routing.dataset_route_overrides.healthbench_professional]
+gpt = "gpt_student"
 
 [canvas]
 # Predictive admission protection is disabled; hard token and wall-clock limits remain.
@@ -132,7 +137,8 @@ max_total_calls = 16
 staged_commit_enabled = true
 max_pending_sessions = 8
 pending_ttl_s = 900.0
-search_observation_mode = "retain_page_text"
+# Promoted baseline: 62/128 strict successes; see docs/WEBSHOP_BASELINE.zh-CN.md.
+search_observation_mode = "legacy"
 
 # Local assets are present; the formal environment installs the alfworld extra.
 [alfworld]
@@ -186,7 +192,7 @@ python_syntax = ["python", "-m", "py_compile"]
 
 [healthbench_judge_audit]
 path = "state/formal-training/private/healthbench_judge"
-runtime_route = "gpt_judge"
+runtime_route = "gpt_student"
 expected_model = "gpt-5.5"
 
 [resources]
@@ -238,6 +244,23 @@ timeout_s = 240.0
 max_tokens = 16384
 managed_locally = false
 frozen = true
+
+# Student gateway joined to the existing gpt worker pool; it uses the same
+# queue, health cooldown, retry, and round-robin endpoint selection logic.
+[runtimes.gpt_student]
+base_url = "https://flowsteer.org:2087/v1"
+api_key_file = "~/.config/student-api/flowsteer.key"
+served_model = "lab-gpt-5.5-2"
+request_profile = "responses_text"
+api_surface = "responses"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 5
+timeout_s = 600.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+user_agent = "selfplay-graph-flowsteer/student-gateway"
 
 [runtimes.grok]
 base_url = "https://nexus.itssx.com/api/grok/v1"

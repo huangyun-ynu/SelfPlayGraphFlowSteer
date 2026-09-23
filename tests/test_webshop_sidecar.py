@@ -188,14 +188,17 @@ def test_session_projects_official_actions_and_versions(tmp_path: Path) -> None:
     reset = session.reset()
     assert reset["page_type"] == "search"
     assert reset["state_version"] == 1
+    assert reset["raw_available_actions"] == ["search", "click[search]"]
 
     search = session.search("example")
+    assert search["raw_available_actions"] == ["click[back to search]", "click[B012345678]"]
     product = next(item for item in search["valid_subactions"] if item["kind"] == "open_product")
     assert product == {
         "asin": "B012345678",
         "kind": "open_product",
         "label": "Example Product",
         "price": 12.5,
+        "raw_action": "click[B012345678]",
         "target_id": "open_product:1:B012345678",
         "title": "Example Product",
     }

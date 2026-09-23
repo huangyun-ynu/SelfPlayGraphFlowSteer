@@ -113,7 +113,9 @@ class OfficialWorker:
                 stdin.flush()
                 ready, _, _ = select.select((self._response_fd,), (), (), self.timeout_s)
                 if not ready:
-                    raise SidecarError("official WebShop worker timed out", HTTPStatus.GATEWAY_TIMEOUT)
+                    raise SidecarError(
+                        "official WebShop worker timed out", HTTPStatus.GATEWAY_TIMEOUT
+                    )
                 response = json.loads(self._read_line())
             except SidecarError:
                 raise
@@ -135,7 +137,9 @@ class OfficialWorker:
         while True:
             chunk = os.read(self._response_fd, 1)
             if not chunk:
-                raise SidecarError("official WebShop worker returned no data", HTTPStatus.BAD_GATEWAY)
+                raise SidecarError(
+                    "official WebShop worker returned no data", HTTPStatus.BAD_GATEWAY
+                )
             if chunk == b"\n":
                 return bytes(output)
             output.extend(chunk)
@@ -268,7 +272,10 @@ class WebShopSession:
         elif kind == "select_option":
             product = self.products.product(self.current_asin)
             for name, values in _option_groups(product).items():
-                if any(str(item.get("value", "")).casefold() == raw_action.casefold() for item in values):
+                if any(
+                    str(item.get("value", "")).casefold() == raw_action.casefold()
+                    for item in values
+                ):
                     self.selected_options[name.casefold()] = raw_action
                     break
         elif kind == "back_to_search":
@@ -301,6 +308,7 @@ class WebShopSession:
             "steps": self.step_count,
             "termination_reason": "purchase_completed" if terminal else "active",
             "valid_subactions": valid,
+            "raw_available_actions": actions,
         }
         if action_kind != "reset":
             payload["action_effect"] = {"kind": action_kind, "value": action_value}
@@ -367,7 +375,11 @@ class WebShopSession:
                     "kind": "open_product",
                     "label": str(preview.get("title", asin)),
                     "price": preview.get("price"),
-                    **{key: preview[key] for key in ("price_min", "price_max", "price_text") if key in preview},
+                    **{
+                        key: preview[key]
+                        for key in ("price_min", "price_max", "price_text")
+                        if key in preview
+                    },
                     "target_id": target,
                     "title": str(preview.get("title", asin)),
                 }
@@ -401,9 +413,11 @@ class WebShopSession:
             else:
                 target = f"click:{len(output) + 1}:{value}"
                 item = {"kind": "navigate", "label": value, "target_id": target}
+            item["raw_action"] = raw
             output.append(item)
             targets[target] = value
         return output, targets
+
 
 def _option_groups(product: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     # The official environment renders normalized options, not catalog labels.
@@ -433,8 +447,13 @@ def _public_price_fields(product: dict[str, Any]) -> dict[str, Any]:
     pricing = product.get("pricing")
     text = str(product.get("Price", ""))
     values = (
-        [float(value) for value in pricing if isinstance(value, (int, float)) and not isinstance(value, bool)]
-        if isinstance(pricing, list) else []
+        [
+            float(value)
+            for value in pricing
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        ]
+        if isinstance(pricing, list)
+        else []
     )
     if not values:
         values = [float(value) for value in _PRICE.findall(text)]
@@ -443,8 +462,12 @@ def _public_price_fields(product: dict[str, Any]) -> dict[str, Any]:
     low, high = min(values), max(values)
     if low == high:
         return {"price": low}
-    return {"price": None, "price_min": low, "price_max": high,
-            "price_text": text or f"${low} to ${high}"}
+    return {
+        "price": None,
+        "price_min": low,
+        "price_max": high,
+        "price_text": text or f"${low} to ${high}",
+    }
 
 
 def _search_products(text: str) -> dict[str, dict[str, Any]]:
@@ -490,7 +513,9 @@ class SidecarState:
             raise SidecarError("goal_id must identify webshop/goal-N")
         with self.lock:
             if len(self.sessions) >= self.args.max_sessions:
-                raise SidecarError("WebShop session capacity exhausted", HTTPStatus.TOO_MANY_REQUESTS)
+                raise SidecarError(
+                    "WebShop session capacity exhausted", HTTPStatus.TOO_MANY_REQUESTS
+                )
         with self.initializer_gate:
             worker = OfficialWorker(
                 interpreter=self.args.interpreter,
@@ -565,6 +590,7 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
                 "goal_fingerprint": state.goal_fingerprint,
                 "index_path": str(state.args.index.resolve()),
                 "idempotency_protocol": _IDEMPOTENCY_PROTOCOL,
+                "raw_action_protocol": "webshop-raw-actions-v1",
                 "request_epoch": state.epoch,
                 "session_count": session_count,
                 "status": "ok",
@@ -598,9 +624,10 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
         except SidecarError as exc:
             status, response = exc.status, {"error": str(exc)}
         except Exception as exc:  # noqa: BLE001
-            status, response = HTTPStatus.INTERNAL_SERVER_ERROR, {
-                "error": f"{type(exc).__name__}: {exc}"
-            }
+            status, response = (
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": f"{type(exc).__name__}: {exc}"},
+            )
         if key:
             with state.lock:
                 state.idempotency[cache_key] = (int(status), dict(response))

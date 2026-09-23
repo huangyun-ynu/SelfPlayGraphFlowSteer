@@ -597,6 +597,10 @@ class GraphDirector:
         system_prompt = (
             base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
         )
+        if self.canvas.runtime.native_webshop and self.canvas.dataset == "webshop":
+            from .webshop_native_protocol import DIRECTOR_ENVIRONMENT_HINT
+
+            system_prompt = base_prompt.rstrip() + "\n\n" + DIRECTOR_ENVIRONMENT_HINT
         if self.solver_skill_context:
             # The per-turn conversation is deliberately fresh, so persistent
             # Solver-only orchestration context belongs in the system message.

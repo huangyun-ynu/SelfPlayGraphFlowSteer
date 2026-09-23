@@ -2,7 +2,18 @@
 
 Separate Proposer and Solver policies for multi-agent graph self-play. The Proposer selects tasks; the Solver's Director builds and executes a graph of workers. Verified rollouts feed Frontier scoring and policy updates.
 
-This distribution includes Director SkillBank generation, retrieval, usage accounting and retirement. It retains graph execution, ADS/TSDS task selection, dataset adapters, relation counterfactuals, Frontier rewards, partial-group training, and the training orchestration code. The formal dataset package is encrypted because HealthBench Professional asks users not to republish its examples; credentials, decryption keys, private experiment results, model weights and SSH identities are never included.
+This distribution includes Director SkillBank generation, retrieval, usage accounting and retirement. It retains graph execution, ADS/TSDS task selection, dataset adapters, relation counterfactuals, Frontier rewards, partial-group training, and the training orchestration code. The formal dataset package is encrypted because HealthBench Professional asks users not to republish its examples; credentials, decryption keys, raw experiment artifacts, model weights and SSH identities are never included. Published aggregate metrics and source version archives are documented below.
+
+## Experiment records and source versions
+
+The [cross-dataset experiment record](docs/EXPERIMENT_RECORDS.zh-CN.md) covers
+WebShop, ALFWorld, NQ Open, HotpotQA, AIME, HealthBench Professional and SWE-Bench,
+including version changes, metric definitions, incomplete runs and comparison limits.
+[Historical source versions](experiment_versions/README.md) include eight recoverable
+code snapshots with file hashes and a restore command. Raw trajectories, datasets,
+logs and model/service state remain local. The native WebShop first 10-task result
+belongs to its archived inference snapshot; the subsequent fixes have not been
+evaluated in another real inference run.
 
 ## Offline quick start
 

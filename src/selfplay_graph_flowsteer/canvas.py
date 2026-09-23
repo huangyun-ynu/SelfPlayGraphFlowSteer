@@ -206,6 +206,7 @@ class GraphCanvas:
         self,
         *,
         task: str,
+        worker_task: str | None = None,
         director_task: str | None = None,
         runtime: MultiAgentRuntime,
         config: CanvasConfig | None = None,
@@ -223,6 +224,7 @@ class GraphCanvas:
         binary_relation_policy: bool = False,
     ) -> None:
         self.task = task
+        self.worker_task = worker_task if worker_task is not None else task
         self.director_task = director_task if director_task is not None else task
         self.runtime = runtime
         self.config = config or CanvasConfig()
@@ -1561,9 +1563,7 @@ class GraphCanvas:
             result = artifact.environment_result if artifact is not None else {}
             # Selecting output is not a decision to abandon an unsolved episode.
             # Preserve the next Director turn whenever other legal actions remain.
-            if not (
-                result.get("environment_completed") is True and result.get("won") is True
-            ):
+            if not (result.get("environment_completed") is True and result.get("won") is True):
                 return None
         graph_is_ready = bool(
             self.graph.output_agent
@@ -1774,6 +1774,27 @@ class GraphCanvas:
                 execution=report,
                 final_execution=True,
             )
+        if self.runtime.native_webshop and self.dataset == "webshop":
+            selected = self.graph.output_agent
+            if selected in self.runtime.environment_commit_ready_agents():
+                try:
+                    result = self.runtime.commit_environment_output(selected)
+                    if not result.get("purchased"):
+                        raise ValueError("selected candidate did not reach a terminal purchase")
+                    if report is not None:
+                        report.artifacts[selected] = self.runtime.artifacts[selected]
+                except Exception as exc:
+                    self.state = CanvasState.FAILED
+                    return self._record(
+                        action,
+                        accepted=False,
+                        feedback=f"Selected WebShop candidate commit failed: {exc}",
+                        execution=report,
+                        final_execution=True,
+                        rejection_code="webshop_environment_commit_failed",
+                    )
+            # A graph may legitimately finish without a purchase (score zero).
+            # Never select a different Agent or a candidate using hidden reward.
         if is_aime_dataset(self.dataset):
             parsed = parse_aime_answer(output)
             if not parsed.valid:
@@ -1867,33 +1888,56 @@ class GraphCanvas:
                     }
                 )
         if self.dataset == "webshop" and executable_dirty:
-            calls = self.runtime.estimate_execution_tokens(
-                self.graph,
-                executable_dirty,
-                quantile=self.config.worker_token_quantile,
-                minimum_samples=self.config.worker_token_min_samples,
-                cold_start_tokens=self.config.worker_token_cold_start,
-            )["call_count"]
-            closure = any(
-                "webshop_output_closure_required" in self.dirty_reasons.get(agent_id, ())
-                for agent_id in executable_dirty
-            )
-            partition = self._webshop_budget_partition(call_count=int(calls), closure=closure)
-            self._token_admission_event.update(partition)
+            admission_enabled = self.config.remaining_token_admission_enabled
+            partition = None
+            if admission_enabled:
+                calls = self.runtime.estimate_execution_tokens(
+                    self.graph,
+                    executable_dirty,
+                    quantile=self.config.worker_token_quantile,
+                    minimum_samples=self.config.worker_token_min_samples,
+                    cold_start_tokens=self.config.worker_token_cold_start,
+                )["call_count"]
+                closure = any(
+                    "webshop_output_closure_required" in self.dirty_reasons.get(agent_id, ())
+                    for agent_id in executable_dirty
+                )
+                partition = self._webshop_budget_partition(call_count=int(calls), closure=closure)
+                self._token_admission_event.update(partition)
+            else:
+                self._token_admission_event.update(
+                    request_admission="disabled",
+                    remaining_worker_tokens=max(
+                        0, self.config.max_total_tokens - self.total_tokens
+                    ),
+                )
             for agent_id in executable_dirty:
-                self.graph.nodes[agent_id].metadata.update(
+                metadata = self.graph.nodes[agent_id].metadata
+                metadata.update(
                     {
-                        "_runtime_token_credit": partition["per_execution_credit"],
-                        "_runtime_reserved_closure_tokens": partition["reserved_closure_tokens"],
-                        "_runtime_budget_phase": partition["phase"],
+                        "_runtime_webshop_request_admission_enabled": admission_enabled,
                         "_runtime_webshop_output_closure": (
                             "webshop_output_closure_required"
                             in self.dirty_reasons.get(agent_id, ())
                         ),
                     }
                 )
+                if partition is not None:
+                    metadata.update(
+                        _runtime_token_credit=partition["per_execution_credit"],
+                        _runtime_reserved_closure_tokens=partition["reserved_closure_tokens"],
+                        _runtime_budget_phase=partition["phase"],
+                    )
+                else:
+                    # A restored graph may still carry an earlier execution's credit.
+                    for key in (
+                        "_runtime_token_credit",
+                        "_runtime_reserved_closure_tokens",
+                        "_runtime_budget_phase",
+                    ):
+                        metadata.pop(key, None)
         report = self.runtime.execute(
-            task=self.task,
+            task=self.worker_task,
             graph=self.graph,
             dirty_agents=executable_dirty if executable_dirty else set(),
             invalidation_reasons={
@@ -2644,6 +2688,7 @@ class GraphCanvas:
             if (
                 self.action_adapter is not None
                 and self.action_adapter.commit_policy.value == "single_committer"
+                and not (self.runtime.native_webshop and self.dataset == "webshop")
             ):
                 capability_name = (
                     "environment_commit"
@@ -3021,6 +3066,7 @@ class GraphCanvas:
             fields,
             dataset=self.dataset if self.managed_delegation_contracts else "",
             action_names=action_names,
+            webshop_native=self.runtime.native_webshop and self.dataset == "webshop",
         )
         if issue is not None:
             raise DelegationValidationError(issue)
@@ -3232,8 +3278,10 @@ class GraphCanvas:
                         "Use only a grounded same-owner revision or select it for the one "
                         "bounded output-closure pass; no replacement session is legal."
                     )
-                elif self.dataset == "webshop" and not bool(
-                    webshop_progress.get("commit_ready", False)
+                elif (
+                    self.dataset == "webshop"
+                    and not self.runtime.native_webshop
+                    and not bool(webshop_progress.get("commit_ready", False))
                 ):
                     webshop_recovery = (
                         "No purchase is staged. The sole owner may be revised in the same "
@@ -3987,10 +4035,18 @@ class GraphCanvas:
             "allowed_actions": allowed_actions,
             "legal_action_parameters": legal_parameters,
             "output_agent": self.graph.output_agent,
-            "environment_commit_ready_agents": list(commit_ready_agents),
+            "environment_commit_ready_agents": (
+                list(self.runtime.environment_commit_ready_agents())
+                if self.runtime.native_webshop and self.dataset == "webshop"
+                else list(commit_ready_agents)
+            ),
             "environment_owner_agents": list(self.runtime.environment_owner_agents()),
             "environment_commit_resolution": (
-                "SET_OUTPUT commits one staged candidate; commit confirmation cannot exist "
+                "SET_OUTPUT only selects an output. FINISH validates the graph, updates dirty "
+                "nodes, then commits only the selected output's latest staged candidate. "
+                "Candidates remain revisable before FINISH."
+                if self.runtime.native_webshop and self.dataset == "webshop"
+                else "SET_OUTPUT commits one staged candidate; commit confirmation cannot exist "
                 "before SET_OUTPUT, so waiting for that confirmation is not an unresolved task "
                 "constraint. The trusted staged Action is latched; later model prose cannot "
                 "discard or revise it."

@@ -1,0 +1,3 @@
+# Unified patch context lines contain a required leading space, including blank
+# lines. Preserve archived patch bytes for their SHA-256 and restoration checks.
+experiment_versions/patches/*.patch -whitespace

@@ -63,8 +63,8 @@ from .observability import (
     MultiAnswerExactMatchVerifier,
     MultipleChoiceVerifier,
     NumericVerifier,
-    TokenF1Verifier,
     TaskSpec,
+    TokenF1Verifier,
     VerificationResult,
     Verifier,
     task_requires_reference,
@@ -109,6 +109,10 @@ from .webshop import (
     webshop_lifecycles,
 )
 from .webshop_budget import budget_partition
+from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
+from .webshop_history import WEBSHOP_WORKER_MEMORY_POLICIES
+from .webshop_native import NativeWebShopLifecycle
+from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
 
 
 class GraphEvaluationIncompleteError(RuntimeError):
@@ -249,12 +253,17 @@ class FixedRuntimeConfig:
         ):
             raise ValueError("runtime.stream requires generic Chat Completions")
         if self.request_profile not in {"qwen", "generic", "gemini", "responses_text"}:
-            raise ValueError("runtime.request_profile must be qwen, generic, gemini or responses_text")
+            raise ValueError(
+                "runtime.request_profile must be qwen, generic, gemini or responses_text"
+            )
         if self.api_surface not in {"chat_completions", "responses"}:
             raise ValueError("runtime.api_surface must be chat_completions or responses")
         if self.request_profile == "responses_text" and self.api_surface != "responses":
             raise ValueError("responses_text requires the Responses API")
-        if self.api_surface == "responses" and self.request_profile not in {"generic", "responses_text"}:
+        if self.api_surface == "responses" and self.request_profile not in {
+            "generic",
+            "responses_text",
+        }:
             raise ValueError("Responses runtimes require generic or responses_text")
         if self.healthbench_grader_reasoning_effort not in {None, "low", "medium", "high"}:
             raise ValueError(
@@ -346,8 +355,36 @@ class WebShopConfig:
     max_pending_sessions: int = 8
     pending_ttl_s: float = 900.0
     search_observation_mode: str = "structured_only"
+    env_feedback_enabled: bool = False
+    worker_guidance_policy: str = "baseline"
+    worker_memory_policy: str = "factual_memory_v1"
+    worker_execution_policy: str = "graph_tools_v1"
 
     def validate(self) -> None:
+        if self.worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
+            raise ValueError("unknown webshop.worker_execution_policy")
+        if (
+            self.enabled
+            and self.worker_execution_policy == NATIVE_POLICY
+            and (
+                self.search_observation_mode != "legacy"
+                or self.max_observation_chars != 0
+                or not self.staged_commit_enabled
+                or self.worker_guidance_policy != "baseline"
+                or self.env_feedback_enabled
+            )
+        ):
+            raise ValueError(
+                "skillflow_native_v1 requires legacy, unlimited observations, staged commit, baseline guidance and feedback off"
+            )
+        if self.worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
+            raise ValueError(
+                "webshop.worker_memory_policy must be factual_memory_v1 or skillflow_history_v1"
+            )
+        if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
+            raise ValueError(
+                "webshop.worker_guidance_policy must be baseline or laser_checklist_v1"
+            )
         if not self.enabled:
             return
         if not self.service_url.startswith(("http://", "https://")):
@@ -381,6 +418,13 @@ class WebShopConfig:
             raise ValueError(
                 "webshop.search_observation_mode must be legacy, retain_page_text, "
                 "or structured_only"
+            )
+        if self.worker_memory_policy == "skillflow_history_v1" and (
+            self.search_observation_mode == "structured_only" or self.max_observation_chars != 0
+        ):
+            raise ValueError(
+                "webshop.worker_memory_policy=skillflow_history_v1 requires legacy or "
+                "retain_page_text observations and max_observation_chars=0"
             )
 
 
@@ -559,6 +603,10 @@ class AdaptiveApplicationConfig:
     runtime_name: str = "default"
     additional_runtimes: dict[str, FixedRuntimeConfig] = field(default_factory=dict)
     worker_runtime_routes: tuple[str, ...] = ("default",)
+    # Optional dataset-scoped remapping applied after the Director selects a
+    # Worker route.  This is deliberately narrow: routes not listed here keep
+    # the exact Director selection.
+    dataset_route_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
     endpoint_pool_retry_attempts: int = 2
     endpoint_pool_retry_backoff_s: float = 1.0
@@ -669,6 +717,22 @@ class AdaptiveApplicationConfig:
         unknown_routes = set(self.worker_runtime_routes) - set(runtime_pool)
         if unknown_routes:
             raise ValueError("unknown worker runtime routes: " + ", ".join(sorted(unknown_routes)))
+        for dataset, overrides in self.dataset_route_overrides.items():
+            dataset_key = canonical_dataset_name(dataset)
+            if not dataset_key or not isinstance(overrides, dict):
+                raise ValueError("invalid dataset route override: " + str(dataset))
+            unknown_selected = set(overrides) - set(self.worker_runtime_routes)
+            if unknown_selected:
+                raise ValueError(
+                    "dataset route override selects unavailable Worker routes: "
+                    + ", ".join(sorted(unknown_selected))
+                )
+            unknown_targets = set(overrides.values()) - set(runtime_pool)
+            if unknown_targets:
+                raise ValueError(
+                    "dataset route override targets unknown routes: "
+                    + ", ".join(sorted(unknown_targets))
+                )
         for logical, members in self.runtime_endpoint_pools.items():
             if (
                 logical not in runtime_pool
@@ -678,8 +742,13 @@ class AdaptiveApplicationConfig:
             ):
                 raise ValueError("invalid endpoint pool: " + logical)
             configs = [runtime_pool[member] for member in (logical, *members)]
-            if len({(item.served_model, item.reasoning_effort) for item in configs}) != 1:
-                raise ValueError("endpoint pool must use the same model and effort")
+            # A logical pool may shard compatible provider deployments that
+            # expose different model aliases (for example, a lab gateway
+            # beside the production GPT endpoint). Reasoning effort remains a
+            # pool invariant so the request policy does not change on rotation;
+            # each physical backend supplies its own served model at dispatch.
+            if len({item.reasoning_effort for item in configs}) != 1:
+                raise ValueError("endpoint pool must use the same reasoning effort")
         if (
             self.endpoint_pool_retry_attempts < 0
             or self.endpoint_pool_retry_backoff_s < 0
@@ -910,14 +979,16 @@ class AdaptiveApplicationConfig:
                 "action_protocol": "director_model_v1",
                 "counterfactual_execution": "full_graph_v1",
                 "worker_routes": list(self.worker_runtime_routes),
+                "dataset_route_overrides": {
+                    canonical_dataset_name(dataset): dict(sorted(overrides.items()))
+                    for dataset, overrides in sorted(self.dataset_route_overrides.items())
+                },
                 "endpoint_pools": {
                     key: list(value) for key, value in self.runtime_endpoint_pools.items()
                 },
                 "endpoint_pool_retry_attempts": self.endpoint_pool_retry_attempts,
                 "endpoint_pool_retry_backoff_s": self.endpoint_pool_retry_backoff_s,
-                "endpoint_pool_member_queue_wait_s": (
-                    self.endpoint_pool_member_queue_wait_s
-                ),
+                "endpoint_pool_member_queue_wait_s": (self.endpoint_pool_member_queue_wait_s),
                 "skill_distiller": self.skill_distiller_runtime,
                 "health_state_path": str(self.route_health_path),
                 "health_cooldown_s": self.route_health_cooldown_s,
@@ -1064,6 +1135,12 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         worker_runtime_routes=tuple(
             str(value) for value in runtime_routing.get("worker_routes", [runtime_name])
         ),
+        dataset_route_overrides={
+            canonical_dataset_name(dataset): {
+                str(selected): str(target) for selected, target in overrides.items()
+            }
+            for dataset, overrides in runtime_routing.get("dataset_route_overrides", {}).items()
+        },
         runtime_endpoint_pools={
             str(key): tuple(str(member) for member in value)
             for key, value in runtime_routing.get("endpoint_pools", {}).items()
@@ -1231,6 +1308,14 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             max_pending_sessions=int(webshop.get("max_pending_sessions", 8)),
             pending_ttl_s=float(webshop.get("pending_ttl_s", 900.0)),
             search_observation_mode=str(webshop.get("search_observation_mode", "structured_only")),
+            env_feedback_enabled=bool(webshop.get("env_feedback_enabled", False)),
+            worker_guidance_policy=str(webshop.get("worker_guidance_policy", "baseline"))
+            .strip()
+            .casefold(),
+            worker_memory_policy=str(webshop.get("worker_memory_policy", "factual_memory_v1"))
+            .strip()
+            .casefold(),
+            worker_execution_policy=str(webshop.get("worker_execution_policy", "graph_tools_v1")),
         ),
         alfworld=ALFWorldConfig(
             enabled=bool(alfworld.get("enabled", False)),
@@ -1287,12 +1372,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             or os.environ.get("SPGFS_SWE_CVM_AUTO_STOP", "").strip() == "1",
             cvm_region=str(swe.get("cvm_region", "ap-singapore")),
             cvm_instance_id=str(swe.get("cvm_instance_id", "ins-5n1zolfw")),
-            cvm_secret_id_env=str(
-                swe.get("cvm_secret_id_env", "TENCENTCLOUD_SECRET_ID")
-            ),
-            cvm_secret_key_env=str(
-                swe.get("cvm_secret_key_env", "TENCENTCLOUD_SECRET_KEY")
-            ),
+            cvm_secret_id_env=str(swe.get("cvm_secret_id_env", "TENCENTCLOUD_SECRET_ID")),
+            cvm_secret_key_env=str(swe.get("cvm_secret_key_env", "TENCENTCLOUD_SECRET_KEY")),
             cvm_endpoint=str(swe.get("cvm_endpoint", "cvm.tencentcloudapi.com")),
             cvm_timeout_s=float(swe.get("cvm_timeout_s", 600.0)),
             cvm_poll_s=float(swe.get("cvm_poll_s", 5.0)),
@@ -1864,11 +1945,16 @@ class AdaptiveSolverApplication:
                     call_count=calls,
                     closure=False,
                 )
-                if dataset == "webshop"
+                if dataset == "webshop" and self.config.canvas.remaining_token_admission_enabled
                 else None
             )
             for node in graph.nodes.values():
-                node.metadata["_runtime_token_credit"] = int(token_budget) // calls
+                if dataset == "webshop":
+                    node.metadata["_runtime_webshop_request_admission_enabled"] = (
+                        self.config.canvas.remaining_token_admission_enabled
+                    )
+                else:
+                    node.metadata["_runtime_token_credit"] = int(token_budget) // calls
                 if webshop_partition is not None:
                     node.metadata.update(
                         _runtime_token_credit=webshop_partition["per_execution_credit"],
@@ -1913,6 +1999,10 @@ class AdaptiveSolverApplication:
                 )
             if graph.output_agent in self.runtime.environment_commit_ready_agents():
                 self.runtime.commit_environment_output(graph.output_agent)
+                if self.runtime.native_webshop:
+                    report.artifacts[graph.output_agent] = self.runtime.artifacts[
+                        graph.output_agent
+                    ]
             self.last_graph_evaluation = {
                 "execution_mode": "full_graph_v1",
                 "seed": int(seed),
@@ -2145,7 +2235,12 @@ def create_adaptive_application(
         )
     webshop_lifecycle = None
     if config.webshop.enabled:
-        webshop_lifecycle = WebShopSessionLifecycle(
+        lifecycle_type = (
+            NativeWebShopLifecycle
+            if config.webshop.worker_execution_policy == NATIVE_POLICY
+            else WebShopSessionLifecycle
+        )
+        webshop_lifecycle = lifecycle_type(
             WebShopHTTPClient(
                 config.webshop.service_url,
                 timeout_s=config.webshop.timeout_s,
@@ -2155,6 +2250,7 @@ def create_adaptive_application(
             pending_ttl_s=config.webshop.pending_ttl_s,
             stage_purchases=config.webshop.staged_commit_enabled,
             search_observation_mode=config.webshop.search_observation_mode,
+            env_feedback_enabled=config.webshop.env_feedback_enabled,
         )
         tools["webshop_search"] = WebShopSearchTool(
             webshop_lifecycle,
@@ -2233,6 +2329,7 @@ def create_adaptive_application(
             config.webshop.max_total_calls,
         ),
         webshop_staged_commit=config.webshop.staged_commit_enabled,
+        webshop_commit_on_finish=config.webshop.worker_execution_policy == NATIVE_POLICY,
         alfworld_budgets=(
             config.alfworld.max_initial_calls,
             config.alfworld.max_revision_calls,
@@ -2260,6 +2357,9 @@ def create_adaptive_application(
             action_registry=action_registry,
             max_tool_rounds=config.retrieval.max_tool_rounds,
             alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
+            webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
+            webshop_worker_memory_policy=config.webshop.worker_memory_policy,
+            webshop_worker_execution_policy=config.webshop.worker_execution_policy,
         )
     else:
         if director_backend is None:
@@ -2297,10 +2397,14 @@ def create_adaptive_application(
             worker_executor = RoutedModelAgentExecutor(
                 runtime_backends,
                 config.worker_runtime_routes,
+                dataset_route_overrides=config.dataset_route_overrides,
                 tools=tools,
                 action_registry=action_registry,
                 max_tool_rounds=config.retrieval.max_tool_rounds,
                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
+                webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
+                webshop_worker_memory_policy=config.webshop.worker_memory_policy,
+                webshop_worker_execution_policy=config.webshop.worker_execution_policy,
             )
         else:
             worker_executor = ModelAgentExecutor(
@@ -2309,6 +2413,9 @@ def create_adaptive_application(
                 action_registry=action_registry,
                 max_tool_rounds=config.retrieval.max_tool_rounds,
                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
+                webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
+                webshop_worker_memory_policy=config.webshop.worker_memory_policy,
+                webshop_worker_execution_policy=config.webshop.worker_execution_policy,
             )
         if distiller_backend is None:
             distiller_backend = runtime_backends[config.skill_distiller_runtime]

@@ -17,6 +17,7 @@ from .action_protocol import ActionCall, ActionSpec, action_spec_from_tool
 from .agent_tools import AgentTool
 from .artifact_protocol import check_artifact, summarize_worker_protocol
 from .backend_failures import classify_backend_failure
+from .config import canonical_dataset_name
 from .contracts import AgentArtifact, AgentNode, CodeArtifactRef, ExecutionReport, RelayPacket
 from .dataset_actions import DatasetActionRegistry
 from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
@@ -35,6 +36,15 @@ from .llm import (
 )
 from .qa_submission import is_short_qa_dataset
 from .webshop_budget import execution_accounting, request_budget_quote
+from .webshop_guidance import webshop_worker_guidance
+from .webshop_history import (
+    HISTORY_INSTRUCTION,
+    WEBSHOP_WORKER_MEMORY_POLICIES,
+    append_webshop_history,
+    project_webshop_history_environment,
+)
+from .webshop_identity import visible_product_asin
+from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
 
 WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
 WORKER_PROTOCOL_FAILURE_SENTINEL = "WORKER_PROTOCOL_FAILURE"
@@ -379,6 +389,15 @@ class ModelAgentExecutor:
     deadline_monotonic: float | None = None
     rollout_deadline: RolloutDeadline | None = None
     budget_scope: str | None = None
+    webshop_worker_guidance_policy: str = "baseline"
+    webshop_worker_memory_policy: str = "factual_memory_v1"
+    webshop_worker_execution_policy: str = "graph_tools_v1"
+
+    def __post_init__(self) -> None:
+        if self.webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
+            raise ValueError("unknown webshop.worker_execution_policy")
+        if self.webshop_worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
+            raise ValueError("unknown webshop.worker_memory_policy")
 
     def reset(self) -> None:
         self.budget_ledger.reset()
@@ -425,6 +444,22 @@ class ModelAgentExecutor:
     ) -> AgentArtifact:
         self._check_deadline()
         self._validate_dataset_actions(node)
+        if (
+            node.metadata.get("action_adapter") == "webshop"
+            and self.webshop_worker_execution_policy == NATIVE_POLICY
+        ):
+            from .webshop_native_executor import execute_native
+
+            return execute_native(
+                self,
+                task=task,
+                node=node,
+                upstream=upstream,
+                peers=peers,
+                revision=revision,
+                seed=seed,
+                prior=prior,
+            )
         allowed_tools = {
             name: self.tools[name] for name in node.allowed_tools if name in self.tools
         }
@@ -555,6 +590,20 @@ class ModelAgentExecutor:
             raw_webshop_journal = initial_environment_state.pop(
                 "_runtime_transaction_journal", None
             )
+            if (
+                action_adapter == "webshop"
+                and self.webshop_worker_memory_policy == "skillflow_history_v1"
+                and raw_webshop_journal is None
+                and not stateless_environment_owner
+            ):
+                # A zero-Action final report must see the same history without
+                # beginning/replacing a live or already-staged environment session.
+                for lifecycle in lifecycle_targets.values():
+                    journal_for = getattr(lifecycle, "runtime_transaction_journal_for", None)
+                    if callable(journal_for):
+                        raw_webshop_journal = journal_for(node.agent_id)
+                        if isinstance(raw_webshop_journal, dict):
+                            break
             if action_adapter == "webshop" and isinstance(raw_webshop_journal, dict):
                 # This is a runtime-only reference owned by the task-bound
                 # WebShop lifecycle.  It survives same-owner revisions but is
@@ -644,6 +693,16 @@ class ModelAgentExecutor:
             else {}
         )
         webshop_journal_restored = bool(webshop_journal.get("schema_version"))
+        webshop_history_enabled = (
+            action_adapter == "webshop"
+            and not stateless_environment_owner
+            and self.webshop_worker_memory_policy == "skillflow_history_v1"
+        )
+        webshop_react_history = (
+            copy.deepcopy(webshop_journal.get("react_history", []))
+            if webshop_history_enabled
+            else []
+        )
         webshop_product_inspections = _webshop_restore_keyed_records(
             webshop_journal.get("product_inspections"), key="asin"
         )
@@ -802,11 +861,18 @@ class ModelAgentExecutor:
                 ),
             },
         }
+        if webshop_history_enabled:
+            context["action_environment"]["worker_memory_policy"] = "skillflow_history_v1"
+            context["action_environment"]["react_history"] = webshop_react_history
         system_managed_contract = node.metadata.get("system_managed_contract")
         contract_dataset = (
             str(system_managed_contract.get("dataset", ""))
             if isinstance(system_managed_contract, dict)
             else ""
+        )
+        short_answer_qa = is_short_qa_dataset(contract_dataset)
+        selected_output_agent = short_answer_qa and bool(
+            node.metadata.get("_runtime_is_output_agent", False)
         )
         public_task_visible = bool(action_adapter) or is_short_qa_dataset(contract_dataset)
         if public_task_visible:
@@ -905,8 +971,16 @@ class ModelAgentExecutor:
                 "Action evidence. "
             )
         instruction += _worker_output_instruction(
-            context["available_actions"], action_adapter=action_adapter
+            context["available_actions"],
+            action_adapter=action_adapter,
+            short_answer_qa=short_answer_qa,
+            is_output_agent=selected_output_agent,
+            webshop_history_enabled=webshop_history_enabled,
         )
+        # Keep guidance out of environment observations and the Director prompt.
+        # The same conditional checklist survives state updates and owner revisions.
+        if action_adapter == "webshop" and not stateless_environment_owner:
+            instruction += webshop_worker_guidance(self.webshop_worker_guidance_policy)
         prompt_context = _action_context_for_prompt(
             context,
             action_adapter=action_adapter,
@@ -930,6 +1004,10 @@ class ModelAgentExecutor:
             int(node.metadata["_runtime_token_credit"])
             if (action_adapter == "webshop" or submission_credit or full_graph_credit)
             and "_runtime_token_credit" in node.metadata
+            and (
+                action_adapter != "webshop"
+                or node.metadata.get("_runtime_webshop_request_admission_enabled", True)
+            )
             else None
         )
 
@@ -1049,7 +1127,7 @@ class ModelAgentExecutor:
             if isinstance(raw_guidance_deliveries, list)
             else []
         )
-        if action_adapter == "webshop":
+        if action_adapter == "webshop" and not webshop_history_enabled:
             _record_webshop_state_guidance_delivery(
                 webshop_state_guidance_deliveries,
                 context["action_environment"].get("webshop_progress"),
@@ -1081,6 +1159,7 @@ class ModelAgentExecutor:
                 stall_first_round=webshop_stall_first_round,
                 max_reward=webshop_max_reward,
                 purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
+                react_history=webshop_react_history if webshop_history_enabled else None,
             )
 
         force_finalize = False
@@ -1126,6 +1205,8 @@ class ModelAgentExecutor:
                         credit_label=credit_label,
                         prior_response=qa_previous_response,
                         pre_reserved_closure_tokens=closure_reserve(),
+                        short_answer_qa=short_answer_qa,
+                        is_output_agent=selected_output_agent,
                     )
                 )
                 token_in += recovery_token_in
@@ -1151,6 +1232,8 @@ class ModelAgentExecutor:
                             action_adapter=action_adapter,
                             alfworld_worker_guidance_policy=self.alfworld_worker_guidance_policy,
                         ),
+                        short_answer_qa=short_answer_qa,
+                        is_output_agent=selected_output_agent,
                     )
                     reserve_quote = request_budget_quote(
                         {
@@ -1399,6 +1482,14 @@ class ModelAgentExecutor:
 
             call_observations: list[tuple[ActionCall, dict[str, Any]]] = []
             for batch_index, (call, arguments, error, failure_reason) in enumerate(prepared):
+                history_before = (
+                    {
+                        "page_text": str(webshop_state.get("page_text", "")),
+                        "page_type": str(webshop_state.get("page_type", "")),
+                    }
+                    if webshop_history_enabled
+                    else {}
+                )
                 summary = None
                 if error is not None:
                     observation = error
@@ -1921,6 +2012,19 @@ class ModelAgentExecutor:
                     trace_entry["batch_index"] = batch_index
                     trace_entry["batch_size"] = len(calls)
                 react_trace.append(trace_entry)
+                if webshop_history_enabled and (
+                    not stateful_batch or batch_index == selected_index
+                ):
+                    append_webshop_history(
+                        webshop_react_history,
+                        before=history_before,
+                        action={
+                            "name": call.name,
+                            "arguments": arguments if arguments is not None else call.arguments,
+                        },
+                        result=observation,
+                    )
+                    sync_webshop_journal()
                 call_observations.append((call, observation))
             message_call_observations = call_observations
             if (
@@ -1989,11 +2093,12 @@ class ModelAgentExecutor:
                         current_state=webshop_state,
                         purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
                     )
-                    _record_webshop_state_guidance_delivery(
-                        webshop_state_guidance_deliveries,
-                        context["action_environment"].get("webshop_progress"),
-                        interaction_round=interaction_round,
-                    )
+                    if not webshop_history_enabled:
+                        _record_webshop_state_guidance_delivery(
+                            webshop_state_guidance_deliveries,
+                            context["action_environment"].get("webshop_progress"),
+                            interaction_round=interaction_round,
+                        )
                 latest_context_for_prompt = _action_context_for_prompt(
                     context,
                     action_adapter=action_adapter,
@@ -2088,6 +2193,8 @@ class ModelAgentExecutor:
                     credit_label=credit_label,
                     prior_response=qa_previous_response,
                     pre_reserved_closure_tokens=closure_reserve(),
+                    short_answer_qa=short_answer_qa,
+                    is_output_agent=selected_output_agent,
                 )
             )
             token_in += recovery_token_in
@@ -2176,6 +2283,9 @@ class ModelAgentExecutor:
                     action_attempts=len(react_trace),
                 ),
                 "budget_partition": {
+                    "request_admission_enabled": node.metadata.get(
+                        "_runtime_webshop_request_admission_enabled", True
+                    ),
                     "phase": node.metadata.get("_runtime_budget_phase", "unpartitioned"),
                     "execution_credit": execution_credit,
                     "reserved_closure_tokens": node.metadata.get(
@@ -2237,6 +2347,21 @@ class ModelAgentExecutor:
                 "policy_failure": policy_failure,
                 "prompt_projection": _webshop_prompt_projection_summary(prompt_projection_stats),
             }
+            if self.webshop_worker_guidance_policy != "baseline":
+                artifact.webshop_progress["worker_guidance"] = {
+                    "policy": self.webshop_worker_guidance_policy,
+                    "applied": not bool(stateless_environment_owner),
+                }
+            if self.webshop_worker_memory_policy != "factual_memory_v1":
+                artifact.webshop_progress["worker_memory"] = {
+                    "policy": self.webshop_worker_memory_policy,
+                    "applied": webshop_history_enabled,
+                    "history_entries": len(webshop_react_history),
+                    "history_observation_chars": sum(
+                        len(item["observation"]) for item in webshop_react_history
+                    ),
+                    "continuity_scope": "webshop_rollout_owner",
+                }
             if commit_ready:
                 purchase_status = staged_output.get("purchase_evidence_status", {})
                 purchase_status = purchase_status if isinstance(purchase_status, dict) else {}
@@ -2396,6 +2521,8 @@ class ModelAgentExecutor:
         abort_on_credit_exhaustion: bool = False,
         credit_label: str = "qa",
         prior_response: str = "",
+        short_answer_qa: bool = False,
+        is_output_agent: bool = False,
     ) -> tuple[Any, int, int, list[dict[str, Any]]]:
         token_in = token_out = 0
         diagnostics: list[dict[str, Any]] = []
@@ -2423,6 +2550,8 @@ class ModelAgentExecutor:
                 visible_context=visible_context,
                 previous_response=previous_response,
                 previous_error=previous_error,
+                short_answer_qa=short_answer_qa,
+                is_output_agent=is_output_agent,
             )
             started = time.monotonic()
             try:
@@ -2561,6 +2690,10 @@ class RoutedModelAgentExecutor:
         action_registry: DatasetActionRegistry | None = None,
         max_tool_rounds: int = 3,
         alfworld_worker_guidance_policy: str = "factual_memory_v1",
+        webshop_worker_guidance_policy: str = "baseline",
+        webshop_worker_memory_policy: str = "factual_memory_v1",
+        webshop_worker_execution_policy: str = "graph_tools_v1",
+        dataset_route_overrides: dict[str, dict[str, str]] | None = None,
     ) -> None:
         if not backends:
             raise ValueError("at least one runtime backend is required")
@@ -2575,6 +2708,19 @@ class RoutedModelAgentExecutor:
         self.action_registry = action_registry
         self.max_tool_rounds = int(max_tool_rounds)
         self.alfworld_worker_guidance_policy = str(alfworld_worker_guidance_policy)
+        self.webshop_worker_guidance_policy = str(webshop_worker_guidance_policy)
+        if webshop_worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
+            raise ValueError("unknown webshop.worker_memory_policy")
+        self.webshop_worker_memory_policy = str(webshop_worker_memory_policy)
+        if webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
+            raise ValueError("unknown webshop.worker_execution_policy")
+        self.webshop_worker_execution_policy = webshop_worker_execution_policy
+        self.dataset_route_overrides = {
+            canonical_dataset_name(dataset): {
+                str(selected): str(target) for selected, target in overrides.items()
+            }
+            for dataset, overrides in (dataset_route_overrides or {}).items()
+        }
         self.budget_ledger = ActionBudgetLedger()
         self.deadline_monotonic: float | None = None
         self.rollout_deadline: RolloutDeadline | None = None
@@ -2606,8 +2752,8 @@ class RoutedModelAgentExecutor:
     def route_for(self, node: AgentNode) -> str:
         explicit = str(node.metadata.get("runtime_route", "")).strip()
         if not explicit and len(self.routes) == 1:
-            return self.routes[0]
-        if not explicit:
+            explicit = self.routes[0]
+        elif not explicit:
             raise ValueError(
                 f"Director did not assign runtime_route for agent {node.agent_id}; "
                 f"choose one of: {', '.join(self.routes)}"
@@ -2616,6 +2762,19 @@ class RoutedModelAgentExecutor:
             raise ValueError(
                 f"agent {node.agent_id} requests unavailable runtime route {explicit!r}"
             )
+        contract = node.metadata.get("system_managed_contract")
+        dataset = (
+            canonical_dataset_name(contract.get("dataset", ""))
+            if isinstance(contract, dict)
+            else ""
+        )
+        override = self.dataset_route_overrides.get(dataset, {}).get(explicit)
+        if override is not None:
+            if override not in self.backends:
+                raise ValueError(
+                    f"dataset route override targets unavailable runtime route {override!r}"
+                )
+            return override
         return explicit
 
     def execute(
@@ -2637,6 +2796,9 @@ class RoutedModelAgentExecutor:
                 action_registry=self.action_registry,
                 max_tool_rounds=self.max_tool_rounds,
                 alfworld_worker_guidance_policy=(self.alfworld_worker_guidance_policy),
+                webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
+                webshop_worker_memory_policy=self.webshop_worker_memory_policy,
+                webshop_worker_execution_policy=self.webshop_worker_execution_policy,
                 budget_ledger=self.budget_ledger,
                 deadline_monotonic=self.deadline_monotonic,
                 rollout_deadline=self.rollout_deadline,
@@ -2747,6 +2909,10 @@ class MultiAgentRuntime:
         if callable(reset_executor):
             reset_executor()
 
+    @property
+    def native_webshop(self) -> bool:
+        return getattr(self.executor, "webshop_worker_execution_policy", None) == NATIVE_POLICY
+
     def environment_commit_ready_agents(self) -> tuple[str, ...]:
         """Return Agents with a trusted staged environment commit."""
 
@@ -2763,6 +2929,9 @@ class MultiAgentRuntime:
         owners: set[str] = set()
         for lifecycle in self._environment_lifecycles():
             owner = getattr(lifecycle, "owner_agent", None)
+            owners_for = getattr(lifecycle, "owner_agents", None)
+            if callable(owners_for):
+                owners.update(owners_for())
             if owner:
                 owners.add(str(owner))
         return tuple(sorted(owners))
@@ -2791,6 +2960,11 @@ class MultiAgentRuntime:
         artifact = self.artifacts.get(agent_id)
         if artifact is None:
             raise ValueError(f"environment commit Agent {agent_id} has no Artifact")
+        if getattr(lifecycle, "execution_policy", None) == NATIVE_POLICY:
+            # Prior Canvas reports/cache entries retain the pre-commit snapshot.
+            # Publishing the reward must not rewrite the Agent's earlier evidence.
+            artifact = copy.deepcopy(artifact)
+            self.artifacts[agent_id] = artifact
         artifact.environment_result = dict(result)
         return dict(result)
 
@@ -3107,12 +3281,13 @@ class MultiAgentRuntime:
             return
         node = graph.nodes[agent_id]
         node.metadata["_runtime_full_graph_closure_attempted"] = True
-        node.metadata.update(
-            _runtime_webshop_output_closure=True,
-            _runtime_budget_phase="closure",
-            _runtime_token_credit=remaining_token_credit,
-            _runtime_reserved_closure_tokens=0,
-        )
+        node.metadata["_runtime_webshop_output_closure"] = True
+        if node.metadata.get("_runtime_webshop_request_admission_enabled", True):
+            node.metadata.update(
+                _runtime_budget_phase="closure",
+                _runtime_token_credit=remaining_token_credit,
+                _runtime_reserved_closure_tokens=0,
+            )
         prior = self._packet(
             self.artifacts[agent_id], [agent_id], phase="selected_output_recovery_prior"
         )
@@ -3214,6 +3389,14 @@ class MultiAgentRuntime:
         reason_codes: list[str],
     ) -> tuple[AgentArtifact, bool, int, int]:
         node = graph.nodes[agent_id]
+        # The generic AgentExecutor API intentionally stays dataset-agnostic;
+        # pass the graph role through runtime-owned metadata instead.
+        contract = node.metadata.get("system_managed_contract")
+        contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
+        if is_short_qa_dataset(contract_dataset):
+            node.metadata["_runtime_is_output_agent"] = agent_id == graph.output_agent
+        else:
+            node.metadata.pop("_runtime_is_output_agent", None)
         payload = self._cache_payload(
             task=task,
             node=node,
@@ -3270,6 +3453,8 @@ class MultiAgentRuntime:
             if action_adapter == "webshop":
                 owners = self.environment_owner_agents()
                 owner = owners[0] if len(owners) == 1 else agent_id
+                if self.native_webshop:
+                    owner = "whole-graph"
                 # One official WebShop episode has one cumulative Action
                 # budget, even when the owner is revised or receives the
                 # bounded output-closure pass.
@@ -3305,7 +3490,21 @@ class MultiAgentRuntime:
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
         }:
-            self.cache[cache_key] = artifact
+            if self.native_webshop and node.metadata.get("action_adapter") == "webshop":
+                # Side effects have advanced this private session. Store only at
+                # the resulting state, never reuse a stale candidate from an old page.
+                post_payload = self._cache_payload(
+                    task=task,
+                    node=node,
+                    upstream=upstream,
+                    peers=peers,
+                    revision=revision,
+                    prior=prior,
+                )
+                self.cache[self._cache_key(post_payload)] = artifact
+                self._last_input_payloads[(agent_id, revision)] = copy.deepcopy(post_payload)
+            else:
+                self.cache[cache_key] = artifact
         self._record_attempt(
             report,
             agent_id=agent_id,
@@ -3339,12 +3538,13 @@ class MultiAgentRuntime:
         # ADD_AGENT precedes Director SET_MODEL, so admission must remain safe
         # for every route that the Director is allowed to choose.
         selected = max(estimates, key=lambda item: item.seconds)
-        return {
+        payload = {
             "estimated_worker_s": selected.seconds,
             "call_count": 1,
             "routes": [item.to_dict() for item in estimates],
             "estimation_mode": "new_agent_worst_candidate_route",
         }
+        return payload
 
     def estimate_new_agent_tokens(
         self,
@@ -3629,7 +3829,7 @@ class MultiAgentRuntime:
                 ),
             }
 
-        return {
+        payload = {
             "task": task,
             "agent_prompt": node.prompt,
             "agent_layer": node.layer,
@@ -3653,6 +3853,23 @@ class MultiAgentRuntime:
                 "bidirectional_always_one_wave_v1" if revision else "initial_pass_v1"
             ),
         }
+        if self.native_webshop and node.metadata.get("action_adapter") == "webshop":
+            payload["native_sessions"] = [
+                lifecycle.cache_signature(node.agent_id)
+                for lifecycle in self._environment_lifecycles()
+                if callable(getattr(lifecycle, "cache_signature", None))
+            ]
+            payload["webshop_execution_policy"] = NATIVE_POLICY
+        contract = node.metadata.get("system_managed_contract")
+        contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
+        if is_short_qa_dataset(contract_dataset):
+            payload.update(
+                {
+                    "worker_prompt_version": "qa_role_conditioned_v2",
+                    "is_output_agent": bool(node.metadata.get("_runtime_is_output_agent", False)),
+                }
+            )
+        return payload
 
     @staticmethod
     def _cache_key(payload: dict[str, Any]) -> str:
@@ -4567,7 +4784,11 @@ def _webshop_public_product_state(payload: dict[str, Any]) -> dict[str, Any]:
             "asin": str(product.get("asin", "")).casefold(),
             "title": str(product.get("title", "")),
             "price": product.get("price"),
-            **{key: product[key] for key in ("price_min", "price_max", "price_text") if key in product},
+            **{
+                key: product[key]
+                for key in ("price_min", "price_max", "price_text")
+                if key in product
+            },
         }
         if isinstance(product, dict)
         else {}
@@ -4671,7 +4892,7 @@ def _update_webshop_product_inspections(
             evidence = dict(evidence) if isinstance(evidence, dict) else {}
             evidence[section] = section_text
             record["section_evidence"] = {
-                str(name)[:40]: str(value)[:1_400] for name, value in list(evidence.items())[-2:]
+                str(name)[:40]: str(value) for name, value in list(evidence.items())[-2:]
             }
     if asin in product_inspections:
         del product_inspections[asin]
@@ -4696,7 +4917,7 @@ def _annotate_webshop_search_state(
         if not isinstance(item, dict) or item.get("kind") != "open_product":
             continue
         visible_products += 1
-        asin = str(item.get("asin", "")).strip().casefold()
+        asin = visible_product_asin(item)
         record = product_inspections.get(asin)
         if record is None:
             item["inspection_status"] = "not_inspected"
@@ -4976,7 +5197,7 @@ def _webshop_progress_prompt(
     retained_evidence = current_inspection.get("section_evidence", {})
     retained_evidence = (
         {
-            str(name)[:40]: str(value)[:1_400]
+            str(name)[:40]: str(value)
             for name, value in retained_evidence.items()
             if str(name).strip() and str(value).strip()
         }
@@ -5377,13 +5598,36 @@ def _bounded_swe_code_memory(react_trace: list[dict[str, Any]]) -> dict[str, Any
     }
 
 
-def _worker_output_instruction(available_actions: object, *, action_adapter: str = "") -> str:
+def _worker_output_instruction(
+    available_actions: object,
+    *,
+    action_adapter: str = "",
+    short_answer_qa: bool = False,
+    is_output_agent: bool = False,
+    webshop_history_enabled: bool = False,
+) -> str:
     actions = available_actions if isinstance(available_actions, list) else []
+    if short_answer_qa:
+        qa_instruction = (
+            "For short-answer QA, put only a short phrase, entity, date, number, or compact "
+            "relation in answer. If you are the selected output Agent, answer the whole "
+            "question with its shortest direct answer. If you are an intermediate Worker, "
+            "answer only your assigned local sub-question; you do not need to solve the whole "
+            "question. Put all reasoning, evidence, qualifications, and uncertainty in "
+            "summary or evidence, never in answer. "
+        )
+    else:
+        # Preserve the existing guidance for every non-short-QA dataset.
+        qa_instruction = (
+            "For short-answer QA, answer must be the shortest answer span, not a sentence "
+            "or explanation. "
+        )
     instruction = (
         "Return one final JSON object with answer, summary, confidence, evidence, "
         "unresolved_issues, and tool_summary. Put only the direct task result in answer and put "
-        "all explanation in summary or evidence. For short-answer QA, answer must be the shortest "
-        "answer span, not a sentence or explanation. The final JSON is a normal final response, "
+        "all explanation in summary or evidence. "
+        + qa_instruction
+        + "The final JSON is a normal final response, "
         "not an Action call. Never call an Action named finalize. Report failed Actions in "
         "unresolved_issues and calibrate confidence accordingly. Never claim that a tool or "
         "numerical computation succeeded unless its visible observation has status=ok. "
@@ -5413,11 +5657,18 @@ def _worker_output_instruction(available_actions: object, *, action_adapter: str
             "only after the latest observation reports success or termination. "
         )
     elif action_adapter == "webshop":
+        memory_instruction = (
+            HISTORY_INSTRUCTION
+            if webshop_history_enabled
+            else (
+                "The webshop_progress.state_guidance block reports public page facts, not a "
+                "recommended next Action, candidate ranking, or evidence of task correctness. "
+            )
+        )
         action_requirement = (
             "For WebShop, Actions use target IDs from the latest observation. "
-            "The webshop_progress.state_guidance block reports public page facts, not a "
-            "recommended next Action, candidate ranking, or evidence of task correctness. "
-            "Search-result option values describe only a default display variant: a missing or "
+            + memory_instruction
+            + "Search-result option values describe only a default display variant: a missing or "
             "conflicting title-level option is unknown, neither satisfied nor evidence that the "
             "product lacks that option. Product-page option Actions are authoritative. On product "
             "pages, selected_options and sparse selected=true "
@@ -5736,6 +5987,8 @@ def _finalization_recovery_messages(
     visible_context: dict[str, Any],
     previous_response: str = "",
     previous_error: dict[str, Any] | None = None,
+    short_answer_qa: bool = False,
+    is_output_agent: bool = False,
 ) -> list[dict[str, str]]:
     action_environment = visible_context.get("action_environment", {})
     action_adapter = (
@@ -5779,6 +6032,17 @@ def _finalization_recovery_messages(
         recovery_context["webshop_current_public_state"] = _webshop_finalization_state(
             action_environment.get("state", {}),
         )
+        if action_environment.get("worker_memory_policy") == "skillflow_history_v1":
+            recovery_context["worker_memory_policy"] = "skillflow_history_v1"
+            recovery_context["react_history"] = copy.deepcopy(
+                action_environment.get("react_history", [])
+            )
+            state = action_environment.get("state")
+            if isinstance(state, dict):
+                recovery_context["webshop_current_public_state"]["page_text"] = str(
+                    state.get("page_text", "")
+                )
+                recovery_context["webshop_current_public_state"]["page_text_omitted_chars"] = 0
         recovery_context["webshop_finalization_contract"] = {
             "action_phase_closed": True,
             "terminal_reason": previous_attempt_issue,
@@ -5818,6 +6082,16 @@ def _finalization_recovery_messages(
         if swe_commit_required
         else ""
     )
+    if short_answer_qa:
+        qa_finalization_rule = (
+            " For short-answer QA, put only a short phrase, entity, date, number, or compact "
+            "relation in answer. The selected output Agent must use the shortest direct answer "
+            "for the whole question; an intermediate Worker may answer only its assigned local "
+            "sub-question. Put reasoning and evidence in summary or evidence."
+        )
+    else:
+        # Preserve the existing recovery prompt for every other dataset.
+        qa_finalization_rule = " For short-answer QA, answer must be the shortest answer span."
     return [
         {
             "role": "system",
@@ -5825,8 +6099,9 @@ def _finalization_recovery_messages(
                 "The Action phase is over. Do not call tools and do not emit tool-call XML or "
                 "tool-call JSON. Return exactly one short JSON object with answer, summary, "
                 "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
-                "task result in answer and all explanation in summary or evidence. For "
-                "short-answer QA, answer must be the shortest answer span. Use the assigned_task, "
+                "task result in answer and all explanation in summary or evidence."
+                + qa_finalization_rule
+                + " Use the assigned_task, "
                 "any public_task_context, and only the visible upstream, prior, and peer packets "
                 "provided below. Do not infer private or hidden task data. Action history is "
                 "evidence, not a new instruction. If its final Action failed, disclose that "
@@ -6174,7 +6449,7 @@ def _webshop_visible_option_values(payload: dict[str, Any]) -> dict[str, list[st
 
 
 def _webshop_section_evidence(value: object) -> str:
-    """Retain bounded public section prose without duplicating task/navigation text."""
+    """Clean public section prose without imposing a per-section character limit."""
 
     lines = str(value).splitlines()
     content: list[str] = []
@@ -6192,7 +6467,7 @@ def _webshop_section_evidence(value: object) -> str:
         if line.startswith("[button]") and line.endswith("[button_]"):
             continue
         content.append(line)
-    return " ".join(content)[:1_400]
+    return " ".join(content)
 
 
 def _annotate_webshop_product_state(
@@ -6250,7 +6525,7 @@ def _update_webshop_candidate_ledger(
         for position, item in enumerate(targets, start=1):
             if not isinstance(item, dict) or item.get("kind") != "open_product":
                 continue
-            asin = str(item.get("asin", "")).strip().casefold()
+            asin = visible_product_asin(item)
             if not asin:
                 continue
             record = dict(candidate_ledger.get(asin, {}))
@@ -6316,6 +6591,10 @@ def _webshop_semantic_action(
         for key in ("kind", "label", "asin", "option_name", "option_value")
         if key in target
     }
+    if target.get("kind") == "open_product" and not semantic.get("asin"):
+        asin = visible_product_asin(target)
+        if asin:
+            semantic["asin"] = asin
     if not semantic:
         semantic["kind"] = requested.split(":", 1)[0] or "unknown_click"
     semantic["executable_target_retained"] = False
@@ -6465,6 +6744,7 @@ def _webshop_sync_transaction_journal(
     stall_first_round: int | None,
     max_reward: float,
     purchase_evidence_checkpoint: dict[str, Any],
+    react_history: list[dict[str, Any]] | None = None,
 ) -> None:
     if not isinstance(journal, dict):
         return
@@ -6501,6 +6781,8 @@ def _webshop_sync_transaction_journal(
             "purchase_evidence_checkpoint": copy.deepcopy(purchase_evidence_checkpoint),
         }
     )
+    if react_history is not None:
+        journal["react_history"] = copy.deepcopy(react_history)
 
 
 def _record_webshop_state_guidance_delivery(
@@ -6687,8 +6969,11 @@ def _webshop_context_for_prompt(
         environment.pop("workspace_changed", None)
         environment.pop("swe_progress", None)
         environment.pop("alfworld_progress", None)
+        history_mode = environment.get("worker_memory_policy") == "skillflow_history_v1"
         state = environment.get("state")
-        if isinstance(state, dict):
+        if history_mode:
+            project_webshop_history_environment(environment)
+        elif isinstance(state, dict):
             progress = environment.get("webshop_progress")
             progress = progress if isinstance(progress, dict) else {}
             state["decision_phase"] = _webshop_decision_phase(state)
@@ -6709,11 +6994,12 @@ def _webshop_context_for_prompt(
                     "audit_copy_retained": True,
                 }
                 page_text_truncated = len(page_text) - 8_000
-        environment["public_constraint_matrix"] = _webshop_public_constraint_matrix(
-            projected.get("public_task_context", ""),
-            state if isinstance(state, dict) else {},
-            progress=environment.get("webshop_progress"),
-        )
+        if not history_mode:
+            environment["public_constraint_matrix"] = _webshop_public_constraint_matrix(
+                projected.get("public_task_context", ""),
+                state if isinstance(state, dict) else {},
+                progress=environment.get("webshop_progress"),
+            )
 
     prompt_chars = len(json.dumps(projected, ensure_ascii=False, separators=separators))
     if stats is not None:
@@ -6793,7 +7079,7 @@ def _webshop_action_decision_support(
             "agent_selectable": True,
         }
         if kind == "open_product":
-            asin = str(action.get("asin", "")).strip().casefold()
+            asin = visible_product_asin(action)
             item.update(
                 {
                     "asin": asin,
@@ -6857,10 +7143,16 @@ def _webshop_public_constraint_matrix(
     price_max = current_product.get("price_max") if isinstance(current_product, dict) else None
     if ceiling is not None:
         price_status = "unknown_public_price"
-    if ceiling is not None and isinstance(price_min, (int, float)) and isinstance(price_max, (int, float)):
+    if (
+        ceiling is not None
+        and isinstance(price_min, (int, float))
+        and isinstance(price_max, (int, float))
+    ):
         price_status = (
-            "within_public_ceiling" if price_max <= ceiling
-            else "exceeds_public_ceiling" if price_min > ceiling
+            "within_public_ceiling"
+            if price_max <= ceiling
+            else "exceeds_public_ceiling"
+            if price_min > ceiling
             else "uncertain_price_range"
         )
     if (

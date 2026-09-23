@@ -437,6 +437,10 @@ class AdaptiveWorkflowSolver:
             task=solver_task_text(
                 task, include_submission_contract=self.answer_finalizer is not None
             ),
+            worker_task=solver_task_text(
+                task,
+                include_submission_contract=self.answer_finalizer is not None,
+            ),
             director_task=task.prompt,
             runtime=self.runtime,
             config=replace(base_canvas_config, max_total_tokens=selected_token_budget),

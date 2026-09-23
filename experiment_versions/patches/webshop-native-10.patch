@@ -1,0 +1,3341 @@
+diff --git a/b/configs/webshop_skillflow_native_eval.toml b/configs/webshop_skillflow_native_eval.toml
+new file mode 100644
+index 0000000..08301f5
+--- /dev/null
++++ b/configs/webshop_skillflow_native_eval.toml
+@@ -0,0 +1,379 @@
++# Candidate SkillFlow text execution; commits only on valid Canvas FINISH.
++# Opt-in candidate; leaves the adopted baseline unchanged.
++# See docs/WEBSHOP_SKILLFLOW_NATIVE_V1.zh-CN.md.
++# Canonical deployment configuration for the seven-dataset formal PATS run.
++# Credentials are loaded from the repository .env and are never stored here.
++[models.proposer]
++base_url = "http://127.0.0.1:18601/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++base_model_path = "models/Qwen3.5-9B"
++checkpoint_path = "state/formal-training/checkpoints/proposer"
++trainable = true
++
++[models.solver]
++base_url = "http://127.0.0.1:18602/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++base_model_path = "models/Qwen3.5-9B"
++checkpoint_path = "state/formal-training/checkpoints/solver"
++trainable = true
++
++[runtime]
++name = "default"
++base_url = "http://127.0.0.1:18603/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++timeout_s = 120.0
++max_concurrency = 12
++managed_locally = false
++frozen = true
++network_path = "direct"
++request_profile = "qwen"
++
++[runtime_routing]
++# Use the two existing Codex endpoints; judge aliases share the same pool.
++worker_routes = ["deepseek"]
++skill_distiller = "skill_refiner"
++health_cooldown_s = 600.0
++pool_retry_attempts = 2
++pool_retry_backoff_s = 1.0
++pool_member_queue_wait_s = 0.5
++
++[runtime_routing.endpoint_pools]
++gpt = ["gpt", "gpt_eco", "gpt_student"]
++gpt_judge = ["gpt_judge", "gpt_judge_eco"]
++
++[canvas]
++# Predictive admission protection is disabled; hard token and wall-clock limits remain.
++remaining_time_admission_enabled = false
++remaining_token_admission_enabled = false
++max_agents = 4
++max_rounds = 24
++relay_max_chars = 1000
++
++[canvas.max_total_tokens_by_dataset]
++aime = 65536
++nq_open = 65536
++hotpotqa = 65536
++webshop = 350000
++alfworld = 350000
++healthbench_professional = 65536
++swe_bench = 350000
++
++[solver_skillbank]
++path = "state/formal-training/runtime_state/director_skillbank.v2.json"
++cases_path = "state/formal-training/runtime_state/director_skill_cases.json"
++usage = "off"
++prompt_token_budget = 1024
++retrieve_top_k = 3
++enabled = false
++mode = "director_skill_v2"
++activation_policy = "checked"
++embedding_model_path = "models/e5-base-v2"
++
++[solver_skillbank.pats]
++enabled = false
++ema_alpha = 0.1
++revise_threshold = 0.3
++compress_threshold = 0.85
++max_skills = 30
++max_tokens = 2000
++min_groups = 2
++min_evidence_cards = 2
++review_interval = 1
++max_edits = 4
++max_reviews_per_cycle = 3
++max_evidence_groups = 32
++max_policy_lag = 1
++max_review_input_tokens = 20480
++
++[trace]
++path = "state/formal-training/runtime_state/traces.jsonl"
++
++[verifier]
++mode = "auto"
++
++[answer_submission]
++enabled = true
++qa_model_enabled = true
++runtime_route = "gpt"
++max_tokens = 128
++require_source_span = true
++
++# Pure-local Python execution support for AIME Workers.
++[aime_actions]
++enabled = true
++timeout_s = 5.0
++max_output_chars = 8000
++max_code_chars = 12000
++memory_limit_mb = 1024
++max_initial_calls = 3
++max_revision_calls = 1
++max_total_calls = 4
++
++# Pinned Search-R1 Wiki-18 E5/FAISS service used by NQ-open.
++# HotpotQA follows FlowSteer: its dataset-provided distractor context is used directly.
++# The launcher validates the backend identity before admitting formal runs.
++[retrieval]
++enabled = true
++service_url = "http://127.0.0.1:18010/retrieve"
++top_k = 5
++timeout_s = 240.0
++max_tool_rounds = 3
++
++# Separate pinned official WebShop sidecar with raw-action projection on port 18021.
++[webshop]
++enabled = true
++service_url = "http://127.0.0.1:18021"
++timeout_s = 240.0
++max_observation_chars = 0
++max_query_chars = 500
++max_initial_calls = 12
++max_revision_calls = 4
++max_total_calls = 16
++staged_commit_enabled = true
++max_pending_sessions = 8
++pending_ttl_s = 900.0
++# Preserve legacy page text while selecting the candidate native Worker protocol.
++search_observation_mode = "legacy"
++worker_guidance_policy = "baseline"
++worker_memory_policy = "skillflow_history_v1"
++worker_execution_policy = "skillflow_native_v1"
++
++# Local assets are present; the formal environment installs the alfworld extra.
++[alfworld]
++enabled = true
++data_root = "assets/alfworld-data/json_2.1.1"
++max_episode_steps = 50
++max_rollout_steps = 200
++max_observation_chars = 12000
++max_initial_calls = 50
++max_revision_calls = 50
++max_total_calls = 100
++worker_guidance_policy = "factual_memory_v1"
++
++# Local execution storage, trusted remote verifier identity, registry, and
++# pinned dataset revision are provisioned for the formal run.
++[swe]
++enabled = true
++repo_cache_root = "state/formal-training/swe/repo-cache"
++workspace_root = "state/formal-training/swe/workspaces"
++artifact_store_root = "state/formal-training/private/swe/artifacts"
++verifier_registry_path = "state/formal-training/private/swe/verifier-registry.json"
++lifecycle_log_path = "state/formal-training/private/swe/lifecycle.jsonl"
++verifier_log_path = "state/formal-training/private/swe/verifier-client.jsonl"
++verifier_host = "43.134.20.27"
++verifier_user = "sweeval"
++verifier_identity_file = "state/formal-training/private/swe/identity"
++verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
++# Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
++# TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
++cvm_auto_start = false
++cvm_auto_stop = false
++cvm_region = "ap-singapore"
++cvm_instance_id = "ins-5n1zolfw"
++cvm_secret_id_env = "TENCENTCLOUD_SECRET_ID"
++cvm_secret_key_env = "TENCENTCLOUD_SECRET_KEY"
++cvm_endpoint = "cvm.tencentcloudapi.com"
++cvm_timeout_s = 600.0
++cvm_poll_s = 5.0
++dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
++local_test_timeout_s = 60.0
++max_output_chars = 12000
++max_file_chars = 200000
++max_patch_bytes = 2000000
++max_initial_calls = 20
++max_revision_calls = 12
++max_total_calls = 32
++duplicate_responsibility_policy = "record_only"
++
++[swe.test_profiles]
++python_syntax = ["python", "-m", "py_compile"]
++
++[healthbench_judge_audit]
++path = "state/formal-training/private/healthbench_judge"
++runtime_route = "gpt_student"
++expected_model = "gpt-5.5"
++
++[resources]
++proposer_gpu_id = 1
++solver_gpu_id = 1
++# Validation metadata for this evaluation-only profile; the launcher uses existing services.
++allocated_gpu_ids = [1]
++allow_policy_gpu_colocation = true
++proposer_service_gpu_memory_utilization = 0.30
++solver_service_gpu_memory_utilization = 0.30
++
++# Dedicated between-cycle Skill Distiller route.
++[runtimes.skill_refiner]
++base_url = "https://nexus.itssx.com/api/codex/codex_pro/v1"
++api_key_env = "NEXUS_PRO_API_KEY"
++served_model = "gpt-6-astra"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 20
++timeout_s = 240.0
++max_tokens = 4096
++managed_locally = false
++frozen = true
++
++[runtimes.gpt]
++base_url = "https://nexus.itssx.com/api/codex/codex/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 10
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gpt_eco]
++base_url = "https://nexus.itssx.com/api/codex_eco/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 10
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++# Student gateway joined to the existing gpt worker pool; it uses the same
++# queue, health cooldown, retry, and round-robin endpoint selection logic.
++[runtimes.gpt_student]
++base_url = "https://flowsteer.org:2087/v1"
++api_key_file = "~/.config/student-api/flowsteer.key"
++served_model = "lab-gpt-5.5-2"
++request_profile = "responses_text"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 5
++timeout_s = 600.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++user_agent = "selfplay-graph-flowsteer/student-gateway"
++
++[runtimes.grok]
++base_url = "https://nexus.itssx.com/api/grok/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "grok-4.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.grok45]
++base_url = "https://nexus.itssx.com/api/grok45/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "grok-4.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gemini]
++base_url = "https://uuapi.io/v1"
++api_key_env = "UUAPI_API_KEY"
++served_model = "gemini-3.6-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gemini2]
++base_url = "https://uuapi.io/v1"
++api_key_env = "UUAPI_API_KEY_2"
++served_model = "gemini-3.6-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.deepseek]
++base_url = "https://api.deepseek.com/v1"
++api_key_env = "DEEPSEEK_API_KEY"
++served_model = "deepseek-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++enable_thinking = true
++reasoning_effort = "low"
++max_concurrency = 20
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.minimax]
++base_url = "https://api.minimaxi.com/v1"
++api_key_env = "MINIMAX_API_KEY"
++served_model = "MiniMax-M2.7"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++enable_thinking = false
++reasoning_effort = "low"
++max_concurrency = 30
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++# HealthBench Judge shares the same physical GPT endpoint gates and credentials
++# as GPT Worker traffic; only the API surface and request role differ.
++[runtimes.gpt_judge]
++base_url = "https://nexus.itssx.com/api/codex/codex/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++healthbench_grader_reasoning_effort = "low"
++max_concurrency = 16
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gpt_judge_eco]
++base_url = "https://nexus.itssx.com/api/codex_eco/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++healthbench_grader_reasoning_effort = "low"
++max_concurrency = 16
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
+diff --git a/b/scripts/formal/run_webshop_skillflow_native_eval.sh b/scripts/formal/run_webshop_skillflow_native_eval.sh
+new file mode 100644
+index 0000000..818a9c0
+--- /dev/null
++++ b/scripts/formal/run_webshop_skillflow_native_eval.sh
+@@ -0,0 +1,34 @@
++#!/usr/bin/env bash
++set -euo pipefail
++ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
++cd "$ROOT"
++set -a
++source .env
++set +a
++export SPGFS_ALLOWED_PHYSICAL_GPUS=${SPGFS_ALLOWED_PHYSICAL_GPUS:-0,1,2,3,4,5,6,7}
++source scripts/formal/environment.sh
++export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
++PYTHON=${SPGFS_PYTHON:-$SPGFS_VENV/bin/python}
++OUTPUT=${SPGFS_WEBSHOP_EVAL_OUTPUT:-state/formal-eval/webshop-skillflow-native10-$(date +%Y%m%d-%H%M%S)}
++# Required preselected dataset; this launcher never silently expands to 128 tasks.
++DATASET=${SPGFS_WEBSHOP_EVAL_DATASET:?Set the path of the preselected evaluation JSONL}
++DIRECTOR_URL=${SPGFS_WEBSHOP_DIRECTOR_URL:-http://127.0.0.1:18623/v1}
++WORKERS=${SPGFS_WEBSHOP_WORKERS:-24}
++if [[ -e "$OUTPUT" ]]; then
++  printf 'Output already exists: %s\n' "$OUTPUT" >&2
++  exit 2
++fi
++curl --noproxy '*' --fail --silent --show-error --max-time 10 \
++  -H 'Authorization: Bearer EMPTY' "$DIRECTOR_URL/models" >/dev/null
++"$PYTHON" - <<'PY'
++import json, urllib.request
++with urllib.request.urlopen('http://127.0.0.1:18021/health', timeout=10) as response:
++    health=json.load(response)
++assert health.get('raw_action_protocol')=='webshop-raw-actions-v1', health
++PY
++exec "$PYTHON" -m selfplay_graph_flowsteer benchmark \
++  --config configs/webshop_skillflow_native_eval.toml \
++  --dataset "$DATASET" --output "$OUTPUT" --seed 0 --workers "$WORKERS" --disable-swe \
++  --worker-route deepseek --director-base-url "$DIRECTOR_URL" \
++  --director-api-key EMPTY --director-model Qwen3.5-9B \
++  --director-thinking --skill-context off --wandb-mode offline
+diff --git a/src/selfplay_graph_flowsteer/adaptive.py b/src/selfplay_graph_flowsteer/adaptive.py
+index 724b777..a8f917a 100644
+--- a/src/selfplay_graph_flowsteer/adaptive.py
++++ b/src/selfplay_graph_flowsteer/adaptive.py
+@@ -437,6 +437,10 @@ class AdaptiveWorkflowSolver:
+             task=solver_task_text(
+                 task, include_submission_contract=self.answer_finalizer is not None
+             ),
++            worker_task=solver_task_text(
++                task,
++                include_submission_contract=self.answer_finalizer is not None,
++            ),
+             director_task=task.prompt,
+             runtime=self.runtime,
+             config=replace(base_canvas_config, max_total_tokens=selected_token_budget),
+diff --git a/src/selfplay_graph_flowsteer/application.py b/src/selfplay_graph_flowsteer/application.py
+index 67a9013..f22b77a 100644
+--- a/src/selfplay_graph_flowsteer/application.py
++++ b/src/selfplay_graph_flowsteer/application.py
+@@ -63,8 +63,8 @@ from .observability import (
+     MultiAnswerExactMatchVerifier,
+     MultipleChoiceVerifier,
+     NumericVerifier,
+-    TokenF1Verifier,
+     TaskSpec,
++    TokenF1Verifier,
+     VerificationResult,
+     Verifier,
+     task_requires_reference,
+@@ -109,6 +109,10 @@ from .webshop import (
+     webshop_lifecycles,
+ )
+ from .webshop_budget import budget_partition
++from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
++from .webshop_history import WEBSHOP_WORKER_MEMORY_POLICIES
++from .webshop_native import NativeWebShopLifecycle
++from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
+ 
+ 
+ class GraphEvaluationIncompleteError(RuntimeError):
+@@ -249,12 +253,17 @@ class FixedRuntimeConfig:
+         ):
+             raise ValueError("runtime.stream requires generic Chat Completions")
+         if self.request_profile not in {"qwen", "generic", "gemini", "responses_text"}:
+-            raise ValueError("runtime.request_profile must be qwen, generic, gemini or responses_text")
++            raise ValueError(
++                "runtime.request_profile must be qwen, generic, gemini or responses_text"
++            )
+         if self.api_surface not in {"chat_completions", "responses"}:
+             raise ValueError("runtime.api_surface must be chat_completions or responses")
+         if self.request_profile == "responses_text" and self.api_surface != "responses":
+             raise ValueError("responses_text requires the Responses API")
+-        if self.api_surface == "responses" and self.request_profile not in {"generic", "responses_text"}:
++        if self.api_surface == "responses" and self.request_profile not in {
++            "generic",
++            "responses_text",
++        }:
+             raise ValueError("Responses runtimes require generic or responses_text")
+         if self.healthbench_grader_reasoning_effort not in {None, "low", "medium", "high"}:
+             raise ValueError(
+@@ -346,8 +355,36 @@ class WebShopConfig:
+     max_pending_sessions: int = 8
+     pending_ttl_s: float = 900.0
+     search_observation_mode: str = "structured_only"
++    env_feedback_enabled: bool = False
++    worker_guidance_policy: str = "baseline"
++    worker_memory_policy: str = "factual_memory_v1"
++    worker_execution_policy: str = "graph_tools_v1"
+ 
+     def validate(self) -> None:
++        if self.worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
++            raise ValueError("unknown webshop.worker_execution_policy")
++        if (
++            self.enabled
++            and self.worker_execution_policy == NATIVE_POLICY
++            and (
++                self.search_observation_mode != "legacy"
++                or self.max_observation_chars != 0
++                or not self.staged_commit_enabled
++                or self.worker_guidance_policy != "baseline"
++                or self.env_feedback_enabled
++            )
++        ):
++            raise ValueError(
++                "skillflow_native_v1 requires legacy, unlimited observations, staged commit, baseline guidance and feedback off"
++            )
++        if self.worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
++            raise ValueError(
++                "webshop.worker_memory_policy must be factual_memory_v1 or skillflow_history_v1"
++            )
++        if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
++            raise ValueError(
++                "webshop.worker_guidance_policy must be baseline or laser_checklist_v1"
++            )
+         if not self.enabled:
+             return
+         if not self.service_url.startswith(("http://", "https://")):
+@@ -382,6 +419,13 @@ class WebShopConfig:
+                 "webshop.search_observation_mode must be legacy, retain_page_text, "
+                 "or structured_only"
+             )
++        if self.worker_memory_policy == "skillflow_history_v1" and (
++            self.search_observation_mode == "structured_only" or self.max_observation_chars != 0
++        ):
++            raise ValueError(
++                "webshop.worker_memory_policy=skillflow_history_v1 requires legacy or "
++                "retain_page_text observations and max_observation_chars=0"
++            )
+ 
+ 
+ @dataclass(frozen=True)
+@@ -559,6 +603,10 @@ class AdaptiveApplicationConfig:
+     runtime_name: str = "default"
+     additional_runtimes: dict[str, FixedRuntimeConfig] = field(default_factory=dict)
+     worker_runtime_routes: tuple[str, ...] = ("default",)
++    # Optional dataset-scoped remapping applied after the Director selects a
++    # Worker route.  This is deliberately narrow: routes not listed here keep
++    # the exact Director selection.
++    dataset_route_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
+     endpoint_pool_retry_attempts: int = 2
+     endpoint_pool_retry_backoff_s: float = 1.0
+@@ -669,6 +717,22 @@ class AdaptiveApplicationConfig:
+         unknown_routes = set(self.worker_runtime_routes) - set(runtime_pool)
+         if unknown_routes:
+             raise ValueError("unknown worker runtime routes: " + ", ".join(sorted(unknown_routes)))
++        for dataset, overrides in self.dataset_route_overrides.items():
++            dataset_key = canonical_dataset_name(dataset)
++            if not dataset_key or not isinstance(overrides, dict):
++                raise ValueError("invalid dataset route override: " + str(dataset))
++            unknown_selected = set(overrides) - set(self.worker_runtime_routes)
++            if unknown_selected:
++                raise ValueError(
++                    "dataset route override selects unavailable Worker routes: "
++                    + ", ".join(sorted(unknown_selected))
++                )
++            unknown_targets = set(overrides.values()) - set(runtime_pool)
++            if unknown_targets:
++                raise ValueError(
++                    "dataset route override targets unknown routes: "
++                    + ", ".join(sorted(unknown_targets))
++                )
+         for logical, members in self.runtime_endpoint_pools.items():
+             if (
+                 logical not in runtime_pool
+@@ -678,8 +742,13 @@ class AdaptiveApplicationConfig:
+             ):
+                 raise ValueError("invalid endpoint pool: " + logical)
+             configs = [runtime_pool[member] for member in (logical, *members)]
+-            if len({(item.served_model, item.reasoning_effort) for item in configs}) != 1:
+-                raise ValueError("endpoint pool must use the same model and effort")
++            # A logical pool may shard compatible provider deployments that
++            # expose different model aliases (for example, a lab gateway
++            # beside the production GPT endpoint). Reasoning effort remains a
++            # pool invariant so the request policy does not change on rotation;
++            # each physical backend supplies its own served model at dispatch.
++            if len({item.reasoning_effort for item in configs}) != 1:
++                raise ValueError("endpoint pool must use the same reasoning effort")
+         if (
+             self.endpoint_pool_retry_attempts < 0
+             or self.endpoint_pool_retry_backoff_s < 0
+@@ -910,14 +979,16 @@ class AdaptiveApplicationConfig:
+                 "action_protocol": "director_model_v1",
+                 "counterfactual_execution": "full_graph_v1",
+                 "worker_routes": list(self.worker_runtime_routes),
++                "dataset_route_overrides": {
++                    canonical_dataset_name(dataset): dict(sorted(overrides.items()))
++                    for dataset, overrides in sorted(self.dataset_route_overrides.items())
++                },
+                 "endpoint_pools": {
+                     key: list(value) for key, value in self.runtime_endpoint_pools.items()
+                 },
+                 "endpoint_pool_retry_attempts": self.endpoint_pool_retry_attempts,
+                 "endpoint_pool_retry_backoff_s": self.endpoint_pool_retry_backoff_s,
+-                "endpoint_pool_member_queue_wait_s": (
+-                    self.endpoint_pool_member_queue_wait_s
+-                ),
++                "endpoint_pool_member_queue_wait_s": (self.endpoint_pool_member_queue_wait_s),
+                 "skill_distiller": self.skill_distiller_runtime,
+                 "health_state_path": str(self.route_health_path),
+                 "health_cooldown_s": self.route_health_cooldown_s,
+@@ -1064,6 +1135,12 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
+         worker_runtime_routes=tuple(
+             str(value) for value in runtime_routing.get("worker_routes", [runtime_name])
+         ),
++        dataset_route_overrides={
++            canonical_dataset_name(dataset): {
++                str(selected): str(target) for selected, target in overrides.items()
++            }
++            for dataset, overrides in runtime_routing.get("dataset_route_overrides", {}).items()
++        },
+         runtime_endpoint_pools={
+             str(key): tuple(str(member) for member in value)
+             for key, value in runtime_routing.get("endpoint_pools", {}).items()
+@@ -1231,6 +1308,14 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
+             max_pending_sessions=int(webshop.get("max_pending_sessions", 8)),
+             pending_ttl_s=float(webshop.get("pending_ttl_s", 900.0)),
+             search_observation_mode=str(webshop.get("search_observation_mode", "structured_only")),
++            env_feedback_enabled=bool(webshop.get("env_feedback_enabled", False)),
++            worker_guidance_policy=str(webshop.get("worker_guidance_policy", "baseline"))
++            .strip()
++            .casefold(),
++            worker_memory_policy=str(webshop.get("worker_memory_policy", "factual_memory_v1"))
++            .strip()
++            .casefold(),
++            worker_execution_policy=str(webshop.get("worker_execution_policy", "graph_tools_v1")),
+         ),
+         alfworld=ALFWorldConfig(
+             enabled=bool(alfworld.get("enabled", False)),
+@@ -1287,12 +1372,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
+             or os.environ.get("SPGFS_SWE_CVM_AUTO_STOP", "").strip() == "1",
+             cvm_region=str(swe.get("cvm_region", "ap-singapore")),
+             cvm_instance_id=str(swe.get("cvm_instance_id", "ins-5n1zolfw")),
+-            cvm_secret_id_env=str(
+-                swe.get("cvm_secret_id_env", "TENCENTCLOUD_SECRET_ID")
+-            ),
+-            cvm_secret_key_env=str(
+-                swe.get("cvm_secret_key_env", "TENCENTCLOUD_SECRET_KEY")
+-            ),
++            cvm_secret_id_env=str(swe.get("cvm_secret_id_env", "TENCENTCLOUD_SECRET_ID")),
++            cvm_secret_key_env=str(swe.get("cvm_secret_key_env", "TENCENTCLOUD_SECRET_KEY")),
+             cvm_endpoint=str(swe.get("cvm_endpoint", "cvm.tencentcloudapi.com")),
+             cvm_timeout_s=float(swe.get("cvm_timeout_s", 600.0)),
+             cvm_poll_s=float(swe.get("cvm_poll_s", 5.0)),
+@@ -1864,11 +1945,16 @@ class AdaptiveSolverApplication:
+                     call_count=calls,
+                     closure=False,
+                 )
+-                if dataset == "webshop"
++                if dataset == "webshop" and self.config.canvas.remaining_token_admission_enabled
+                 else None
+             )
+             for node in graph.nodes.values():
+-                node.metadata["_runtime_token_credit"] = int(token_budget) // calls
++                if dataset == "webshop":
++                    node.metadata["_runtime_webshop_request_admission_enabled"] = (
++                        self.config.canvas.remaining_token_admission_enabled
++                    )
++                else:
++                    node.metadata["_runtime_token_credit"] = int(token_budget) // calls
+                 if webshop_partition is not None:
+                     node.metadata.update(
+                         _runtime_token_credit=webshop_partition["per_execution_credit"],
+@@ -2145,7 +2231,12 @@ def create_adaptive_application(
+         )
+     webshop_lifecycle = None
+     if config.webshop.enabled:
+-        webshop_lifecycle = WebShopSessionLifecycle(
++        lifecycle_type = (
++            NativeWebShopLifecycle
++            if config.webshop.worker_execution_policy == NATIVE_POLICY
++            else WebShopSessionLifecycle
++        )
++        webshop_lifecycle = lifecycle_type(
+             WebShopHTTPClient(
+                 config.webshop.service_url,
+                 timeout_s=config.webshop.timeout_s,
+@@ -2155,6 +2246,7 @@ def create_adaptive_application(
+             pending_ttl_s=config.webshop.pending_ttl_s,
+             stage_purchases=config.webshop.staged_commit_enabled,
+             search_observation_mode=config.webshop.search_observation_mode,
++            env_feedback_enabled=config.webshop.env_feedback_enabled,
+         )
+         tools["webshop_search"] = WebShopSearchTool(
+             webshop_lifecycle,
+@@ -2233,6 +2325,7 @@ def create_adaptive_application(
+             config.webshop.max_total_calls,
+         ),
+         webshop_staged_commit=config.webshop.staged_commit_enabled,
++        webshop_commit_on_finish=config.webshop.worker_execution_policy == NATIVE_POLICY,
+         alfworld_budgets=(
+             config.alfworld.max_initial_calls,
+             config.alfworld.max_revision_calls,
+@@ -2260,6 +2353,9 @@ def create_adaptive_application(
+             action_registry=action_registry,
+             max_tool_rounds=config.retrieval.max_tool_rounds,
+             alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
++            webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
++            webshop_worker_memory_policy=config.webshop.worker_memory_policy,
++            webshop_worker_execution_policy=config.webshop.worker_execution_policy,
+         )
+     else:
+         if director_backend is None:
+@@ -2297,10 +2393,14 @@ def create_adaptive_application(
+             worker_executor = RoutedModelAgentExecutor(
+                 runtime_backends,
+                 config.worker_runtime_routes,
++                dataset_route_overrides=config.dataset_route_overrides,
+                 tools=tools,
+                 action_registry=action_registry,
+                 max_tool_rounds=config.retrieval.max_tool_rounds,
+                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
++                webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
++                webshop_worker_memory_policy=config.webshop.worker_memory_policy,
++                webshop_worker_execution_policy=config.webshop.worker_execution_policy,
+             )
+         else:
+             worker_executor = ModelAgentExecutor(
+@@ -2309,6 +2409,9 @@ def create_adaptive_application(
+                 action_registry=action_registry,
+                 max_tool_rounds=config.retrieval.max_tool_rounds,
+                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
++                webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
++                webshop_worker_memory_policy=config.webshop.worker_memory_policy,
++                webshop_worker_execution_policy=config.webshop.worker_execution_policy,
+             )
+         if distiller_backend is None:
+             distiller_backend = runtime_backends[config.skill_distiller_runtime]
+diff --git a/src/selfplay_graph_flowsteer/canvas.py b/src/selfplay_graph_flowsteer/canvas.py
+index 0c32d6f..c761951 100644
+--- a/src/selfplay_graph_flowsteer/canvas.py
++++ b/src/selfplay_graph_flowsteer/canvas.py
+@@ -206,6 +206,7 @@ class GraphCanvas:
+         self,
+         *,
+         task: str,
++        worker_task: str | None = None,
+         director_task: str | None = None,
+         runtime: MultiAgentRuntime,
+         config: CanvasConfig | None = None,
+@@ -223,6 +224,7 @@ class GraphCanvas:
+         binary_relation_policy: bool = False,
+     ) -> None:
+         self.task = task
++        self.worker_task = worker_task if worker_task is not None else task
+         self.director_task = director_task if director_task is not None else task
+         self.runtime = runtime
+         self.config = config or CanvasConfig()
+@@ -1561,9 +1563,7 @@ class GraphCanvas:
+             result = artifact.environment_result if artifact is not None else {}
+             # Selecting output is not a decision to abandon an unsolved episode.
+             # Preserve the next Director turn whenever other legal actions remain.
+-            if not (
+-                result.get("environment_completed") is True and result.get("won") is True
+-            ):
++            if not (result.get("environment_completed") is True and result.get("won") is True):
+                 return None
+         graph_is_ready = bool(
+             self.graph.output_agent
+@@ -1774,6 +1774,25 @@ class GraphCanvas:
+                 execution=report,
+                 final_execution=True,
+             )
++        if self.runtime.native_webshop and self.dataset == "webshop":
++            selected = self.graph.output_agent
++            if selected in self.runtime.environment_commit_ready_agents():
++                try:
++                    result = self.runtime.commit_environment_output(selected)
++                    if not result.get("purchased"):
++                        raise ValueError("selected candidate did not reach a terminal purchase")
++                except Exception as exc:
++                    self.state = CanvasState.FAILED
++                    return self._record(
++                        action,
++                        accepted=False,
++                        feedback=f"Selected WebShop candidate commit failed: {exc}",
++                        execution=report,
++                        final_execution=True,
++                        rejection_code="webshop_environment_commit_failed",
++                    )
++            # A graph may legitimately finish without a purchase (score zero).
++            # Never select a different Agent or a candidate using hidden reward.
+         if is_aime_dataset(self.dataset):
+             parsed = parse_aime_answer(output)
+             if not parsed.valid:
+@@ -1867,33 +1886,56 @@ class GraphCanvas:
+                     }
+                 )
+         if self.dataset == "webshop" and executable_dirty:
+-            calls = self.runtime.estimate_execution_tokens(
+-                self.graph,
+-                executable_dirty,
+-                quantile=self.config.worker_token_quantile,
+-                minimum_samples=self.config.worker_token_min_samples,
+-                cold_start_tokens=self.config.worker_token_cold_start,
+-            )["call_count"]
+-            closure = any(
+-                "webshop_output_closure_required" in self.dirty_reasons.get(agent_id, ())
+-                for agent_id in executable_dirty
+-            )
+-            partition = self._webshop_budget_partition(call_count=int(calls), closure=closure)
+-            self._token_admission_event.update(partition)
++            admission_enabled = self.config.remaining_token_admission_enabled
++            partition = None
++            if admission_enabled:
++                calls = self.runtime.estimate_execution_tokens(
++                    self.graph,
++                    executable_dirty,
++                    quantile=self.config.worker_token_quantile,
++                    minimum_samples=self.config.worker_token_min_samples,
++                    cold_start_tokens=self.config.worker_token_cold_start,
++                )["call_count"]
++                closure = any(
++                    "webshop_output_closure_required" in self.dirty_reasons.get(agent_id, ())
++                    for agent_id in executable_dirty
++                )
++                partition = self._webshop_budget_partition(call_count=int(calls), closure=closure)
++                self._token_admission_event.update(partition)
++            else:
++                self._token_admission_event.update(
++                    request_admission="disabled",
++                    remaining_worker_tokens=max(
++                        0, self.config.max_total_tokens - self.total_tokens
++                    ),
++                )
+             for agent_id in executable_dirty:
+-                self.graph.nodes[agent_id].metadata.update(
++                metadata = self.graph.nodes[agent_id].metadata
++                metadata.update(
+                     {
+-                        "_runtime_token_credit": partition["per_execution_credit"],
+-                        "_runtime_reserved_closure_tokens": partition["reserved_closure_tokens"],
+-                        "_runtime_budget_phase": partition["phase"],
++                        "_runtime_webshop_request_admission_enabled": admission_enabled,
+                         "_runtime_webshop_output_closure": (
+                             "webshop_output_closure_required"
+                             in self.dirty_reasons.get(agent_id, ())
+                         ),
+                     }
+                 )
++                if partition is not None:
++                    metadata.update(
++                        _runtime_token_credit=partition["per_execution_credit"],
++                        _runtime_reserved_closure_tokens=partition["reserved_closure_tokens"],
++                        _runtime_budget_phase=partition["phase"],
++                    )
++                else:
++                    # A restored graph may still carry an earlier execution's credit.
++                    for key in (
++                        "_runtime_token_credit",
++                        "_runtime_reserved_closure_tokens",
++                        "_runtime_budget_phase",
++                    ):
++                        metadata.pop(key, None)
+         report = self.runtime.execute(
+-            task=self.task,
++            task=self.worker_task,
+             graph=self.graph,
+             dirty_agents=executable_dirty if executable_dirty else set(),
+             invalidation_reasons={
+@@ -2644,6 +2686,7 @@ class GraphCanvas:
+             if (
+                 self.action_adapter is not None
+                 and self.action_adapter.commit_policy.value == "single_committer"
++                and not self.runtime.native_webshop
+             ):
+                 capability_name = (
+                     "environment_commit"
+@@ -3021,6 +3064,7 @@ class GraphCanvas:
+             fields,
+             dataset=self.dataset if self.managed_delegation_contracts else "",
+             action_names=action_names,
++            webshop_native=self.runtime.native_webshop and self.dataset == "webshop",
+         )
+         if issue is not None:
+             raise DelegationValidationError(issue)
+@@ -3232,8 +3276,10 @@ class GraphCanvas:
+                         "Use only a grounded same-owner revision or select it for the one "
+                         "bounded output-closure pass; no replacement session is legal."
+                     )
+-                elif self.dataset == "webshop" and not bool(
+-                    webshop_progress.get("commit_ready", False)
++                elif (
++                    self.dataset == "webshop"
++                    and not self.runtime.native_webshop
++                    and not bool(webshop_progress.get("commit_ready", False))
+                 ):
+                     webshop_recovery = (
+                         "No purchase is staged. The sole owner may be revised in the same "
+@@ -3987,10 +4033,18 @@ class GraphCanvas:
+             "allowed_actions": allowed_actions,
+             "legal_action_parameters": legal_parameters,
+             "output_agent": self.graph.output_agent,
+-            "environment_commit_ready_agents": list(commit_ready_agents),
++            "environment_commit_ready_agents": (
++                list(self.runtime.environment_commit_ready_agents())
++                if self.runtime.native_webshop
++                else list(commit_ready_agents)
++            ),
+             "environment_owner_agents": list(self.runtime.environment_owner_agents()),
+             "environment_commit_resolution": (
+-                "SET_OUTPUT commits one staged candidate; commit confirmation cannot exist "
++                "SET_OUTPUT only selects an output. FINISH validates the graph, updates dirty "
++                "nodes, then commits only the selected output's latest staged candidate. "
++                "Candidates remain revisable before FINISH."
++                if self.runtime.native_webshop
++                else "SET_OUTPUT commits one staged candidate; commit confirmation cannot exist "
+                 "before SET_OUTPUT, so waiting for that confirmation is not an unresolved task "
+                 "constraint. The trusted staged Action is latched; later model prose cannot "
+                 "discard or revise it."
+diff --git a/src/selfplay_graph_flowsteer/config.py b/src/selfplay_graph_flowsteer/config.py
+index d3d99ef..e53eb8c 100644
+--- a/src/selfplay_graph_flowsteer/config.py
++++ b/src/selfplay_graph_flowsteer/config.py
+@@ -112,6 +112,8 @@ class CanvasConfig:
+             "swe_bench": 120.0,
+         }
+     )
++    # Includes WebShop serialized-request estimates and closure token reservations.
++    # False retains post-execution actual-usage checks and environment action limits.
+     remaining_token_admission_enabled: bool = True
+     worker_token_quantile: float = 0.95
+     worker_token_window: int = 64
+diff --git a/src/selfplay_graph_flowsteer/dataset_actions.py b/src/selfplay_graph_flowsteer/dataset_actions.py
+index 7295036..27bdc30 100644
+--- a/src/selfplay_graph_flowsteer/dataset_actions.py
++++ b/src/selfplay_graph_flowsteer/dataset_actions.py
+@@ -34,6 +34,7 @@ class CommitActivation(StrEnum):
+     NONE = "none"
+     EXECUTE_ON_OUTPUT = "execute_on_output"
+     COMMIT_PENDING_ON_OUTPUT = "commit_pending_on_output"
++    COMMIT_PENDING_ON_FINISH = "commit_pending_on_finish"
+     EXPORT_LATEST_ARTIFACT = "export_latest_artifact"
+ 
+ 
+@@ -158,7 +159,9 @@ class DatasetActionRegistry:
+         dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+         # Frozen-context NQ keeps the canonical dataset name (so metrics and
+         # budgets remain comparable) but deliberately has no runtime search.
+-        if dataset == "nq_open" and str(task.metadata.get("evidence_mode", "")).strip().casefold() in {
++        if dataset == "nq_open" and str(
++            task.metadata.get("evidence_mode", "")
++        ).strip().casefold() in {
+             "provided_context",
+             "frozen_retrieval",
+             "provided_context_inline",
+@@ -180,6 +183,7 @@ def default_dataset_action_registry(
+     retrieval_initial_budget: int = 3,
+     webshop_budgets: tuple[int, int, int] = (12, 4, 16),
+     webshop_staged_commit: bool = True,
++    webshop_commit_on_finish: bool = False,
+     alfworld_budgets: tuple[int, int, int] = (50, 50, 100),
+     swe_budgets: tuple[int, int, int] = (28, 12, 40),
+ ) -> DatasetActionRegistry:
+@@ -269,7 +273,9 @@ def default_dataset_action_registry(
+                 action_execution=ActionExecution.SEQUENTIAL,
+                 commit_policy=CommitPolicy.SINGLE_COMMITTER,
+                 commit_activation=(
+-                    CommitActivation.COMMIT_PENDING_ON_OUTPUT
++                    CommitActivation.COMMIT_PENDING_ON_FINISH
++                    if webshop_commit_on_finish
++                    else CommitActivation.COMMIT_PENDING_ON_OUTPUT
+                     if webshop_staged_commit
+                     else CommitActivation.EXECUTE_ON_OUTPUT
+                 ),
+diff --git a/src/selfplay_graph_flowsteer/dataset_adapters.py b/src/selfplay_graph_flowsteer/dataset_adapters.py
+index 621c6b6..072f0a5 100644
+--- a/src/selfplay_graph_flowsteer/dataset_adapters.py
++++ b/src/selfplay_graph_flowsteer/dataset_adapters.py
+@@ -182,9 +182,11 @@ def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = Fals
+     # The QA answer interface is independent of optional model-based formatting.
+     # Apply this on primary and graph re-execution paths alike, without giving
+     # intermediate Workers an obligation to solve the complete task.
+-    contract = (
+-        submission_contract(task) if include_submission_contract or is_short_answer_qa(task) else ""
+-    )
++    # Final submission formatting is injected by the runtime only for the
++    # selected output Agent.  The Canvas/Director may still request it
++    # explicitly, but intermediate QA Workers should receive only the task and
++    # trusted context.
++    contract = submission_contract(task) if include_submission_contract else ""
+     task_text = task.prompt
+     dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+     verifier = str(task.metadata.get("verifier", "")).strip().casefold()
+@@ -207,11 +209,17 @@ def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = Fals
+             rendered.append(f"[{index}] {title}\n{text}")
+     if not rendered:
+         return f"{task_text}\n\n{contract}" if contract else task_text
++    closing_instruction = (
++        "Use the documents as evidence and return the final answer to the question."
++        if contract
++        else "Use the documents as evidence and return your assigned local result."
++    )
+     rendered_task = (
+         f"Question:\n{task_text}\n\n"
+         "Trusted context documents:\n"
+         + "\n\n".join(rendered)
+-        + "\n\nUse the documents as evidence and return the final answer to the question."
++        + "\n\n"
++        + closing_instruction
+     )
+     return f"{rendered_task}\n\n{contract}" if contract else rendered_task
+ 
+diff --git a/src/selfplay_graph_flowsteer/delegation.py b/src/selfplay_graph_flowsteer/delegation.py
+index 4ab1b3f..66b047e 100644
+--- a/src/selfplay_graph_flowsteer/delegation.py
++++ b/src/selfplay_graph_flowsteer/delegation.py
+@@ -833,6 +833,7 @@ def compile_delegation(
+     *,
+     dataset: str = "",
+     action_names: Iterable[str] = (),
++    webshop_native: bool = False,
+ ) -> tuple[DelegationCompilation | None, DelegationIssue | None]:
+     """Validate, locally compact, and deterministically compile a responsibility.
+ 
+@@ -873,7 +874,11 @@ def compile_delegation(
+ 
+     repaired = dict(normalized)
+     dataset_key = str(dataset or "").strip().casefold()
+-    if dataset_key == "webshop" and repaired["expected_output"] != _WEBSHOP_EXPECTED_OUTPUT:
++    if (
++        dataset_key == "webshop"
++        and not webshop_native
++        and repaired["expected_output"] != _WEBSHOP_EXPECTED_OUTPUT
++    ):
+         original = repaired["expected_output"]
+         repaired["expected_output"] = _WEBSHOP_EXPECTED_OUTPUT
+         repairs.append(
+@@ -909,10 +914,27 @@ def compile_delegation(
+         )
+     )
+     contract = _DATASET_OUTPUT_CONTRACTS.get(dataset_key, ())
++    if dataset_key == "webshop" and webshop_native:
++        contract = (
++            (
++                "graph_packet",
++                "Fulfil the assigned responsibility using public evidence and graph-authorized packets; return a structured result and unresolved issues.",
++            ),
++            (
++                "native_environment",
++                "Environment interaction uses search[...] and click[...] from the current admissible actions. Your private history belongs only to this Agent's session.",
++            ),
++            (
++                "graph_commit",
++                "Buy Now stages this Agent's current candidate. Only Canvas FINISH commits the selected output's latest candidate; do not claim purchase success before commit.",
++            ),
++        )
+     rule_ids = tuple(rule_id for rule_id, _text in contract)
+     if contract:
+         managed_contract_version = (
+-            WEBSHOP_DELEGATION_CONTRACT_VERSION
++            "webshop-native-graph-contract-v1"
++            if dataset_key == "webshop" and webshop_native
++            else WEBSHOP_DELEGATION_CONTRACT_VERSION
+             if dataset_key == "webshop"
+             else DELEGATION_CONTRACT_VERSION
+         )
+diff --git a/src/selfplay_graph_flowsteer/director.py b/src/selfplay_graph_flowsteer/director.py
+index ca0ab97..9177e9c 100644
+--- a/src/selfplay_graph_flowsteer/director.py
++++ b/src/selfplay_graph_flowsteer/director.py
+@@ -597,6 +597,10 @@ class GraphDirector:
+         system_prompt = (
+             base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
+         )
++        if self.canvas.runtime.native_webshop and self.canvas.dataset == "webshop":
++            from .webshop_native_protocol import DIRECTOR_ENVIRONMENT_HINT
++
++            system_prompt = base_prompt.rstrip() + "\n\n" + DIRECTOR_ENVIRONMENT_HINT
+         if self.solver_skill_context:
+             # The per-turn conversation is deliberately fresh, so persistent
+             # Solver-only orchestration context belongs in the system message.
+diff --git a/src/selfplay_graph_flowsteer/endpoint_pool.py b/src/selfplay_graph_flowsteer/endpoint_pool.py
+index a3a8fc7..641023c 100644
+--- a/src/selfplay_graph_flowsteer/endpoint_pool.py
++++ b/src/selfplay_graph_flowsteer/endpoint_pool.py
+@@ -1,4 +1,4 @@
+-"""Same-model endpoint sharding and bounded, request-local failover."""
++"""Endpoint sharding and bounded, request-local failover."""
+ 
+ from __future__ import annotations
+ 
+diff --git a/src/selfplay_graph_flowsteer/runtime.py b/src/selfplay_graph_flowsteer/runtime.py
+index 55794ad..d2d7228 100644
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -17,6 +17,7 @@ from .action_protocol import ActionCall, ActionSpec, action_spec_from_tool
+ from .agent_tools import AgentTool
+ from .artifact_protocol import check_artifact, summarize_worker_protocol
+ from .backend_failures import classify_backend_failure
++from .config import canonical_dataset_name
+ from .contracts import AgentArtifact, AgentNode, CodeArtifactRef, ExecutionReport, RelayPacket
+ from .dataset_actions import DatasetActionRegistry
+ from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
+@@ -35,6 +36,15 @@ from .llm import (
+ )
+ from .qa_submission import is_short_qa_dataset
+ from .webshop_budget import execution_accounting, request_budget_quote
++from .webshop_guidance import webshop_worker_guidance
++from .webshop_history import (
++    HISTORY_INSTRUCTION,
++    WEBSHOP_WORKER_MEMORY_POLICIES,
++    append_webshop_history,
++    project_webshop_history_environment,
++)
++from .webshop_identity import visible_product_asin
++from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
+ 
+ WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
+ WORKER_PROTOCOL_FAILURE_SENTINEL = "WORKER_PROTOCOL_FAILURE"
+@@ -379,6 +389,15 @@ class ModelAgentExecutor:
+     deadline_monotonic: float | None = None
+     rollout_deadline: RolloutDeadline | None = None
+     budget_scope: str | None = None
++    webshop_worker_guidance_policy: str = "baseline"
++    webshop_worker_memory_policy: str = "factual_memory_v1"
++    webshop_worker_execution_policy: str = "graph_tools_v1"
++
++    def __post_init__(self) -> None:
++        if self.webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
++            raise ValueError("unknown webshop.worker_execution_policy")
++        if self.webshop_worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
++            raise ValueError("unknown webshop.worker_memory_policy")
+ 
+     def reset(self) -> None:
+         self.budget_ledger.reset()
+@@ -425,6 +444,22 @@ class ModelAgentExecutor:
+     ) -> AgentArtifact:
+         self._check_deadline()
+         self._validate_dataset_actions(node)
++        if (
++            node.metadata.get("action_adapter") == "webshop"
++            and self.webshop_worker_execution_policy == NATIVE_POLICY
++        ):
++            from .webshop_native_executor import execute_native
++
++            return execute_native(
++                self,
++                task=task,
++                node=node,
++                upstream=upstream,
++                peers=peers,
++                revision=revision,
++                seed=seed,
++                prior=prior,
++            )
+         allowed_tools = {
+             name: self.tools[name] for name in node.allowed_tools if name in self.tools
+         }
+@@ -555,6 +590,20 @@ class ModelAgentExecutor:
+             raw_webshop_journal = initial_environment_state.pop(
+                 "_runtime_transaction_journal", None
+             )
++            if (
++                action_adapter == "webshop"
++                and self.webshop_worker_memory_policy == "skillflow_history_v1"
++                and raw_webshop_journal is None
++                and not stateless_environment_owner
++            ):
++                # A zero-Action final report must see the same history without
++                # beginning/replacing a live or already-staged environment session.
++                for lifecycle in lifecycle_targets.values():
++                    journal_for = getattr(lifecycle, "runtime_transaction_journal_for", None)
++                    if callable(journal_for):
++                        raw_webshop_journal = journal_for(node.agent_id)
++                        if isinstance(raw_webshop_journal, dict):
++                            break
+             if action_adapter == "webshop" and isinstance(raw_webshop_journal, dict):
+                 # This is a runtime-only reference owned by the task-bound
+                 # WebShop lifecycle.  It survives same-owner revisions but is
+@@ -644,6 +693,16 @@ class ModelAgentExecutor:
+             else {}
+         )
+         webshop_journal_restored = bool(webshop_journal.get("schema_version"))
++        webshop_history_enabled = (
++            action_adapter == "webshop"
++            and not stateless_environment_owner
++            and self.webshop_worker_memory_policy == "skillflow_history_v1"
++        )
++        webshop_react_history = (
++            copy.deepcopy(webshop_journal.get("react_history", []))
++            if webshop_history_enabled
++            else []
++        )
+         webshop_product_inspections = _webshop_restore_keyed_records(
+             webshop_journal.get("product_inspections"), key="asin"
+         )
+@@ -802,12 +861,19 @@ class ModelAgentExecutor:
+                 ),
+             },
+         }
++        if webshop_history_enabled:
++            context["action_environment"]["worker_memory_policy"] = "skillflow_history_v1"
++            context["action_environment"]["react_history"] = webshop_react_history
+         system_managed_contract = node.metadata.get("system_managed_contract")
+         contract_dataset = (
+             str(system_managed_contract.get("dataset", ""))
+             if isinstance(system_managed_contract, dict)
+             else ""
+         )
++        short_answer_qa = is_short_qa_dataset(contract_dataset)
++        selected_output_agent = short_answer_qa and bool(
++            node.metadata.get("_runtime_is_output_agent", False)
++        )
+         public_task_visible = bool(action_adapter) or is_short_qa_dataset(contract_dataset)
+         if public_task_visible:
+             # Dataset adapters and short QA follow the guide's (q, p_v, visible
+@@ -905,8 +971,16 @@ class ModelAgentExecutor:
+                 "Action evidence. "
+             )
+         instruction += _worker_output_instruction(
+-            context["available_actions"], action_adapter=action_adapter
++            context["available_actions"],
++            action_adapter=action_adapter,
++            short_answer_qa=short_answer_qa,
++            is_output_agent=selected_output_agent,
++            webshop_history_enabled=webshop_history_enabled,
+         )
++        # Keep guidance out of environment observations and the Director prompt.
++        # The same conditional checklist survives state updates and owner revisions.
++        if action_adapter == "webshop" and not stateless_environment_owner:
++            instruction += webshop_worker_guidance(self.webshop_worker_guidance_policy)
+         prompt_context = _action_context_for_prompt(
+             context,
+             action_adapter=action_adapter,
+@@ -930,6 +1004,10 @@ class ModelAgentExecutor:
+             int(node.metadata["_runtime_token_credit"])
+             if (action_adapter == "webshop" or submission_credit or full_graph_credit)
+             and "_runtime_token_credit" in node.metadata
++            and (
++                action_adapter != "webshop"
++                or node.metadata.get("_runtime_webshop_request_admission_enabled", True)
++            )
+             else None
+         )
+ 
+@@ -1049,7 +1127,7 @@ class ModelAgentExecutor:
+             if isinstance(raw_guidance_deliveries, list)
+             else []
+         )
+-        if action_adapter == "webshop":
++        if action_adapter == "webshop" and not webshop_history_enabled:
+             _record_webshop_state_guidance_delivery(
+                 webshop_state_guidance_deliveries,
+                 context["action_environment"].get("webshop_progress"),
+@@ -1081,6 +1159,7 @@ class ModelAgentExecutor:
+                 stall_first_round=webshop_stall_first_round,
+                 max_reward=webshop_max_reward,
+                 purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
++                react_history=webshop_react_history if webshop_history_enabled else None,
+             )
+ 
+         force_finalize = False
+@@ -1126,6 +1205,8 @@ class ModelAgentExecutor:
+                         credit_label=credit_label,
+                         prior_response=qa_previous_response,
+                         pre_reserved_closure_tokens=closure_reserve(),
++                        short_answer_qa=short_answer_qa,
++                        is_output_agent=selected_output_agent,
+                     )
+                 )
+                 token_in += recovery_token_in
+@@ -1151,6 +1232,8 @@ class ModelAgentExecutor:
+                             action_adapter=action_adapter,
+                             alfworld_worker_guidance_policy=self.alfworld_worker_guidance_policy,
+                         ),
++                        short_answer_qa=short_answer_qa,
++                        is_output_agent=selected_output_agent,
+                     )
+                     reserve_quote = request_budget_quote(
+                         {
+@@ -1399,6 +1482,14 @@ class ModelAgentExecutor:
+ 
+             call_observations: list[tuple[ActionCall, dict[str, Any]]] = []
+             for batch_index, (call, arguments, error, failure_reason) in enumerate(prepared):
++                history_before = (
++                    {
++                        "page_text": str(webshop_state.get("page_text", "")),
++                        "page_type": str(webshop_state.get("page_type", "")),
++                    }
++                    if webshop_history_enabled
++                    else {}
++                )
+                 summary = None
+                 if error is not None:
+                     observation = error
+@@ -1921,6 +2012,19 @@ class ModelAgentExecutor:
+                     trace_entry["batch_index"] = batch_index
+                     trace_entry["batch_size"] = len(calls)
+                 react_trace.append(trace_entry)
++                if webshop_history_enabled and (
++                    not stateful_batch or batch_index == selected_index
++                ):
++                    append_webshop_history(
++                        webshop_react_history,
++                        before=history_before,
++                        action={
++                            "name": call.name,
++                            "arguments": arguments if arguments is not None else call.arguments,
++                        },
++                        result=observation,
++                    )
++                    sync_webshop_journal()
+                 call_observations.append((call, observation))
+             message_call_observations = call_observations
+             if (
+@@ -1989,11 +2093,12 @@ class ModelAgentExecutor:
+                         current_state=webshop_state,
+                         purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
+                     )
+-                    _record_webshop_state_guidance_delivery(
+-                        webshop_state_guidance_deliveries,
+-                        context["action_environment"].get("webshop_progress"),
+-                        interaction_round=interaction_round,
+-                    )
++                    if not webshop_history_enabled:
++                        _record_webshop_state_guidance_delivery(
++                            webshop_state_guidance_deliveries,
++                            context["action_environment"].get("webshop_progress"),
++                            interaction_round=interaction_round,
++                        )
+                 latest_context_for_prompt = _action_context_for_prompt(
+                     context,
+                     action_adapter=action_adapter,
+@@ -2088,6 +2193,8 @@ class ModelAgentExecutor:
+                     credit_label=credit_label,
+                     prior_response=qa_previous_response,
+                     pre_reserved_closure_tokens=closure_reserve(),
++                    short_answer_qa=short_answer_qa,
++                    is_output_agent=selected_output_agent,
+                 )
+             )
+             token_in += recovery_token_in
+@@ -2176,6 +2283,9 @@ class ModelAgentExecutor:
+                     action_attempts=len(react_trace),
+                 ),
+                 "budget_partition": {
++                    "request_admission_enabled": node.metadata.get(
++                        "_runtime_webshop_request_admission_enabled", True
++                    ),
+                     "phase": node.metadata.get("_runtime_budget_phase", "unpartitioned"),
+                     "execution_credit": execution_credit,
+                     "reserved_closure_tokens": node.metadata.get(
+@@ -2237,6 +2347,21 @@ class ModelAgentExecutor:
+                 "policy_failure": policy_failure,
+                 "prompt_projection": _webshop_prompt_projection_summary(prompt_projection_stats),
+             }
++            if self.webshop_worker_guidance_policy != "baseline":
++                artifact.webshop_progress["worker_guidance"] = {
++                    "policy": self.webshop_worker_guidance_policy,
++                    "applied": not bool(stateless_environment_owner),
++                }
++            if self.webshop_worker_memory_policy != "factual_memory_v1":
++                artifact.webshop_progress["worker_memory"] = {
++                    "policy": self.webshop_worker_memory_policy,
++                    "applied": webshop_history_enabled,
++                    "history_entries": len(webshop_react_history),
++                    "history_observation_chars": sum(
++                        len(item["observation"]) for item in webshop_react_history
++                    ),
++                    "continuity_scope": "webshop_rollout_owner",
++                }
+             if commit_ready:
+                 purchase_status = staged_output.get("purchase_evidence_status", {})
+                 purchase_status = purchase_status if isinstance(purchase_status, dict) else {}
+@@ -2396,6 +2521,8 @@ class ModelAgentExecutor:
+         abort_on_credit_exhaustion: bool = False,
+         credit_label: str = "qa",
+         prior_response: str = "",
++        short_answer_qa: bool = False,
++        is_output_agent: bool = False,
+     ) -> tuple[Any, int, int, list[dict[str, Any]]]:
+         token_in = token_out = 0
+         diagnostics: list[dict[str, Any]] = []
+@@ -2423,6 +2550,8 @@ class ModelAgentExecutor:
+                 visible_context=visible_context,
+                 previous_response=previous_response,
+                 previous_error=previous_error,
++                short_answer_qa=short_answer_qa,
++                is_output_agent=is_output_agent,
+             )
+             started = time.monotonic()
+             try:
+@@ -2561,6 +2690,10 @@ class RoutedModelAgentExecutor:
+         action_registry: DatasetActionRegistry | None = None,
+         max_tool_rounds: int = 3,
+         alfworld_worker_guidance_policy: str = "factual_memory_v1",
++        webshop_worker_guidance_policy: str = "baseline",
++        webshop_worker_memory_policy: str = "factual_memory_v1",
++        webshop_worker_execution_policy: str = "graph_tools_v1",
++        dataset_route_overrides: dict[str, dict[str, str]] | None = None,
+     ) -> None:
+         if not backends:
+             raise ValueError("at least one runtime backend is required")
+@@ -2575,6 +2708,19 @@ class RoutedModelAgentExecutor:
+         self.action_registry = action_registry
+         self.max_tool_rounds = int(max_tool_rounds)
+         self.alfworld_worker_guidance_policy = str(alfworld_worker_guidance_policy)
++        self.webshop_worker_guidance_policy = str(webshop_worker_guidance_policy)
++        if webshop_worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
++            raise ValueError("unknown webshop.worker_memory_policy")
++        self.webshop_worker_memory_policy = str(webshop_worker_memory_policy)
++        if webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
++            raise ValueError("unknown webshop.worker_execution_policy")
++        self.webshop_worker_execution_policy = webshop_worker_execution_policy
++        self.dataset_route_overrides = {
++            canonical_dataset_name(dataset): {
++                str(selected): str(target) for selected, target in overrides.items()
++            }
++            for dataset, overrides in (dataset_route_overrides or {}).items()
++        }
+         self.budget_ledger = ActionBudgetLedger()
+         self.deadline_monotonic: float | None = None
+         self.rollout_deadline: RolloutDeadline | None = None
+@@ -2606,8 +2752,8 @@ class RoutedModelAgentExecutor:
+     def route_for(self, node: AgentNode) -> str:
+         explicit = str(node.metadata.get("runtime_route", "")).strip()
+         if not explicit and len(self.routes) == 1:
+-            return self.routes[0]
+-        if not explicit:
++            explicit = self.routes[0]
++        elif not explicit:
+             raise ValueError(
+                 f"Director did not assign runtime_route for agent {node.agent_id}; "
+                 f"choose one of: {', '.join(self.routes)}"
+@@ -2616,6 +2762,19 @@ class RoutedModelAgentExecutor:
+             raise ValueError(
+                 f"agent {node.agent_id} requests unavailable runtime route {explicit!r}"
+             )
++        contract = node.metadata.get("system_managed_contract")
++        dataset = (
++            canonical_dataset_name(contract.get("dataset", ""))
++            if isinstance(contract, dict)
++            else ""
++        )
++        override = self.dataset_route_overrides.get(dataset, {}).get(explicit)
++        if override is not None:
++            if override not in self.backends:
++                raise ValueError(
++                    f"dataset route override targets unavailable runtime route {override!r}"
++                )
++            return override
+         return explicit
+ 
+     def execute(
+@@ -2637,6 +2796,9 @@ class RoutedModelAgentExecutor:
+                 action_registry=self.action_registry,
+                 max_tool_rounds=self.max_tool_rounds,
+                 alfworld_worker_guidance_policy=(self.alfworld_worker_guidance_policy),
++                webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
++                webshop_worker_memory_policy=self.webshop_worker_memory_policy,
++                webshop_worker_execution_policy=self.webshop_worker_execution_policy,
+                 budget_ledger=self.budget_ledger,
+                 deadline_monotonic=self.deadline_monotonic,
+                 rollout_deadline=self.rollout_deadline,
+@@ -2747,6 +2909,10 @@ class MultiAgentRuntime:
+         if callable(reset_executor):
+             reset_executor()
+ 
++    @property
++    def native_webshop(self) -> bool:
++        return getattr(self.executor, "webshop_worker_execution_policy", None) == NATIVE_POLICY
++
+     def environment_commit_ready_agents(self) -> tuple[str, ...]:
+         """Return Agents with a trusted staged environment commit."""
+ 
+@@ -2763,6 +2929,9 @@ class MultiAgentRuntime:
+         owners: set[str] = set()
+         for lifecycle in self._environment_lifecycles():
+             owner = getattr(lifecycle, "owner_agent", None)
++            owners_for = getattr(lifecycle, "owner_agents", None)
++            if callable(owners_for):
++                owners.update(owners_for())
+             if owner:
+                 owners.add(str(owner))
+         return tuple(sorted(owners))
+@@ -3107,12 +3276,13 @@ class MultiAgentRuntime:
+             return
+         node = graph.nodes[agent_id]
+         node.metadata["_runtime_full_graph_closure_attempted"] = True
+-        node.metadata.update(
+-            _runtime_webshop_output_closure=True,
+-            _runtime_budget_phase="closure",
+-            _runtime_token_credit=remaining_token_credit,
+-            _runtime_reserved_closure_tokens=0,
+-        )
++        node.metadata["_runtime_webshop_output_closure"] = True
++        if node.metadata.get("_runtime_webshop_request_admission_enabled", True):
++            node.metadata.update(
++                _runtime_budget_phase="closure",
++                _runtime_token_credit=remaining_token_credit,
++                _runtime_reserved_closure_tokens=0,
++            )
+         prior = self._packet(
+             self.artifacts[agent_id], [agent_id], phase="selected_output_recovery_prior"
+         )
+@@ -3214,6 +3384,14 @@ class MultiAgentRuntime:
+         reason_codes: list[str],
+     ) -> tuple[AgentArtifact, bool, int, int]:
+         node = graph.nodes[agent_id]
++        # The generic AgentExecutor API intentionally stays dataset-agnostic;
++        # pass the graph role through runtime-owned metadata instead.
++        contract = node.metadata.get("system_managed_contract")
++        contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
++        if is_short_qa_dataset(contract_dataset):
++            node.metadata["_runtime_is_output_agent"] = agent_id == graph.output_agent
++        else:
++            node.metadata.pop("_runtime_is_output_agent", None)
+         payload = self._cache_payload(
+             task=task,
+             node=node,
+@@ -3270,6 +3448,8 @@ class MultiAgentRuntime:
+             if action_adapter == "webshop":
+                 owners = self.environment_owner_agents()
+                 owner = owners[0] if len(owners) == 1 else agent_id
++                if self.native_webshop:
++                    owner = "whole-graph"
+                 # One official WebShop episode has one cumulative Action
+                 # budget, even when the owner is revised or receives the
+                 # bounded output-closure pass.
+@@ -3305,7 +3485,21 @@ class MultiAgentRuntime:
+             WORKER_BACKEND_FAILURE_SENTINEL,
+             WORKER_PROTOCOL_FAILURE_SENTINEL,
+         }:
+-            self.cache[cache_key] = artifact
++            if self.native_webshop and node.metadata.get("action_adapter") == "webshop":
++                # Side effects have advanced this private session. Store only at
++                # the resulting state, never reuse a stale candidate from an old page.
++                post_payload = self._cache_payload(
++                    task=task,
++                    node=node,
++                    upstream=upstream,
++                    peers=peers,
++                    revision=revision,
++                    prior=prior,
++                )
++                self.cache[self._cache_key(post_payload)] = artifact
++                self._last_input_payloads[(agent_id, revision)] = copy.deepcopy(post_payload)
++            else:
++                self.cache[cache_key] = artifact
+         self._record_attempt(
+             report,
+             agent_id=agent_id,
+@@ -3339,12 +3533,13 @@ class MultiAgentRuntime:
+         # ADD_AGENT precedes Director SET_MODEL, so admission must remain safe
+         # for every route that the Director is allowed to choose.
+         selected = max(estimates, key=lambda item: item.seconds)
+-        return {
++        payload = {
+             "estimated_worker_s": selected.seconds,
+             "call_count": 1,
+             "routes": [item.to_dict() for item in estimates],
+             "estimation_mode": "new_agent_worst_candidate_route",
+         }
++        return payload
+ 
+     def estimate_new_agent_tokens(
+         self,
+@@ -3629,7 +3824,7 @@ class MultiAgentRuntime:
+                 ),
+             }
+ 
+-        return {
++        payload = {
+             "task": task,
+             "agent_prompt": node.prompt,
+             "agent_layer": node.layer,
+@@ -3653,6 +3848,23 @@ class MultiAgentRuntime:
+                 "bidirectional_always_one_wave_v1" if revision else "initial_pass_v1"
+             ),
+         }
++        if self.native_webshop and node.metadata.get("action_adapter") == "webshop":
++            payload["native_sessions"] = [
++                lifecycle.cache_signature(node.agent_id)
++                for lifecycle in self._environment_lifecycles()
++                if callable(getattr(lifecycle, "cache_signature", None))
++            ]
++            payload["webshop_execution_policy"] = NATIVE_POLICY
++        contract = node.metadata.get("system_managed_contract")
++        contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
++        if is_short_qa_dataset(contract_dataset):
++            payload.update(
++                {
++                    "worker_prompt_version": "qa_role_conditioned_v2",
++                    "is_output_agent": bool(node.metadata.get("_runtime_is_output_agent", False)),
++                }
++            )
++        return payload
+ 
+     @staticmethod
+     def _cache_key(payload: dict[str, Any]) -> str:
+@@ -4567,7 +4779,11 @@ def _webshop_public_product_state(payload: dict[str, Any]) -> dict[str, Any]:
+             "asin": str(product.get("asin", "")).casefold(),
+             "title": str(product.get("title", "")),
+             "price": product.get("price"),
+-            **{key: product[key] for key in ("price_min", "price_max", "price_text") if key in product},
++            **{
++                key: product[key]
++                for key in ("price_min", "price_max", "price_text")
++                if key in product
++            },
+         }
+         if isinstance(product, dict)
+         else {}
+@@ -4671,7 +4887,7 @@ def _update_webshop_product_inspections(
+             evidence = dict(evidence) if isinstance(evidence, dict) else {}
+             evidence[section] = section_text
+             record["section_evidence"] = {
+-                str(name)[:40]: str(value)[:1_400] for name, value in list(evidence.items())[-2:]
++                str(name)[:40]: str(value) for name, value in list(evidence.items())[-2:]
+             }
+     if asin in product_inspections:
+         del product_inspections[asin]
+@@ -4696,7 +4912,7 @@ def _annotate_webshop_search_state(
+         if not isinstance(item, dict) or item.get("kind") != "open_product":
+             continue
+         visible_products += 1
+-        asin = str(item.get("asin", "")).strip().casefold()
++        asin = visible_product_asin(item)
+         record = product_inspections.get(asin)
+         if record is None:
+             item["inspection_status"] = "not_inspected"
+@@ -4976,7 +5192,7 @@ def _webshop_progress_prompt(
+     retained_evidence = current_inspection.get("section_evidence", {})
+     retained_evidence = (
+         {
+-            str(name)[:40]: str(value)[:1_400]
++            str(name)[:40]: str(value)
+             for name, value in retained_evidence.items()
+             if str(name).strip() and str(value).strip()
+         }
+@@ -5377,13 +5593,36 @@ def _bounded_swe_code_memory(react_trace: list[dict[str, Any]]) -> dict[str, Any
+     }
+ 
+ 
+-def _worker_output_instruction(available_actions: object, *, action_adapter: str = "") -> str:
++def _worker_output_instruction(
++    available_actions: object,
++    *,
++    action_adapter: str = "",
++    short_answer_qa: bool = False,
++    is_output_agent: bool = False,
++    webshop_history_enabled: bool = False,
++) -> str:
+     actions = available_actions if isinstance(available_actions, list) else []
++    if short_answer_qa:
++        qa_instruction = (
++            "For short-answer QA, put only a short phrase, entity, date, number, or compact "
++            "relation in answer. If you are the selected output Agent, answer the whole "
++            "question with its shortest direct answer. If you are an intermediate Worker, "
++            "answer only your assigned local sub-question; you do not need to solve the whole "
++            "question. Put all reasoning, evidence, qualifications, and uncertainty in "
++            "summary or evidence, never in answer. "
++        )
++    else:
++        # Preserve the existing guidance for every non-short-QA dataset.
++        qa_instruction = (
++            "For short-answer QA, answer must be the shortest answer span, not a sentence "
++            "or explanation. "
++        )
+     instruction = (
+         "Return one final JSON object with answer, summary, confidence, evidence, "
+         "unresolved_issues, and tool_summary. Put only the direct task result in answer and put "
+-        "all explanation in summary or evidence. For short-answer QA, answer must be the shortest "
+-        "answer span, not a sentence or explanation. The final JSON is a normal final response, "
++        "all explanation in summary or evidence. "
++        + qa_instruction
++        + "The final JSON is a normal final response, "
+         "not an Action call. Never call an Action named finalize. Report failed Actions in "
+         "unresolved_issues and calibrate confidence accordingly. Never claim that a tool or "
+         "numerical computation succeeded unless its visible observation has status=ok. "
+@@ -5413,11 +5652,18 @@ def _worker_output_instruction(available_actions: object, *, action_adapter: str
+             "only after the latest observation reports success or termination. "
+         )
+     elif action_adapter == "webshop":
++        memory_instruction = (
++            HISTORY_INSTRUCTION
++            if webshop_history_enabled
++            else (
++                "The webshop_progress.state_guidance block reports public page facts, not a "
++                "recommended next Action, candidate ranking, or evidence of task correctness. "
++            )
++        )
+         action_requirement = (
+             "For WebShop, Actions use target IDs from the latest observation. "
+-            "The webshop_progress.state_guidance block reports public page facts, not a "
+-            "recommended next Action, candidate ranking, or evidence of task correctness. "
+-            "Search-result option values describe only a default display variant: a missing or "
++            + memory_instruction
++            + "Search-result option values describe only a default display variant: a missing or "
+             "conflicting title-level option is unknown, neither satisfied nor evidence that the "
+             "product lacks that option. Product-page option Actions are authoritative. On product "
+             "pages, selected_options and sparse selected=true "
+@@ -5736,6 +5982,8 @@ def _finalization_recovery_messages(
+     visible_context: dict[str, Any],
+     previous_response: str = "",
+     previous_error: dict[str, Any] | None = None,
++    short_answer_qa: bool = False,
++    is_output_agent: bool = False,
+ ) -> list[dict[str, str]]:
+     action_environment = visible_context.get("action_environment", {})
+     action_adapter = (
+@@ -5779,6 +6027,17 @@ def _finalization_recovery_messages(
+         recovery_context["webshop_current_public_state"] = _webshop_finalization_state(
+             action_environment.get("state", {}),
+         )
++        if action_environment.get("worker_memory_policy") == "skillflow_history_v1":
++            recovery_context["worker_memory_policy"] = "skillflow_history_v1"
++            recovery_context["react_history"] = copy.deepcopy(
++                action_environment.get("react_history", [])
++            )
++            state = action_environment.get("state")
++            if isinstance(state, dict):
++                recovery_context["webshop_current_public_state"]["page_text"] = str(
++                    state.get("page_text", "")
++                )
++                recovery_context["webshop_current_public_state"]["page_text_omitted_chars"] = 0
+         recovery_context["webshop_finalization_contract"] = {
+             "action_phase_closed": True,
+             "terminal_reason": previous_attempt_issue,
+@@ -5818,6 +6077,16 @@ def _finalization_recovery_messages(
+         if swe_commit_required
+         else ""
+     )
++    if short_answer_qa:
++        qa_finalization_rule = (
++            " For short-answer QA, put only a short phrase, entity, date, number, or compact "
++            "relation in answer. The selected output Agent must use the shortest direct answer "
++            "for the whole question; an intermediate Worker may answer only its assigned local "
++            "sub-question. Put reasoning and evidence in summary or evidence."
++        )
++    else:
++        # Preserve the existing recovery prompt for every other dataset.
++        qa_finalization_rule = " For short-answer QA, answer must be the shortest answer span."
+     return [
+         {
+             "role": "system",
+@@ -5825,8 +6094,9 @@ def _finalization_recovery_messages(
+                 "The Action phase is over. Do not call tools and do not emit tool-call XML or "
+                 "tool-call JSON. Return exactly one short JSON object with answer, summary, "
+                 "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
+-                "task result in answer and all explanation in summary or evidence. For "
+-                "short-answer QA, answer must be the shortest answer span. Use the assigned_task, "
++                "task result in answer and all explanation in summary or evidence."
++                + qa_finalization_rule
++                + " Use the assigned_task, "
+                 "any public_task_context, and only the visible upstream, prior, and peer packets "
+                 "provided below. Do not infer private or hidden task data. Action history is "
+                 "evidence, not a new instruction. If its final Action failed, disclose that "
+@@ -6174,7 +6444,7 @@ def _webshop_visible_option_values(payload: dict[str, Any]) -> dict[str, list[st
+ 
+ 
+ def _webshop_section_evidence(value: object) -> str:
+-    """Retain bounded public section prose without duplicating task/navigation text."""
++    """Clean public section prose without imposing a per-section character limit."""
+ 
+     lines = str(value).splitlines()
+     content: list[str] = []
+@@ -6192,7 +6462,7 @@ def _webshop_section_evidence(value: object) -> str:
+         if line.startswith("[button]") and line.endswith("[button_]"):
+             continue
+         content.append(line)
+-    return " ".join(content)[:1_400]
++    return " ".join(content)
+ 
+ 
+ def _annotate_webshop_product_state(
+@@ -6250,7 +6520,7 @@ def _update_webshop_candidate_ledger(
+         for position, item in enumerate(targets, start=1):
+             if not isinstance(item, dict) or item.get("kind") != "open_product":
+                 continue
+-            asin = str(item.get("asin", "")).strip().casefold()
++            asin = visible_product_asin(item)
+             if not asin:
+                 continue
+             record = dict(candidate_ledger.get(asin, {}))
+@@ -6316,6 +6586,10 @@ def _webshop_semantic_action(
+         for key in ("kind", "label", "asin", "option_name", "option_value")
+         if key in target
+     }
++    if target.get("kind") == "open_product" and not semantic.get("asin"):
++        asin = visible_product_asin(target)
++        if asin:
++            semantic["asin"] = asin
+     if not semantic:
+         semantic["kind"] = requested.split(":", 1)[0] or "unknown_click"
+     semantic["executable_target_retained"] = False
+@@ -6465,6 +6739,7 @@ def _webshop_sync_transaction_journal(
+     stall_first_round: int | None,
+     max_reward: float,
+     purchase_evidence_checkpoint: dict[str, Any],
++    react_history: list[dict[str, Any]] | None = None,
+ ) -> None:
+     if not isinstance(journal, dict):
+         return
+@@ -6501,6 +6776,8 @@ def _webshop_sync_transaction_journal(
+             "purchase_evidence_checkpoint": copy.deepcopy(purchase_evidence_checkpoint),
+         }
+     )
++    if react_history is not None:
++        journal["react_history"] = copy.deepcopy(react_history)
+ 
+ 
+ def _record_webshop_state_guidance_delivery(
+@@ -6687,8 +6964,11 @@ def _webshop_context_for_prompt(
+         environment.pop("workspace_changed", None)
+         environment.pop("swe_progress", None)
+         environment.pop("alfworld_progress", None)
++        history_mode = environment.get("worker_memory_policy") == "skillflow_history_v1"
+         state = environment.get("state")
+-        if isinstance(state, dict):
++        if history_mode:
++            project_webshop_history_environment(environment)
++        elif isinstance(state, dict):
+             progress = environment.get("webshop_progress")
+             progress = progress if isinstance(progress, dict) else {}
+             state["decision_phase"] = _webshop_decision_phase(state)
+@@ -6709,11 +6989,12 @@ def _webshop_context_for_prompt(
+                     "audit_copy_retained": True,
+                 }
+                 page_text_truncated = len(page_text) - 8_000
+-        environment["public_constraint_matrix"] = _webshop_public_constraint_matrix(
+-            projected.get("public_task_context", ""),
+-            state if isinstance(state, dict) else {},
+-            progress=environment.get("webshop_progress"),
+-        )
++        if not history_mode:
++            environment["public_constraint_matrix"] = _webshop_public_constraint_matrix(
++                projected.get("public_task_context", ""),
++                state if isinstance(state, dict) else {},
++                progress=environment.get("webshop_progress"),
++            )
+ 
+     prompt_chars = len(json.dumps(projected, ensure_ascii=False, separators=separators))
+     if stats is not None:
+@@ -6793,7 +7074,7 @@ def _webshop_action_decision_support(
+             "agent_selectable": True,
+         }
+         if kind == "open_product":
+-            asin = str(action.get("asin", "")).strip().casefold()
++            asin = visible_product_asin(action)
+             item.update(
+                 {
+                     "asin": asin,
+@@ -6857,10 +7138,16 @@ def _webshop_public_constraint_matrix(
+     price_max = current_product.get("price_max") if isinstance(current_product, dict) else None
+     if ceiling is not None:
+         price_status = "unknown_public_price"
+-    if ceiling is not None and isinstance(price_min, (int, float)) and isinstance(price_max, (int, float)):
++    if (
++        ceiling is not None
++        and isinstance(price_min, (int, float))
++        and isinstance(price_max, (int, float))
++    ):
+         price_status = (
+-            "within_public_ceiling" if price_max <= ceiling
+-            else "exceeds_public_ceiling" if price_min > ceiling
++            "within_public_ceiling"
++            if price_max <= ceiling
++            else "exceeds_public_ceiling"
++            if price_min > ceiling
+             else "uncertain_price_range"
+         )
+     if (
+diff --git a/src/selfplay_graph_flowsteer/webshop.py b/src/selfplay_graph_flowsteer/webshop.py
+index 84519de..f89eb28 100644
+--- a/src/selfplay_graph_flowsteer/webshop.py
++++ b/src/selfplay_graph_flowsteer/webshop.py
+@@ -18,6 +18,7 @@ from urllib.request import ProxyHandler, Request, build_opener
+ 
+ from .backend_failures import EnvironmentServiceError
+ from .observability import TaskSpec, VerificationResult
++from .webshop_identity import visible_product_asin
+ 
+ _DIRECT_OPENER = build_opener(ProxyHandler({}))
+ 
+@@ -230,6 +231,7 @@ class WebShopSessionLifecycle:
+     pending_ttl_s: float = 900.0
+     stage_purchases: bool = True
+     search_observation_mode: str = "structured_only"
++    env_feedback_enabled: bool = False
+     _task: TaskSpec | None = None
+     _owner_agent: str | None = None
+     _active_agent: str | None = None
+@@ -243,6 +245,8 @@ class WebShopSessionLifecycle:
+     # journal keeps the public search/inspection/evidence history continuous as
+     # well.  It is cleared with the bound task and is never sent to the sidecar.
+     _transaction_journals: dict[str, dict[str, Any]] = field(default_factory=dict)
++    # Executed public actions only; survives Worker revisions in the same episode.
++    _visible_action_history: list[str] = field(default_factory=list)
+     _committer_agent: str | None = None
+     _purchase_committed_by: str | None = None
+     _environment_fingerprint: str = ""
+@@ -286,6 +290,7 @@ class WebShopSessionLifecycle:
+                         "goal_id": goal_id,
+                         "goal_fingerprint": status.get("goal_fingerprint", ""),
+                         "search_observation_mode": self.search_observation_mode,
++                        **({"env_feedback_enabled": True} if self.env_feedback_enabled else {}),
+                     },
+                     sort_keys=True,
+                     separators=(",", ":"),
+@@ -361,6 +366,13 @@ class WebShopSessionLifecycle:
+                 "official_remaining_steps": max(0, remaining),
+             }
+ 
++    def runtime_transaction_journal_for(self, agent_id: str) -> dict[str, Any] | None:
++        """Return the current owner's journal without opening/mutating a session."""
++        with self._lock:
++            if self._owner_agent != str(agent_id):
++                return None
++            return self._transaction_journals.get(str(agent_id))
++
+     def begin_execution(self, *, agent_id: str, seed: int, revision: bool) -> dict[str, Any]:
+         with self._lock:
+             if self._task is None:
+@@ -453,6 +465,7 @@ class WebShopSessionLifecycle:
+             session_id, agent_id = self._active()
+             self._active_pending_target = None
+             result = self._bounded(self.client.search(session_id, query))
++            self._append_env_feedback(result, f"search[{query}]")
+             self._results[agent_id] = result
+             return result
+ 
+@@ -496,6 +509,7 @@ class WebShopSessionLifecycle:
+                 if rejection is not None:
+                     rejected = dict(current)
+                     rejected.pop("action_effect", None)
++                    rejected.pop("env_feedback", None)
+                     rejected.update(
+                         {
+                             "commit_pending": False,
+@@ -524,6 +538,7 @@ class WebShopSessionLifecycle:
+                 # its action_effect forward would falsely attribute (for example)
+                 # the previous option selection to the purchase-stage request.
+                 staged.pop("action_effect", None)
++                staged.pop("env_feedback", None)
+                 staged.update(
+                     {
+                         "commit_pending": True,
+@@ -547,6 +562,12 @@ class WebShopSessionLifecycle:
+                 return dict(staged)
+             self._active_pending_target = None
+             result = self._bounded(self.client.click(session_id, target_id))
++            # Use the resolved public label, never opaque transport IDs or goal data.
++            label = str(target.get("label", "")) if target else ""
++            kind = str(target.get("kind", "")) if target else ""
++            if kind == "back_to_search" or label.casefold() == "back to search":
++                label = "Back to Search"
++            self._append_env_feedback(result, f"click[{label}]", previous=current)
+             result["commit_pending"] = False
+             result["commit_ready"] = False
+             if validated_purchase_evidence is not None:
+@@ -705,8 +726,55 @@ class WebShopSessionLifecycle:
+             self._active_agent = None
+             self._execution_open = False
+             self._transaction_journals = {}
++            self._visible_action_history = []
+             self._task = None
+ 
++    def _append_env_feedback(
++        self,
++        result: dict[str, Any],
++        action: str,
++        *,
++        previous: dict[str, Any] | None = None,
++    ) -> None:
++        """SkillFlow-style factual feedback, without constraining the next action.
++
++        Unlike SkillFlow's text-only wrapper, our observation exposes the product
++        being left. Use that public state instead of guessing from the last four
++        clicks. Keep the note separate from page_text so prompt truncation cannot
++        discard it. Call only after a successful environment operation.
++        """
++        if not self.env_feedback_enabled:
++            return
++        history = self._visible_action_history
++        note = ""
++        if action.startswith("search[") and action in history:
++            if "click[Back to Search]" in history[-3:]:
++                note = (
++                    "same search query was reused after Back; this is a repeated "
++                    "query from the visible action history."
++                )
++            else:
++                note = "same search query was already used earlier in the visible action history."
++        elif action == "click[Back to Search]":
++            state = previous or {}
++            product = state.get("product")
++            asin = product.get("asin", "") if isinstance(product, dict) else ""
++            if asin and state.get("page_type") in {"product", "product_section"}:
++                note = (
++                    f"returned from product page to search after inspecting ASIN {asin}; "
++                    "that ASIN is now part of the visible action history."
++                )
++            elif history and history[-1].startswith("search["):
++                note = (
++                    "clicked Back immediately after a search result page; the result "
++                    "list is no longer visible in the current observation."
++                )
++            else:
++                note = "returned to search from the previous visible page state."
++        if note:
++            result["env_feedback"] = "[WEBSHOP ENV FEEDBACK] " + note
++        history.append(action)
++
+     def _active(self) -> tuple[str, str]:
+         if not self._execution_open or not self._active_session or not self._active_agent:
+             raise RuntimeError("WebShop Action called outside an active Worker execution")
+@@ -907,7 +975,7 @@ def _resolve_visible_target_id(
+             str(item.get("target_id", ""))
+             for item in items
+             if str(item.get("kind", "")) == "open_product"
+-            and str(item.get("asin", "")).strip().casefold() == requested_asin
++            and visible_product_asin(item) == requested_asin
+             and str(item.get("target_id", "")) in visible
+         ]
+         if len(asin_matches) == 1:
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_guidance.py b/src/selfplay_graph_flowsteer/webshop_guidance.py
+new file mode 100644
+index 0000000..1fc1b17
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_guidance.py
+@@ -0,0 +1,48 @@
++"""Optional Worker instructions inspired by LASER's page-specific WebShop prompts.
++
++Reference: Mayer123/LASER, dc50dafa1f88a4b889945393456b8960144be858,
++prompt_library.py (search/select/verify prompts). This is a prompt-only adaptation,
++not LASER's controller, action mapper, or environment implementation.
++"""
++
++WEBSHOP_WORKER_GUIDANCE_POLICIES = frozenset({"baseline", "laser_checklist_v1"})
++
++LASER_PAGE_CHECKLIST = """
++WebShop page checklist (laser_checklist_v1):
++Before choosing an Action, compare the public request with the latest observation
++using the applicable page checklist below. Use your existing reasoning mode;
++keep the existing Action/final JSON format, without a separate Rationale response
++or a think Action. These checks guide decisions; they do not grant extra Actions.
++If commit_pending, purchased, done, or terminal is true, follow the existing
++completion protocol instead of starting another shopping decision.
++
++- search: Identify the requested product type, distinguishing attributes, price
++  limit, and requested options. Form a query from relevant product terms. When
++  prior searches are visible, identify what a revised query should clarify.
++- search_results: Compare visible candidates against the requested product type,
++  attributes, and price. Treat a title's color/size/default variant as provisional:
++  inspect a relevant candidate to learn its actual customization options rather
++  than assuming a title mismatch rules it out. Prefer inspections that resolve
++  an open requirement; revisit an inspected item when completing its purchase or
++  checking a still-unresolved fact, not merely to repeat the same inspection.
++- product: Check each requested attribute and the price against observed evidence.
++  Distinguish options the item offers from options currently selected; compare
++  the requested values with both. Resolve a missing selection using current
++  option Actions. If evidence is missing, choose a useful visible detail section;
++  if a requirement is contradicted and cannot be fixed by customization, consider
++  another candidate. Before Buy Now, recheck price, attributes, selected options,
++  and unresolved requirements under the existing purchase-evidence/budget rules.
++- product_section: Use the displayed description/features/reviews to resolve the
++  specific open requirement. Missing information stays unknown. Avoid reopening
++  an already-read section without an information need. Return to the product page
++  when needed to select options or stage a purchase, accounting for that Action.
++
++For other page types use the existing protocol. Use only public observations and
++visible history; do not invent options, attribute matches, or successful purchases.
++"""
++
++
++def webshop_worker_guidance(policy: str) -> str:
++    if policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
++        raise ValueError("webshop.worker_guidance_policy must be baseline or laser_checklist_v1")
++    return LASER_PAGE_CHECKLIST if policy == "laser_checklist_v1" else ""
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_history.py b/src/selfplay_graph_flowsteer/webshop_history.py
+new file mode 100644
+index 0000000..5feb2ad
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_history.py
+@@ -0,0 +1,82 @@
++"""SkillFlow-style per-episode observation/action history for WebShop Workers.
++
++Reference: local SkillFlow 74be52bb6bd9f0e9e68dacb72636b75649197983,
++training/environment.py (_react_step and _build_react_prompt).
++Only public observations and attempted Actions are retained, never model reasoning.
++"""
++
++from __future__ import annotations
++
++import copy
++from typing import Any
++
++WEBSHOP_WORKER_MEMORY_POLICIES = frozenset({"factual_memory_v1", "skillflow_history_v1"})
++
++HISTORY_INSTRUCTION = (
++    "The action_environment.react_history contains this episode's chronological public "
++    "observations and attempted Actions, including earlier executions by the same owner. "
++    "Each observation is the page BEFORE that Action; its result is the next observation "
++    "or the latest state. Error entries report failed attempts, not successful changes. "
++    "Use the history to compare previously seen products, details and searches. Historical "
++    "target IDs and state versions are records only: choose executable Actions from the "
++    "latest state's valid_subactions and use its state_version. The latest selected_options "
++    "are authoritative; historical option clicks may no longer be selected. "
++)
++
++
++def append_webshop_history(
++    history: list[dict[str, Any]],
++    *,
++    before: dict[str, Any],
++    action: dict[str, Any],
++    result: dict[str, Any],
++) -> None:
++    """Record one selected attempt, without imposing a length/product-count limit."""
++    entry = {
++        "step": len(history) + 1,
++        "observation": str(before.get("page_text", "")),
++        "page_type": str(before.get("page_type", "")),
++        "action": {
++            "name": str(action.get("name", "")),
++            "arguments": copy.deepcopy(action.get("arguments", {})),
++        },
++        "status": str(result.get("status", "")),
++    }
++    if result.get("status") != "ok":
++        error = result.get("error")
++        entry["error"] = copy.deepcopy(error)
++    history.append(entry)
++
++
++def project_webshop_history_environment(environment: dict[str, Any]) -> None:
++    """Replace model-facing derived memory with history; keep live tool/commit state.
++
++    The caller owns a deep copy. Internal ledgers and audit observations are unchanged.
++    Full page text/history bypass the factual journal's 6000 and page's 8000 limits.
++    """
++    state = environment.get("state")
++    if isinstance(state, dict):
++        for key in ("candidate_coverage", "search_decision_state", "action_decision_support"):
++            state.pop(key, None)
++        for action in state.get("valid_subactions", []):
++            if not isinstance(action, dict):
++                continue
++            for key in (
++                "inspection_status",
++                "visit_count",
++                "candidate_evidence",
++                "observed_option_groups",
++                "evidence_status",
++                "action_semantics",
++                "navigation_effect",
++            ):
++                action.pop(key, None)
++    progress = environment.get("webshop_progress")
++    if isinstance(progress, dict):
++        # Required by this project's staged purchase protocol, not shopping memory.
++        environment["webshop_progress"] = {
++            key: progress[key]
++            for key in ("policy_contract", "purchase_evidence_checkpoint")
++            if key in progress
++        }
++    environment.pop("public_constraint_matrix", None)
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_identity.py b/src/selfplay_graph_flowsteer/webshop_identity.py
+new file mode 100644
+index 0000000..0804811
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_identity.py
+@@ -0,0 +1,20 @@
++"""Resolve product identity from public WebShop actions without enriching observations."""
++from __future__ import annotations
++
++import re
++
++
++def visible_product_asin(action: object) -> str:
++    """Use structured identity or the ASIN already embedded in a live legacy action.
++
++    The renderer ordinal is page-local; the ASIN survives result reordering.
++    Never infer identity from labels, task requirements, or a product database.
++    """
++    if not isinstance(action, dict) or action.get("kind") != "open_product":
++        return ""
++    explicit = action.get("asin")
++    if isinstance(explicit, str) and explicit.strip():
++        return explicit.strip().casefold()
++    target = action.get("target_id")
++    match = re.fullmatch(r"open_product:\d+:([A-Za-z0-9]{10})", target) if isinstance(target, str) else None
++    return match.group(1).casefold() if match else ""
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_native.py b/src/selfplay_graph_flowsteer/webshop_native.py
+new file mode 100644
+index 0000000..c84a504
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_native.py
+@@ -0,0 +1,166 @@
++"""SkillFlow WebShop interaction with graph-owned, revisable purchase candidates.
++
++Reference: SkillFlow 74be52bb6bd9f0e9e68dacb72636b75649197983.
++Native text prompts/actions live below the graph scheduler. Agent histories are
++private; the only inter-Agent channel remains RelayPacket. No reward is queried
++until Canvas FINISH commits the selected Agent's candidate.
++"""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from dataclasses import dataclass, field
++from typing import Any
++
++from .webshop import WebShopSessionLifecycle
++from .webshop_native_protocol import NATIVE_POLICY
++
++
++@dataclass
++class NativeWebShopLifecycle(WebShopSessionLifecycle):
++    """Isolated per-Agent sessions; selected candidate commits only on FINISH."""
++
++    execution_policy: str = field(default=NATIVE_POLICY, init=False)
++    _episodes: dict[str, WebShopSessionLifecycle] = field(default_factory=dict)
++    _native_active: str | None = None
++    _native_committed: str | None = None
++
++    @property
++    def owner_agent(self) -> None:
++        # No first-executed-Agent privilege. Every generic node is equally capable.
++        return None
++
++    def owner_agents(self) -> tuple[str, ...]:
++        return tuple(sorted(self._episodes))
++
++    def allows_agent(self, agent_id: str) -> bool:
++        return True
++
++    def reserve_full_graph_owner(self, agent_id: str) -> None:
++        # Counterfactual replays retain generic per-Agent sessions.
++        return None
++
++    def set_committer(self, agent_id: str) -> None:
++        self._committer_agent = str(agent_id)
++
++    def begin_execution(self, *, agent_id: str, seed: int, revision: bool) -> dict[str, Any]:
++        if self._native_committed is not None:
++            raise RuntimeError("cannot execute an Agent after the selected purchase was committed")
++        if self._native_active is not None:
++            raise RuntimeError("native WebShop lifecycle is already executing")
++        child = self._episodes.get(agent_id)
++        if child is None:
++            child = WebShopSessionLifecycle(
++                self.client,
++                max_observation_chars=0,
++                search_observation_mode="legacy",
++                stage_purchases=True,
++                pending_ttl_s=self.pending_ttl_s,
++                max_pending_sessions=self.max_pending_sessions,
++            )
++            if self._task is None:
++                raise RuntimeError("native WebShop has no bound task")
++            child.bind_task(self._task)
++            self._episodes[agent_id] = child
++        # A genuine scheduled re-execution invalidates the old proposal, while
++        # retaining the exact live page and private history. A cache hit never
++        # enters here. No candidate is silently retained after changed inputs.
++        pending = child._pending_sessions.pop(agent_id, None)
++        if pending is not None:
++            child._active_session = pending.session_id
++            child._active_agent = agent_id
++            child._active_pending_target = None
++            child._results[agent_id].update(commit_pending=False, commit_ready=False)
++        state = child.begin_execution(agent_id=agent_id, seed=seed, revision=revision)
++        if not isinstance(state.get("raw_available_actions"), list):
++            child.end_execution()
++            raise ValueError("native WebShop sidecar capability raw_available_actions is missing")
++        self._native_active = agent_id
++        return state
++
++    def end_execution(self) -> None:
++        if self._native_active is not None:
++            self._episodes[self._native_active].end_execution()
++            self._native_active = None
++
++    def runtime_transaction_journal_for(self, agent_id: str) -> dict | None:
++        child = self._episodes.get(agent_id)
++        return child.runtime_transaction_journal_for(agent_id) if child else None
++
++    def step_native(self, action: str) -> dict:
++        if self._native_active is None:
++            raise RuntimeError("native action outside an Agent execution")
++        child = self._episodes[self._native_active]
++        state = child.result_for(self._native_active)
++        if action.startswith("search[") and action.endswith("]"):
++            if "search" not in state["raw_available_actions"]:
++                raise ValueError("search is not available on this page")
++            return child.search(action[7:-1])
++        if action not in state["raw_available_actions"]:
++            raise ValueError("click is not in the current admissible action list")
++        targets = [a for a in state.get("valid_subactions", []) if a.get("raw_action") == action]
++        if len(targets) != 1:
++            raise ValueError("raw action does not resolve to exactly one current target")
++        target = targets[0]
++        if target.get("kind") == "purchase":
++            child._active_pending_target = target["target_id"]
++            staged = copy.deepcopy(state)
++            staged.pop("action_effect", None)
++            staged.update(
++                commit_pending=True,
++                commit_ready=True,
++                purchase_executed=False,
++                termination_reason="purchase_staged",
++            )
++            child._results[self._native_active] = staged
++            return copy.deepcopy(staged)
++        return child.click(target["target_id"], state_version=state.get("state_version"))
++
++    def commit_ready_agents(self) -> tuple[str, ...]:
++        return tuple(
++            sorted(a for a, child in self._episodes.items() if a in child.commit_ready_agents())
++        )
++
++    def commit_pending(self, agent_id: str) -> dict:
++        if self._native_committed is not None:
++            if self._native_committed != agent_id:
++                raise RuntimeError("another Agent's candidate was already committed")
++            return self.result_for(agent_id)
++        child = self._episodes.get(agent_id)
++        if child is None:
++            raise ValueError("selected Agent has no shopping session")
++        result = child.commit_pending(agent_id)
++        if result.get("purchased"):
++            self._native_committed = agent_id
++        return result
++
++    def discard_pending(self, agent_id: str) -> None:
++        child = self._episodes.pop(agent_id, None)
++        if child:
++            child.close_all()
++
++    def result_for(self, agent_id: str | None) -> dict:
++        child = self._episodes.get(str(agent_id))
++        if child:
++            return child.result_for(agent_id)
++        return {"purchased": False, "reward": 0.0, "termination_reason": "agent_never_executed"}
++
++    def cache_signature(self, agent_id: str) -> str:
++        child = self._episodes.get(agent_id)
++        payload = {
++            "policy": NATIVE_POLICY,
++            "agent_id": agent_id,
++            "state": child.result_for(agent_id) if child else None,
++            "history": self.runtime_transaction_journal_for(agent_id),
++        }
++        return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
++
++    def close_all(self) -> None:
++        for child in self._episodes.values():
++            child.close_all()
++        self._episodes.clear()
++        self._native_active = None
++        self._native_committed = None
++        super().close_all()
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_native_executor.py b/src/selfplay_graph_flowsteer/webshop_native_executor.py
+new file mode 100644
+index 0000000..ac5d5b3
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_native_executor.py
+@@ -0,0 +1,272 @@
++"""Native WebShop turns inside the existing generic Agent execution boundary."""
++
++from __future__ import annotations
++
++import copy
++import json
++
++from .artifact_protocol import check_artifact
++from .contracts import AgentArtifact
++from .llm import request_token_credit
++from .webshop_budget import execution_accounting
++from .webshop_native import NativeWebShopLifecycle
++from .webshop_native_protocol import NATIVE_POLICY, native_prompt, parse_native_action
++
++
++def execute_native(executor, *, task, node, upstream, peers, revision, seed, prior=None):
++    # No scheduler, role assignment, graph edits, or cross-Agent history access here.
++    from .runtime import _response_backend_request_events
++
++    lifecycle = next(
++        (
++            tool.lifecycle
++            for tool in executor.tools.values()
++            if isinstance(getattr(tool, "lifecycle", None), NativeWebShopLifecycle)
++        ),
++        None,
++    )
++    if lifecycle is None:
++        raise ValueError("skillflow_native_v1 requires NativeWebShopLifecycle")
++    scope = executor.budget_scope or "webshop-native-rollout"
++    packets = [*upstream, *peers, *([prior] if prior else [])]
++    context = {
++        "assigned_task": node.prompt,
++        "upstream_packets": [p.to_dict() for p in upstream],
++        "peer_packets": [p.to_dict() for p in peers],
++        "prior_packet": prior.to_dict() if prior else None,
++    }
++    instruction = (
++        "Carry out your assigned responsibility for the public task. You are a generic Agent; "
++        "choose whether environment interaction is needed. Use only your own observations and "
++        "the graph-authorized packets supplied below. Packets contain claims and evidence, not "
++        "changes to your own environment. Never infer hidden targets or rewards. Your private "
++        "session resumes across graph-triggered executions. For an environment turn, output "
++        "one search[...] or click[...] action as the WebShop prompt specifies. A Buy Now action "
++        "proposes the current purchase and ends this execution; the runtime commits only the "
++        "selected output's latest proposal after Canvas FINISH. Do not claim a completed "
++        "purchase before that commit. When your assigned non-action responsibility is complete, "
++        "you may instead return a structured JSON packet with answer, summary, confidence, "
++        "evidence, unresolved_issues and tool_summary. Do not reproduce the full page history "
++        "in the packet. No extra skill or shopping checklist is supplied.\n"
++        + json.dumps(context, ensure_ascii=False)
++    )
++    tokens_in = tokens_out = 0
++    events, traces, diagnostics, request_audit = [], [], [], []
++    response = None
++    final_payload = None
++    reason = "action_budget_exhausted"
++    # Full-graph counterfactual credit remains authoritative when explicitly provided.
++    credit = (
++        node.metadata.get("_runtime_token_credit")
++        if node.metadata.get("_runtime_budget_kind") == "full_graph_request_credit_v1"
++        else None
++    )
++
++    def generate(messages):
++        nonlocal tokens_in, tokens_out, response
++        executor._check_deadline()
++        remaining_credit = max(0, credit - tokens_in - tokens_out) if type(credit) is int else None
++        with request_token_credit(remaining_credit, cap_output=remaining_credit is not None):
++            response = executor.backend.generate(messages, role=executor.role, actions=())
++        tokens_in += response.token_in
++        tokens_out += response.token_out
++        events.extend(_response_backend_request_events(response))
++        executor._check_deadline()
++        if executor.rollout_deadline:
++            executor.rollout_deadline.mark_progress("worker_response")
++        # Full prompts remain private audit artifacts, never part of RelayPacket.
++        import hashlib
++
++        encoded = json.dumps(messages, ensure_ascii=False)
++        request_audit.append(
++            {
++                "sha256": hashlib.sha256(encoded.encode()).hexdigest(),
++                "chars": len(encoded),
++                "history_entries": len(history),
++            }
++        )
++        return response
++
++    state = lifecycle.begin_execution(agent_id=node.agent_id, seed=seed, revision=revision)
++    journal = state.pop("_runtime_transaction_journal")
++    history = journal.setdefault("native_history", [])
++    restored = len(history)
++    error_feedback = ""
++    try:
++        while True:
++            remaining = executor.budget_ledger.remaining(node, revision=revision, scope=scope)
++            if min(remaining["phase"], remaining["total"]) <= 0:
++                break
++            messages = [
++                {"role": "system", "content": instruction},
++                {
++                    "role": "user",
++                    "content": native_prompt(task=task, state=state, history=history)
++                    + f"\nAction allowance: {remaining['phase']} in this phase, {remaining['total']} total."
++                    + error_feedback,
++                },
++            ]
++            result = generate(messages)
++            payload, _ = check_artifact(result.text)
++            if payload is not None and result.metadata.get("finish_reason") not in {
++                "length",
++                "MAX_TOKENS",
++            }:
++                final_payload = payload
++                reason = "agent_report"
++                break
++            action = parse_native_action(result.text)
++            consumed, budget_error = executor.budget_ledger.consume(
++                node, revision=revision, scope=scope
++            )
++            if not consumed:
++                reason = budget_error
++                break
++            before = copy.deepcopy(state)
++            error = None
++            try:
++                if action is None:
++                    raise ValueError("No executable search[...] or click[...] action was returned")
++                state = lifecycle.step_native(action)
++                observation = {"status": "ok", "output": copy.deepcopy(state)}
++                error_feedback = ""
++            except ValueError as exc:
++                # Invalid model actions consume an attempt, preserve the actual page,
++                # and expose the error. Infrastructure/backend errors propagate.
++                error = str(exc)
++                observation = {
++                    "status": "error",
++                    "error": {"code": "invalid_native_action", "message": error},
++                }
++                error_feedback = "\nPrevious action failed: " + error
++            record = {
++                "observation": str(before.get("page_text", "")),
++                "action": action or "<INVALID>",
++                "status": observation["status"],
++            }
++            if error:
++                record["error"] = error
++            history.append(record)
++            traces.append(
++                {
++                    "action": {
++                        "name": "webshop_search"
++                        if action and action.startswith("search[")
++                        else "webshop_click",
++                        "arguments": {"raw_action": action},
++                    },
++                    "raw_action": action,
++                    "observation": observation,
++                    "observation_before": before,
++                }
++            )
++            if state.get("commit_pending"):
++                reason = "purchase_staged"
++                break
++            if state.get("done"):
++                reason = "environment_terminal"
++                break
++        if final_payload is None:
++            # Separate reporting boundary: raw Action turns never require a JSON wrapper.
++            report_context = {
++                **context,
++                "public_task": task,
++                "private_history": history,
++                "current_page": state.get("page_text", ""),
++                "purchase_staged": bool(state.get("commit_pending")),
++                "stop_reason": reason,
++            }
++            for attempt in range(2):
++                result = generate(
++                    [
++                        {
++                            "role": "system",
++                            "content": "This Agent execution has ended. Return only a compact JSON packet with "
++                            "answer, summary, confidence, evidence, unresolved_issues and tool_summary. "
++                            "Use the public evidence below and your assigned responsibility. Do not "
++                            "execute actions, include a transcript, infer rewards or claim a staged "
++                            "purchase was completed. Explain any action failures honestly.",
++                        },
++                        {"role": "user", "content": json.dumps(report_context, ensure_ascii=False)},
++                    ]
++                )
++                final_payload, issue = check_artifact(result.text)
++                if result.metadata.get("finish_reason") in {"length", "MAX_TOKENS"}:
++                    final_payload = None
++                diagnostics.append(
++                    {
++                        "stage": "native_packet",
++                        "accepted": final_payload is not None,
++                        "attempt": attempt + 1,
++                        "parse_error": issue,
++                    }
++                )
++                if final_payload is not None:
++                    break
++        if final_payload is None:
++            # A reporting failure must not cancel the trusted staged operation.
++            final_payload = {
++                "answer": "purchase_staged"
++                if state.get("commit_pending")
++                else "execution_incomplete",
++                "summary": "Structured report unavailable; see trusted execution status.",
++                "confidence": 0.0,
++                "evidence": [],
++                "tool_summary": [],
++                "unresolved_issues": ["native_packet_format_failure"],
++            }
++        if state.get("commit_pending"):
++            final_payload["answer"] = "purchase_staged"
++        artifact = AgentArtifact.from_model_text(
++            text=json.dumps(final_payload, ensure_ascii=False),
++            validated_payload=final_payload,
++            artifact_id="pending",
++            agent_id=node.agent_id,
++            revision=revision,
++            source_artifact_ids=[p.artifact_id for p in packets],
++            token_in=tokens_in,
++            token_out=tokens_out,
++            model=response.model if response else "",
++        )
++        artifact.react_trace = traces
++        artifact.backend_request_events = events
++        artifact.protocol_diagnostics = diagnostics
++        artifact.webshop_progress = {
++            "trusted": True,
++            "execution_policy": NATIVE_POLICY,
++            "state": "purchase_staged" if state.get("commit_pending") else "execution_completed",
++            "commit_ready": bool(state.get("commit_pending")),
++            "commit_protocol_status": "awaiting_canvas_finish"
++            if state.get("commit_pending")
++            else None,
++            "environment_access": "isolated_agent_session",
++            "stop_reason": reason,
++            "worker_memory": {
++                "policy": NATIVE_POLICY,
++                "applied": True,
++                "history_entries": len(history),
++                "restored_entries": restored,
++                "history_observation_chars": sum(len(h["observation"]) for h in history),
++            },
++            "action_budget": {
++                **executor.budget_ledger.webshop_audit(node, scope=scope),
++                "scope": "whole_graph",
++                "transfer_status": "not_requested",
++            },
++            "budget_partition": {"request_admission_enabled": False},
++            "execution_accounting": execution_accounting(
++                events=events,
++                diagnostics=diagnostics,
++                token_in=tokens_in,
++                token_out=tokens_out,
++                action_attempts=len(traces),
++            ),
++        }
++        # The prompt hashes/counts are local diagnostics, not shopping memory.
++        artifact.protocol_diagnostics.append(
++            {"stage": "native_prompt_audit", "requests": request_audit}
++        )
++        artifact.environment_result = lifecycle.result_for(node.agent_id)
++        return artifact
++    finally:
++        lifecycle.end_execution()
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_native_protocol.py b/src/selfplay_graph_flowsteer/webshop_native_protocol.py
+new file mode 100644
+index 0000000..bbcfe29
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_native_protocol.py
+@@ -0,0 +1,81 @@
++"""SkillFlow text prompt and action protocol, independent of the runtime."""
++
++from __future__ import annotations
++
++import re
++
++NATIVE_POLICY = "skillflow_native_v1"
++WEBSHOP_EXECUTION_POLICIES = frozenset({"graph_tools_v1", NATIVE_POLICY})
++
++# Kept byte-for-byte with the no-skill raw templates in training/react_prompts.py.
++TEMPLATE_NO_HISTORY = """You are an expert autonomous agent operating in the WebShop e-commerce environment.
++Your task is to: {task_description}.
++Your current observation is: {current_observation}.
++Your admissible actions of the current situation are:
++[
++{available_actions}
++].
++
++Now it's your turn to take one action for the current step.
++Return exactly one executable action string in the form search[keywords] or click[value].
++For click actions, copy one value from the admissible action list exactly. Do not repeat these instructions.
++"""
++
++TEMPLATE_HISTORY = """You are an expert autonomous agent operating in the WebShop e-commerce environment.
++Your task is to: {task_description}.
++Prior to this step, you have already taken {step_count} step(s). Below are the most recent {history_length} observations and the corresponding actions you took: {action_history}
++You are now at step {current_step} and your current observation is: {current_observation}.
++Your admissible actions of the current situation are:
++[
++{available_actions}
++].
++
++Return exactly one executable action string in the form search[keywords] or click[value].
++For click actions, copy one value from the admissible action list exactly. Do not repeat these instructions.
++"""
++
++DIRECTOR_ENVIRONMENT_HINT = """This is a WebShop environment task. Agents are generic and receive
++the same task-specific action interface. Each Agent's shopping session and action history are
++isolated; only graph-authorized structured packets communicate findings. A purchase candidate
++is provisional and can change after a graph edit. SET_OUTPUT selects the output without
++executing a purchase; FINISH commits only that Agent's latest staged candidate after graph
++validation and dirty-subgraph execution. No candidate reward is available during graph design.
++An Agent without a staged candidate has not completed a purchase. Choose responsibilities,
++layers and relations from the task and factual feedback; no role set or topology is prescribed.
++Workers select their own actions. Do not prescribe queries, click targets or action sequences.
++"""
++
++
++def parse_native_action(text: str) -> str | None:
++    """SkillFlow's action-tag then raw-action parsing, with skills disabled.
++
++    Ignore a text think block when using raw fallback: provider reasoning is not
++    an executable action. Preserve the chosen click value instead of guessing.
++    """
++    content = re.sub(r"<think>.*?</think>", "", text, flags=re.I | re.S).strip()
++    tagged = re.search(r"<action>(.*?)</action>", content, flags=re.I | re.S)
++    if tagged:
++        candidate = tagged.group(1).strip()
++        return candidate if re.fullmatch(r"(?:search|click)\[.+\]", candidate, re.S) else None
++    found = re.search(r"(?:search|click)\[[^\]]+\]", content)
++    return found.group(0) if found else None
++
++
++def native_prompt(*, task: str, state: dict, history: list[dict]) -> str:
++    actions = state.get("raw_available_actions")
++    if not isinstance(actions, list):
++        raise ValueError("native WebShop requires raw_available_actions from the sidecar")
++    formatted = "\n".join(f"'{('search[<your query>]' if a == 'search' else a)}'," for a in actions)
++    return (TEMPLATE_HISTORY if history else TEMPLATE_NO_HISTORY).format(
++        task_description=task,
++        current_observation=str(state.get("page_text", "")),
++        available_actions=formatted,
++        action_history="\n".join(
++            f"[Observation {i}: '{row['observation']}', Action {i}: '{row['action']}']"
++            + (f" [Result error: {row['error']}]" if row.get("error") else "")
++            for i, row in enumerate(history, 1)
++        ),
++        step_count=len(history),
++        history_length=len(history),
++        current_step=len(history) + 1,
++    )
+diff --git a/src/selfplay_graph_flowsteer/webshop_sidecar.py b/src/selfplay_graph_flowsteer/webshop_sidecar.py
+index cdd002a..d996d3c 100644
+--- a/src/selfplay_graph_flowsteer/webshop_sidecar.py
++++ b/src/selfplay_graph_flowsteer/webshop_sidecar.py
+@@ -113,7 +113,9 @@ class OfficialWorker:
+                 stdin.flush()
+                 ready, _, _ = select.select((self._response_fd,), (), (), self.timeout_s)
+                 if not ready:
+-                    raise SidecarError("official WebShop worker timed out", HTTPStatus.GATEWAY_TIMEOUT)
++                    raise SidecarError(
++                        "official WebShop worker timed out", HTTPStatus.GATEWAY_TIMEOUT
++                    )
+                 response = json.loads(self._read_line())
+             except SidecarError:
+                 raise
+@@ -135,7 +137,9 @@ class OfficialWorker:
+         while True:
+             chunk = os.read(self._response_fd, 1)
+             if not chunk:
+-                raise SidecarError("official WebShop worker returned no data", HTTPStatus.BAD_GATEWAY)
++                raise SidecarError(
++                    "official WebShop worker returned no data", HTTPStatus.BAD_GATEWAY
++                )
+             if chunk == b"\n":
+                 return bytes(output)
+             output.extend(chunk)
+@@ -268,7 +272,10 @@ class WebShopSession:
+         elif kind == "select_option":
+             product = self.products.product(self.current_asin)
+             for name, values in _option_groups(product).items():
+-                if any(str(item.get("value", "")).casefold() == raw_action.casefold() for item in values):
++                if any(
++                    str(item.get("value", "")).casefold() == raw_action.casefold()
++                    for item in values
++                ):
+                     self.selected_options[name.casefold()] = raw_action
+                     break
+         elif kind == "back_to_search":
+@@ -301,6 +308,7 @@ class WebShopSession:
+             "steps": self.step_count,
+             "termination_reason": "purchase_completed" if terminal else "active",
+             "valid_subactions": valid,
++            "raw_available_actions": actions,
+         }
+         if action_kind != "reset":
+             payload["action_effect"] = {"kind": action_kind, "value": action_value}
+@@ -367,7 +375,11 @@ class WebShopSession:
+                     "kind": "open_product",
+                     "label": str(preview.get("title", asin)),
+                     "price": preview.get("price"),
+-                    **{key: preview[key] for key in ("price_min", "price_max", "price_text") if key in preview},
++                    **{
++                        key: preview[key]
++                        for key in ("price_min", "price_max", "price_text")
++                        if key in preview
++                    },
+                     "target_id": target,
+                     "title": str(preview.get("title", asin)),
+                 }
+@@ -401,10 +413,12 @@ class WebShopSession:
+             else:
+                 target = f"click:{len(output) + 1}:{value}"
+                 item = {"kind": "navigate", "label": value, "target_id": target}
++            item["raw_action"] = raw
+             output.append(item)
+             targets[target] = value
+         return output, targets
+ 
++
+ def _option_groups(product: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+     # The official environment renders normalized options, not catalog labels.
+     normalized = product.get("options")
+@@ -433,8 +447,13 @@ def _public_price_fields(product: dict[str, Any]) -> dict[str, Any]:
+     pricing = product.get("pricing")
+     text = str(product.get("Price", ""))
+     values = (
+-        [float(value) for value in pricing if isinstance(value, (int, float)) and not isinstance(value, bool)]
+-        if isinstance(pricing, list) else []
++        [
++            float(value)
++            for value in pricing
++            if isinstance(value, (int, float)) and not isinstance(value, bool)
++        ]
++        if isinstance(pricing, list)
++        else []
+     )
+     if not values:
+         values = [float(value) for value in _PRICE.findall(text)]
+@@ -443,8 +462,12 @@ def _public_price_fields(product: dict[str, Any]) -> dict[str, Any]:
+     low, high = min(values), max(values)
+     if low == high:
+         return {"price": low}
+-    return {"price": None, "price_min": low, "price_max": high,
+-            "price_text": text or f"${low} to ${high}"}
++    return {
++        "price": None,
++        "price_min": low,
++        "price_max": high,
++        "price_text": text or f"${low} to ${high}",
++    }
+ 
+ 
+ def _search_products(text: str) -> dict[str, dict[str, Any]]:
+@@ -490,7 +513,9 @@ class SidecarState:
+             raise SidecarError("goal_id must identify webshop/goal-N")
+         with self.lock:
+             if len(self.sessions) >= self.args.max_sessions:
+-                raise SidecarError("WebShop session capacity exhausted", HTTPStatus.TOO_MANY_REQUESTS)
++                raise SidecarError(
++                    "WebShop session capacity exhausted", HTTPStatus.TOO_MANY_REQUESTS
++                )
+         with self.initializer_gate:
+             worker = OfficialWorker(
+                 interpreter=self.args.interpreter,
+@@ -565,6 +590,7 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
+                 "goal_fingerprint": state.goal_fingerprint,
+                 "index_path": str(state.args.index.resolve()),
+                 "idempotency_protocol": _IDEMPOTENCY_PROTOCOL,
++                "raw_action_protocol": "webshop-raw-actions-v1",
+                 "request_epoch": state.epoch,
+                 "session_count": session_count,
+                 "status": "ok",
+@@ -598,9 +624,10 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
+         except SidecarError as exc:
+             status, response = exc.status, {"error": str(exc)}
+         except Exception as exc:  # noqa: BLE001
+-            status, response = HTTPStatus.INTERNAL_SERVER_ERROR, {
+-                "error": f"{type(exc).__name__}: {exc}"
+-            }
++            status, response = (
++                HTTPStatus.INTERNAL_SERVER_ERROR,
++                {"error": f"{type(exc).__name__}: {exc}"},
++            )
+         if key:
+             with state.lock:
+                 state.idempotency[cache_key] = (int(status), dict(response))
+diff --git a/b/tests/test_webshop_native.py b/tests/test_webshop_native.py
+new file mode 100644
+index 0000000..2c7615d
+--- /dev/null
++++ b/tests/test_webshop_native.py
+@@ -0,0 +1,472 @@
++from __future__ import annotations
++
++import copy
++import json
++from dataclasses import replace
++
++import pytest
++
++from selfplay_graph_flowsteer.application import WebShopConfig, load_adaptive_config
++from selfplay_graph_flowsteer.canvas import CanvasState, GraphCanvas
++from selfplay_graph_flowsteer.config import CanvasConfig
++from selfplay_graph_flowsteer.contracts import AgentNode
++from selfplay_graph_flowsteer.dataset_actions import default_dataset_action_registry
++from selfplay_graph_flowsteer.graph import MultiAgentGraph
++from selfplay_graph_flowsteer.llm import MockBackend
++from selfplay_graph_flowsteer.observability import TaskSpec
++from selfplay_graph_flowsteer.runtime import (
++    ModelAgentExecutor,
++    MultiAgentRuntime,
++    RoutedModelAgentExecutor,
++)
++from selfplay_graph_flowsteer.webshop import WebShopClickTool, WebShopSearchTool
++from selfplay_graph_flowsteer.webshop_native import NativeWebShopLifecycle
++from selfplay_graph_flowsteer.webshop_native_protocol import NATIVE_POLICY, parse_native_action
++
++ASIN1, ASIN2 = "B000000001", "B000000002"
++
++
++def report(answer="Public evidence report", **kwargs):
++    return json.dumps(
++        {
++            "answer": answer,
++            "summary": answer,
++            "confidence": 0.7,
++            "evidence": [answer],
++            "unresolved_issues": [],
++            **kwargs,
++        }
++    )
++
++
++class NativeClient:
++    """Independent live pages; scoring happens only at an explicit commit."""
++
++    def __init__(self):
++        self.sessions = {}
++        self.calls = []
++        self.commits = []
++        self.closed = []
++
++    def health(self):
++        return {"status": "ok", "goal_fingerprint": "fixed"}
++
++    def page(self, sid, kind, asin=""):
++        previous = self.sessions.get(sid, {})
++        version = previous.get("state_version", -1) + 1
++        actions = []
++        if kind == "search_results":
++            actions += [
++                {
++                    "kind": "open_product",
++                    "label": "Public product title",
++                    "target_id": f"open_product:{i}:{a}",
++                    "raw_action": f"click[{a}]",
++                }
++                for i, a in enumerate((ASIN1, ASIN2))
++            ]
++        if kind == "product":
++            actions += [
++                {
++                    "kind": "purchase",
++                    "label": "Buy Now",
++                    "target_id": f"purchase:{asin}",
++                    "raw_action": "click[buy now]",
++                }
++            ]
++        if kind != "search":
++            actions += [
++                {
++                    "kind": "navigate",
++                    "label": "Back to Search",
++                    "target_id": f"back:{version}",
++                    "raw_action": "click[back to search]",
++                }
++            ]
++        raw = [a["raw_action"] for a in actions] if kind != "search" else ["search"]
++        state = {
++            "page_type": kind,
++            "page_text": f"PRIVATE_{sid} {kind} {asin} " + "DETAIL " * 1500,
++            "state_version": version,
++            "valid_subactions": actions,
++            "raw_available_actions": raw,
++            "purchased": False,
++            "done": False,
++            "reward": 0.0,
++        }
++        if asin:
++            state["product"] = {"asin": asin}
++        self.sessions[sid] = state
++        return copy.deepcopy(state)
++
++    def create_session(self, goal_id, *, seed):
++        sid = f"s{len(self.sessions) + 1}"
++        return {"session_id": sid, **self.page(sid, "search")}
++
++    def search(self, sid, query):
++        self.calls.append((sid, "search", query))
++        return self.page(sid, "search_results")
++
++    def click(self, sid, target):
++        self.calls.append((sid, "click", target))
++        if target.startswith("purchase:"):
++            raise AssertionError("purchases must use commit, never an ordinary click")
++        if target.startswith("open_product:"):
++            return self.page(sid, "product", target.split(":")[-1])
++        return self.page(sid, "search")
++
++    def commit(self, sid, target, *, commit_id):
++        self.commits.append((sid, target, commit_id))
++        return {**copy.deepcopy(self.sessions[sid]), "purchased": True, "done": True, "reward": 1.0}
++
++    def close_session(self, sid):
++        self.closed.append(sid)
++
++
++def build(responses, *, routed=False):
++    client = NativeClient()
++    lifecycle = NativeWebShopLifecycle(
++        client, max_observation_chars=0, search_observation_mode="legacy"
++    )
++    lifecycle.bind_task(TaskSpec("task", "Buy a product", metadata={"goal_id": "goal-1"}))
++    tools = {
++        "webshop_search": WebShopSearchTool(lifecycle),
++        "webshop_click": WebShopClickTool(lifecycle),
++    }
++    registry = default_dataset_action_registry(tools, webshop_commit_on_finish=True)
++    backend = MockBackend(list(responses))
++    kwargs = dict(
++        tools=tools, action_registry=registry, webshop_worker_execution_policy=NATIVE_POLICY
++    )
++    executor = (
++        RoutedModelAgentExecutor({"deepseek": backend}, ("deepseek",), **kwargs)
++        if routed
++        else ModelAgentExecutor(backend, **kwargs)
++    )
++    return executor, backend, lifecycle, client, registry
++
++
++def node(name="a"):
++    return AgentNode(
++        name,
++        "Inspect the public product evidence",
++        allowed_tools=("webshop_search", "webshop_click"),
++        operation_policy_configured=True,
++        initial_tool_budget=12,
++        revision_tool_budget=4,
++        total_tool_budget=16,
++        metadata={"action_adapter": "webshop", "runtime_route": "deepseek"},
++    )
++
++
++def execute(executor, n=None, *, revision=False):
++    return executor.execute(
++        task="Buy a product", node=n or node(), upstream=[], peers=[], revision=revision, seed=0
++    )
++
++
++@pytest.mark.parametrize("routed", [False, True])
++def test_raw_actions_full_private_history_and_staged_purchase(routed):
++    e, b, life, client, _ = build(
++        [
++            "search[product]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            report(),
++        ],
++        routed=routed,
++    )
++    artifact = execute(e)
++    assert len(client.calls) == 2 and not client.commits
++    assert artifact.answer == "purchase_staged"
++    assert life.commit_ready_agents() == ("a",)
++    assert artifact.webshop_progress["action_budget"]["total_used"] == 3
++    action_prompt = b.calls[2]["messages"][1]["content"]
++    assert "Observation 1" in action_prompt and "DETAIL " * 1500 in action_prompt
++    assert "target_id" not in action_prompt and "state_version" not in action_prompt
++    assert "purchase_evidence" not in action_prompt and "LASER" not in action_prompt
++    assert "'click[buy now]'" in action_prompt
++    assert not b.calls[0].get("actions")
++    life.commit_pending("a")
++    life.commit_pending("a")
++    assert len(client.commits) == 1
++
++
++def test_each_generic_agent_has_isolated_history_and_no_first_owner_privilege():
++    e, b, life, client, _ = build(
++        [
++            "search[only A]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            report("A"),
++            report("B independent"),
++        ]
++    )
++    execute(e, node("a"))
++    execute(e, node("b"))
++    b_prompt = json.dumps(b.calls[-1]["messages"])
++    assert "PRIVATE_s1" not in b_prompt and "only A" not in b_prompt
++    assert "PRIVATE_s2" in b_prompt
++    assert life.allows_agent("a") and life.allows_agent("b")
++    assert life.runtime_transaction_journal_for("b")["native_history"] == []
++    assert len(client.sessions) == 2
++
++
++def test_scheduled_revision_cancels_old_candidate_and_resumes_same_page():
++    e, b, life, client, _ = build(
++        [
++            "search[first]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            report("A"),
++            "click[back to search]",
++            "search[alternative]",
++            f"click[{ASIN2}]",
++            "click[buy now]",
++            report("revised"),
++        ]
++    )
++    execute(e)
++    revised = execute(e, revision=True)
++    assert len(client.sessions) == 1
++    assert "PRIVATE_s1 product" in b.calls[4]["messages"][1]["content"]
++    assert revised.webshop_progress["worker_memory"]["restored_entries"] == 3
++    assert revised.webshop_progress["action_budget"]["revision_used"] == 4
++    life.commit_pending("a")
++    assert client.commits[0][1] == f"purchase:{ASIN2}"
++
++
++def test_revision_without_new_purchase_does_not_commit_stale_proposal():
++    e, _, life, client, _ = build(
++        [
++            "search[first]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            report(),
++            report("Evidence insufficient"),
++        ]
++    )
++    execute(e)
++    execute(e, revision=True)
++    assert life.commit_ready_agents() == () and not client.commits
++
++
++def test_invalid_actions_count_and_shared_budget_cannot_reset_with_new_agent():
++    e, _, life, client, _ = build(
++        ["click[invented]"] * 12 + [report(), report("B"), *(["nonsense"] * 4), report()]
++    )
++    first = execute(e)
++    assert first.webshop_progress["action_budget"]["total_used"] == 12
++    assert len(first.react_trace) == 12 and all(
++        t["observation"]["status"] == "error" for t in first.react_trace
++    )
++    second = execute(e, node("b"))
++    assert not second.react_trace
++    last = execute(e, revision=True)
++    assert last.webshop_progress["action_budget"]["total_used"] == 16
++    assert not client.calls and not client.commits
++
++
++def test_cache_reuses_current_candidate_without_repeating_environment_actions():
++    e, b, life, client, _ = build(["search[q]", f"click[{ASIN1}]", "click[buy now]", report()])
++    runtime = MultiAgentRuntime(e)
++    graph = MultiAgentGraph()
++    graph.nodes["a"] = node()
++    first = runtime.execute(task="Buy a product", graph=graph, dirty_agents={"a"})
++    second = runtime.execute(task="Buy a product", graph=graph, dirty_agents={"a"})
++    assert first.executed_agents == ["a"] and second.reused_agents == ["a"]
++    assert len(b.calls) == 4 and len(client.calls) == 2
++    assert life.commit_ready_agents() == ("a",)
++
++
++def canvas_build(responses):
++    e, b, life, client, registry = build(responses)
++    canvas = GraphCanvas(
++        task="Buy a product",
++        runtime=MultiAgentRuntime(e),
++        config=CanvasConfig(
++            max_total_tokens=1000000,
++            remaining_token_admission_enabled=False,
++            remaining_time_admission_enabled=False,
++        ),
++        action_adapter=registry.get("webshop"),
++        dataset="webshop",
++    )
++    return canvas, b, life, client
++
++
++def add(canvas, name):
++    assert canvas.step(json.dumps({"action": "add_agent", "agent_id": name})).accepted
++    result = canvas.step(
++        json.dumps(
++            {
++                "action": "set_prompt",
++                "target": name,
++                "role": "Public evidence analysis",
++                "objective": f"Assess product evidence {name}",
++                "scope": "Use the assigned evidence",
++                "expected_output": "Public finding",
++            }
++        )
++    )
++    assert result.accepted, result.feedback
++
++
++def test_canvas_purchase_does_not_latch_graph_or_prune_nodes_and_finish_commits_once():
++    c, b, life, client = canvas_build(
++        [
++            "search[q]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            report("A finding"),
++            report("B finding"),
++            report("B after layer change"),
++            "search[q]",
++            f"click[{ASIN2}]",
++            "click[buy now]",
++            report("B with upstream"),
++        ]
++    )
++    add(c, "a")
++    assert not client.commits
++    add(c, "b")
++    selected = c.step('{"action":"set_output","target":"b"}')
++    assert selected.accepted and c.state is not CanvasState.FINISHED
++    assert set(c.graph.nodes) == {"a", "b"}
++    rejected = c.step('{"action":"finish"}')
++    assert not rejected.accepted and not client.commits
++    assert c.step('{"action":"set_layer","target":"b","layer":1}').accepted
++    linked = c.step('{"action":"set_relation","source":"a","target":"b","relation":"directed"}')
++    assert linked.accepted and linked.execution.executed_agents == ["b"]
++    assert "a" in linked.execution.reused_agents
++    assert not client.commits
++    calls_before = len(b.calls)
++    finished = c.step('{"action":"finish"}')
++    assert finished.accepted and c.state is CanvasState.FINISHED
++    assert len(b.calls) == calls_before
++    assert len(client.commits) == 1 and client.commits[0][1] == f"purchase:{ASIN2}"
++
++
++def test_native_config_and_legacy_default_are_separate(monkeypatch):
++    monkeypatch.setenv("SPGFS_ALLOWED_PHYSICAL_GPUS", "0,1,2,3,4,5,6,7")
++    cfg = load_adaptive_config("configs/webshop_skillflow_native_eval.toml")
++    assert cfg.webshop.worker_execution_policy == NATIVE_POLICY
++    assert WebShopConfig().worker_execution_policy == "graph_tools_v1"
++    with pytest.raises(ValueError, match="requires legacy"):
++        replace(cfg.webshop, worker_guidance_policy="laser_checklist_v1").validate()
++
++
++@pytest.mark.parametrize(
++    ("text", "expected"),
++    [
++        ("<think>click[wrong]</think><action>search[blue shirt]</action>", "search[blue shirt]"),
++        ("Action: click[back to search]", "click[back to search]"),
++        ("<action>skill_invoke[hidden]</action>", None),
++        ("<think>click[wrong]</think>report only", None),
++    ],
++)
++def test_native_parser_executes_only_action_content(text, expected):
++    assert parse_native_action(text) == expected
++
++
++def test_bidirectional_barrier_uses_only_first_pass_peer_packets():
++    from selfplay_graph_flowsteer.contracts import RelationType
++
++    e, b, life, _, _ = build(
++        [
++            report("FIRST_A"),
++            report("FIRST_B"),
++            report("REVISION_A"),
++            report("REVISION_B"),
++        ]
++    )
++    runtime = MultiAgentRuntime(e, bidirectional_revision_policy="always")
++    graph = MultiAgentGraph()
++    graph.nodes["a"], graph.nodes["b"] = node("a"), node("b")
++    graph.set_relation("a", "b", RelationType.BIDIRECTIONAL)
++    runtime.execute(task="Buy a product", graph=graph, dirty_agents={"a", "b"})
++    initial_a, initial_b, revision_a, revision_b = [json.dumps(c["messages"]) for c in b.calls]
++    assert "FIRST_A" not in initial_b and "FIRST_B" not in initial_a
++    assert "FIRST_B" in revision_a and "FIRST_A" in revision_b
++    assert "REVISION_A" not in revision_b
++    assert "PRIVATE_s1" not in initial_b and "PRIVATE_s2" not in initial_a
++    # Even connected peers receive a packet rather than the private page history.
++    assert "PRIVATE_s2" not in revision_a and "PRIVATE_s1" not in revision_b
++    assert len(life.owner_agents()) == 2
++
++
++def test_dirty_closure_updates_peer_component_and_downstream_only():
++    from selfplay_graph_flowsteer.contracts import RelationType
++
++    e, _, _, _, _ = build([report(f"result {i}") for i in range(20)])
++    runtime = MultiAgentRuntime(e, bidirectional_revision_policy="always")
++    graph = MultiAgentGraph()
++    for name in ("a", "b", "c", "d", "unrelated"):
++        graph.nodes[name] = node(name)
++    graph.set_layer("b", 1)
++    graph.set_layer("c", 1)
++    graph.set_layer("d", 2)
++    graph.set_relation("b", "c", RelationType.BIDIRECTIONAL)
++    graph.set_relation("c", "d", RelationType.DIRECTED)
++    runtime.execute(task="Buy a product", graph=graph, dirty_agents=set(graph.nodes))
++    mutation = graph.set_relation("a", "b", RelationType.DIRECTED)
++    result = runtime.execute(task="Buy a product", graph=graph, dirty_agents=mutation.dirty_agents)
++    assert set(result.scheduled_agents) == {"b", "c", "d"}
++    assert {"a", "unrelated"} <= set(result.skipped_clean_agents)
++    assert {"b", "c", "d"} <= set(result.executed_agents)
++
++
++def test_new_task_resets_private_history_candidates_and_budget():
++    e, b, life, client, _ = build(
++        [
++            "search[q]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            report(),
++            report("new task"),
++        ]
++    )
++    execute(e)
++    life.bind_task(TaskSpec("new", "Another product", metadata={"goal_id": "goal-2"}))
++    e.reset()
++    artifact = execute(e)
++    assert artifact.webshop_progress["action_budget"]["total_used"] == 0
++    assert artifact.webshop_progress["worker_memory"]["restored_entries"] == 0
++    assert "PRIVATE_s1" not in json.dumps(b.calls[-1]["messages"])
++    assert not life.commit_ready_agents() and not client.commits
++
++
++def test_invalid_report_does_not_invent_a_purchase_or_drop_valid_candidate():
++    e, _, life, client, _ = build(
++        [
++            "search[q]",
++            f"click[{ASIN1}]",
++            "click[buy now]",
++            "malformed",
++            "malformed",
++        ]
++    )
++    artifact = execute(e)
++    assert artifact.answer == "purchase_staged" and not client.commits
++    assert "native_packet_format_failure" in artifact.unresolved_issues
++    assert life.commit_ready_agents() == ("a",)
++
++
++def test_compiler_keeps_director_responsibility_without_legacy_shopping_checklist():
++    from selfplay_graph_flowsteer.delegation import compile_delegation
++
++    compiled, issue = compile_delegation(
++        {
++            "role": "Comparison",
++            "objective": "Compare public evidence",
++            "scope": "Supplied packets",
++            "expected_output": "A comparison of the supplied findings",
++        },
++        dataset="webshop",
++        webshop_native=True,
++    )
++    assert issue is None
++    assert compiled.director_fields["expected_output"] == "A comparison of the supplied findings"
++    assert "purchase_evidence" not in compiled.prompt
++    assert "target identifiers" not in compiled.prompt
++    assert "FINISH" in compiled.prompt

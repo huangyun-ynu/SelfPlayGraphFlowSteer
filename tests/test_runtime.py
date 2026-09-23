@@ -1593,6 +1593,40 @@ def test_routed_executor_accepts_explicit_agent_route() -> None:
     assert artifact.model_route == "grok"
 
 
+def test_routed_executor_applies_dataset_scoped_route_override() -> None:
+    response = json.dumps({"answer": "ok"})
+    executor = RoutedModelAgentExecutor(
+        {
+            "gpt": MockBackend([response]),
+            "gpt_student": MockBackend([response]),
+            "gpt_eco": MockBackend([response]),
+        },
+        ("gpt",),
+        dataset_route_overrides={
+            "healthbench_professional": {"gpt": "gpt_student"},
+        },
+    )
+    healthbench = AgentNode(
+        "healthbench",
+        "solve",
+        metadata={
+            "runtime_route": "gpt",
+            "system_managed_contract": {"dataset": "healthbench"},
+        },
+    )
+    other_dataset = AgentNode(
+        "other",
+        "solve",
+        metadata={
+            "runtime_route": "gpt",
+            "system_managed_contract": {"dataset": "nq_open"},
+        },
+    )
+
+    assert executor.route_for(healthbench) == "gpt_student"
+    assert executor.route_for(other_dataset) == "gpt"
+
+
 def test_routed_executor_turns_transient_timeout_into_failure_artifact() -> None:
     class TimeoutBackend(MockBackend):
         def generate(self, *args, **kwargs):

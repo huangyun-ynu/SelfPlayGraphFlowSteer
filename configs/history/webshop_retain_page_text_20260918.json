@@ -1,0 +1,66 @@
+{
+  "schema": "spgfs-webshop-baseline-v1",
+  "status": "historical",
+  "selected_on": "2026-09-23",
+  "source_run": "state/formal-eval/webshop-deepseek-reasoning-noskill-c24-20260918-170329",
+  "metrics": {
+    "examples": 128,
+    "strict_successes": 58,
+    "strict_success_rate": 0.453125,
+    "mean_reward": 0.648359375
+  },
+  "webshop": {
+    "enabled": true,
+    "service_url": "http://127.0.0.1:18020",
+    "timeout_s": 240.0,
+    "max_observation_chars": 0,
+    "max_query_chars": 500,
+    "max_initial_calls": 12,
+    "max_revision_calls": 4,
+    "max_total_calls": 16,
+    "staged_commit_enabled": true,
+    "max_pending_sessions": 8,
+    "pending_ttl_s": 900.0,
+    "search_observation_mode": "retain_page_text"
+  },
+  "evaluation": {
+    "director_model": "Qwen3.5-9B",
+    "director_thinking": true,
+    "worker_routes": [
+      "deepseek"
+    ],
+    "deepseek": {
+      "served_model": "deepseek-flash",
+      "enable_thinking": true,
+      "reasoning_effort": "low",
+      "max_tokens": 16384,
+      "max_concurrency": 20,
+      "api_surface": "chat_completions",
+      "network_path": "direct"
+    },
+    "director_skill_root": "",
+    "skill_context": "off",
+    "workers": 24,
+    "seeds": [
+      0
+    ],
+    "dataset": "data/formal/eval/webshop_official_test_128.jsonl"
+  },
+  "source_artifacts": {
+    "summary.json": {
+      "path": "state/formal-eval/webshop-deepseek-reasoning-noskill-c24-20260918-170329/summary.json",
+      "sha256": "61e0f5c6fc38fd8759544191a9b93941c7f027d64e1876145ead6eca19b858f9"
+    },
+    "run_manifest.json": {
+      "path": "state/formal-eval/webshop-deepseek-reasoning-noskill-c24-20260918-170329/run_manifest.json",
+      "sha256": "dd9ea2d55f2c8fc931895702c0c3ccc13d085c54f80ab0bb00eb9cac94b7d471"
+    },
+    "records.jsonl": {
+      "path": "state/formal-eval/webshop-deepseek-reasoning-noskill-c24-20260918-170329/records.jsonl",
+      "sha256": "57b9136809703eddd8ade896a0b0bf79bd2d6f81f1af967f22de1ffbfaf0e109"
+    }
+  },
+  "dataset_sha256": "35fbda3aef098050f649ca569a8c8e1c8f3a4dbf0e8c800ba3fade74f7335328",
+  "provenance_note": "Metrics belong to the original run. This selection does not restore the complete historical source tree or constitute a new evaluation.",
+  "superseded_by": "configs/webshop_official_baseline.json"
+}

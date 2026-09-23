@@ -1,4 +1,4 @@
-"""Same-model endpoint sharding and bounded, request-local failover."""
+"""Endpoint sharding and bounded, request-local failover."""
 
 from __future__ import annotations
 

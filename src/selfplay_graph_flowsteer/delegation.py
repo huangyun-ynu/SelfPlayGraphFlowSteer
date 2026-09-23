@@ -833,6 +833,7 @@ def compile_delegation(
     *,
     dataset: str = "",
     action_names: Iterable[str] = (),
+    webshop_native: bool = False,
 ) -> tuple[DelegationCompilation | None, DelegationIssue | None]:
     """Validate, locally compact, and deterministically compile a responsibility.
 
@@ -873,7 +874,11 @@ def compile_delegation(
 
     repaired = dict(normalized)
     dataset_key = str(dataset or "").strip().casefold()
-    if dataset_key == "webshop" and repaired["expected_output"] != _WEBSHOP_EXPECTED_OUTPUT:
+    if (
+        dataset_key == "webshop"
+        and not webshop_native
+        and repaired["expected_output"] != _WEBSHOP_EXPECTED_OUTPUT
+    ):
         original = repaired["expected_output"]
         repaired["expected_output"] = _WEBSHOP_EXPECTED_OUTPUT
         repairs.append(
@@ -909,10 +914,27 @@ def compile_delegation(
         )
     )
     contract = _DATASET_OUTPUT_CONTRACTS.get(dataset_key, ())
+    if dataset_key == "webshop" and webshop_native:
+        contract = (
+            (
+                "graph_packet",
+                "Fulfil the assigned responsibility using public evidence and graph-authorized packets; return a structured result and unresolved issues.",
+            ),
+            (
+                "native_environment",
+                "Environment interaction uses search[...] and click[...] from the current admissible actions. Your private history belongs only to this Agent's session.",
+            ),
+            (
+                "graph_commit",
+                "Buy Now stages this Agent's current candidate. Only Canvas FINISH commits the selected output's latest candidate; do not claim purchase success before commit.",
+            ),
+        )
     rule_ids = tuple(rule_id for rule_id, _text in contract)
     if contract:
         managed_contract_version = (
-            WEBSHOP_DELEGATION_CONTRACT_VERSION
+            "webshop-native-graph-contract-v1"
+            if dataset_key == "webshop" and webshop_native
+            else WEBSHOP_DELEGATION_CONTRACT_VERSION
             if dataset_key == "webshop"
             else DELEGATION_CONTRACT_VERSION
         )

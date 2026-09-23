@@ -1,0 +1,1786 @@
+diff --git a/b/configs/webshop_laser_checklist_eval.toml b/configs/webshop_laser_checklist_eval.toml
+new file mode 100644
+index 0000000..e6d0c0e
+--- /dev/null
++++ b/configs/webshop_laser_checklist_eval.toml
+@@ -0,0 +1,376 @@
++# Review-only LASER-inspired checklist profile; not the adopted baseline.
++# See docs/WEBSHOP_LASER_CHECKLIST_ADAPTATION.zh-CN.md.
++# Canonical deployment configuration for the seven-dataset formal PATS run.
++# Credentials are loaded from the repository .env and are never stored here.
++[models.proposer]
++base_url = "http://127.0.0.1:18601/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++base_model_path = "models/Qwen3.5-9B"
++checkpoint_path = "state/formal-training/checkpoints/proposer"
++trainable = true
++
++[models.solver]
++base_url = "http://127.0.0.1:18602/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++base_model_path = "models/Qwen3.5-9B"
++checkpoint_path = "state/formal-training/checkpoints/solver"
++trainable = true
++
++[runtime]
++name = "default"
++base_url = "http://127.0.0.1:18603/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++timeout_s = 120.0
++max_concurrency = 12
++managed_locally = false
++frozen = true
++network_path = "direct"
++request_profile = "qwen"
++
++[runtime_routing]
++# Use the two existing Codex endpoints; judge aliases share the same pool.
++worker_routes = ["deepseek"]
++skill_distiller = "skill_refiner"
++health_cooldown_s = 600.0
++pool_retry_attempts = 2
++pool_retry_backoff_s = 1.0
++pool_member_queue_wait_s = 0.5
++
++[runtime_routing.endpoint_pools]
++gpt = ["gpt", "gpt_eco", "gpt_student"]
++gpt_judge = ["gpt_judge", "gpt_judge_eco"]
++
++[canvas]
++# Predictive admission protection is disabled; hard token and wall-clock limits remain.
++remaining_time_admission_enabled = false
++remaining_token_admission_enabled = false
++max_agents = 4
++max_rounds = 24
++relay_max_chars = 1000
++
++[canvas.max_total_tokens_by_dataset]
++aime = 65536
++nq_open = 65536
++hotpotqa = 65536
++webshop = 350000
++alfworld = 350000
++healthbench_professional = 65536
++swe_bench = 350000
++
++[solver_skillbank]
++path = "state/formal-training/runtime_state/director_skillbank.v2.json"
++cases_path = "state/formal-training/runtime_state/director_skill_cases.json"
++usage = "off"
++prompt_token_budget = 1024
++retrieve_top_k = 3
++enabled = false
++mode = "director_skill_v2"
++activation_policy = "checked"
++embedding_model_path = "models/e5-base-v2"
++
++[solver_skillbank.pats]
++enabled = false
++ema_alpha = 0.1
++revise_threshold = 0.3
++compress_threshold = 0.85
++max_skills = 30
++max_tokens = 2000
++min_groups = 2
++min_evidence_cards = 2
++review_interval = 1
++max_edits = 4
++max_reviews_per_cycle = 3
++max_evidence_groups = 32
++max_policy_lag = 1
++max_review_input_tokens = 20480
++
++[trace]
++path = "state/formal-training/runtime_state/traces.jsonl"
++
++[verifier]
++mode = "auto"
++
++[answer_submission]
++enabled = true
++qa_model_enabled = true
++runtime_route = "gpt"
++max_tokens = 128
++require_source_span = true
++
++# Pure-local Python execution support for AIME Workers.
++[aime_actions]
++enabled = true
++timeout_s = 5.0
++max_output_chars = 8000
++max_code_chars = 12000
++memory_limit_mb = 1024
++max_initial_calls = 3
++max_revision_calls = 1
++max_total_calls = 4
++
++# Pinned Search-R1 Wiki-18 E5/FAISS service used by NQ-open.
++# HotpotQA follows FlowSteer: its dataset-provided distractor context is used directly.
++# The launcher validates the backend identity before admitting formal runs.
++[retrieval]
++enabled = true
++service_url = "http://127.0.0.1:18010/retrieve"
++top_k = 5
++timeout_s = 240.0
++max_tool_rounds = 3
++
++# The formal launcher owns the pinned official WebShop sidecar on port 18020.
++[webshop]
++enabled = true
++service_url = "http://127.0.0.1:18020"
++timeout_s = 240.0
++max_observation_chars = 0
++max_query_chars = 500
++max_initial_calls = 12
++max_revision_calls = 4
++max_total_calls = 16
++staged_commit_enabled = true
++max_pending_sessions = 8
++pending_ttl_s = 900.0
++# Promoted baseline: 62/128 strict successes; see docs/WEBSHOP_BASELINE.zh-CN.md.
++search_observation_mode = "legacy"
++worker_guidance_policy = "laser_checklist_v1"
++
++# Local assets are present; the formal environment installs the alfworld extra.
++[alfworld]
++enabled = true
++data_root = "assets/alfworld-data/json_2.1.1"
++max_episode_steps = 50
++max_rollout_steps = 200
++max_observation_chars = 12000
++max_initial_calls = 50
++max_revision_calls = 50
++max_total_calls = 100
++worker_guidance_policy = "factual_memory_v1"
++
++# Local execution storage, trusted remote verifier identity, registry, and
++# pinned dataset revision are provisioned for the formal run.
++[swe]
++enabled = true
++repo_cache_root = "state/formal-training/swe/repo-cache"
++workspace_root = "state/formal-training/swe/workspaces"
++artifact_store_root = "state/formal-training/private/swe/artifacts"
++verifier_registry_path = "state/formal-training/private/swe/verifier-registry.json"
++lifecycle_log_path = "state/formal-training/private/swe/lifecycle.jsonl"
++verifier_log_path = "state/formal-training/private/swe/verifier-client.jsonl"
++verifier_host = "43.134.20.27"
++verifier_user = "sweeval"
++verifier_identity_file = "state/formal-training/private/swe/identity"
++verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
++# Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
++# TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
++cvm_auto_start = false
++cvm_auto_stop = false
++cvm_region = "ap-singapore"
++cvm_instance_id = "ins-5n1zolfw"
++cvm_secret_id_env = "TENCENTCLOUD_SECRET_ID"
++cvm_secret_key_env = "TENCENTCLOUD_SECRET_KEY"
++cvm_endpoint = "cvm.tencentcloudapi.com"
++cvm_timeout_s = 600.0
++cvm_poll_s = 5.0
++dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
++local_test_timeout_s = 60.0
++max_output_chars = 12000
++max_file_chars = 200000
++max_patch_bytes = 2000000
++max_initial_calls = 20
++max_revision_calls = 12
++max_total_calls = 32
++duplicate_responsibility_policy = "record_only"
++
++[swe.test_profiles]
++python_syntax = ["python", "-m", "py_compile"]
++
++[healthbench_judge_audit]
++path = "state/formal-training/private/healthbench_judge"
++runtime_route = "gpt_student"
++expected_model = "gpt-5.5"
++
++[resources]
++proposer_gpu_id = 1
++solver_gpu_id = 1
++# Validation metadata for this evaluation-only profile; the launcher uses existing services.
++allocated_gpu_ids = [1]
++allow_policy_gpu_colocation = true
++proposer_service_gpu_memory_utilization = 0.30
++solver_service_gpu_memory_utilization = 0.30
++
++# Dedicated between-cycle Skill Distiller route.
++[runtimes.skill_refiner]
++base_url = "https://nexus.itssx.com/api/codex/codex_pro/v1"
++api_key_env = "NEXUS_PRO_API_KEY"
++served_model = "gpt-6-astra"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 20
++timeout_s = 240.0
++max_tokens = 4096
++managed_locally = false
++frozen = true
++
++[runtimes.gpt]
++base_url = "https://nexus.itssx.com/api/codex/codex/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 10
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gpt_eco]
++base_url = "https://nexus.itssx.com/api/codex_eco/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 10
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++# Student gateway joined to the existing gpt worker pool; it uses the same
++# queue, health cooldown, retry, and round-robin endpoint selection logic.
++[runtimes.gpt_student]
++base_url = "https://flowsteer.org:2087/v1"
++api_key_file = "~/.config/student-api/flowsteer.key"
++served_model = "lab-gpt-5.5-2"
++request_profile = "responses_text"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 5
++timeout_s = 600.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++user_agent = "selfplay-graph-flowsteer/student-gateway"
++
++[runtimes.grok]
++base_url = "https://nexus.itssx.com/api/grok/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "grok-4.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.grok45]
++base_url = "https://nexus.itssx.com/api/grok45/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "grok-4.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gemini]
++base_url = "https://uuapi.io/v1"
++api_key_env = "UUAPI_API_KEY"
++served_model = "gemini-3.6-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gemini2]
++base_url = "https://uuapi.io/v1"
++api_key_env = "UUAPI_API_KEY_2"
++served_model = "gemini-3.6-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.deepseek]
++base_url = "https://api.deepseek.com/v1"
++api_key_env = "DEEPSEEK_API_KEY"
++served_model = "deepseek-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++enable_thinking = true
++reasoning_effort = "low"
++max_concurrency = 20
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.minimax]
++base_url = "https://api.minimaxi.com/v1"
++api_key_env = "MINIMAX_API_KEY"
++served_model = "MiniMax-M2.7"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++enable_thinking = false
++reasoning_effort = "low"
++max_concurrency = 30
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++# HealthBench Judge shares the same physical GPT endpoint gates and credentials
++# as GPT Worker traffic; only the API surface and request role differ.
++[runtimes.gpt_judge]
++base_url = "https://nexus.itssx.com/api/codex/codex/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++healthbench_grader_reasoning_effort = "low"
++max_concurrency = 16
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gpt_judge_eco]
++base_url = "https://nexus.itssx.com/api/codex_eco/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++healthbench_grader_reasoning_effort = "low"
++max_concurrency = 16
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
+diff --git a/b/configs/webshop_official_eval.toml b/configs/webshop_official_eval.toml
+new file mode 100644
+index 0000000..6216bcb
+--- /dev/null
++++ b/configs/webshop_official_eval.toml
+@@ -0,0 +1,374 @@
++# WebShop official no-skill evaluation profile; see docs/WEBSHOP_BASELINE.zh-CN.md.
++# Canonical deployment configuration for the seven-dataset formal PATS run.
++# Credentials are loaded from the repository .env and are never stored here.
++[models.proposer]
++base_url = "http://127.0.0.1:18601/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++base_model_path = "models/Qwen3.5-9B"
++checkpoint_path = "state/formal-training/checkpoints/proposer"
++trainable = true
++
++[models.solver]
++base_url = "http://127.0.0.1:18602/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++base_model_path = "models/Qwen3.5-9B"
++checkpoint_path = "state/formal-training/checkpoints/solver"
++trainable = true
++
++[runtime]
++name = "default"
++base_url = "http://127.0.0.1:18603/v1"
++api_key = "EMPTY"
++served_model = "Qwen3.5-9B"
++timeout_s = 120.0
++max_concurrency = 12
++managed_locally = false
++frozen = true
++network_path = "direct"
++request_profile = "qwen"
++
++[runtime_routing]
++# Use the two existing Codex endpoints; judge aliases share the same pool.
++worker_routes = ["deepseek"]
++skill_distiller = "skill_refiner"
++health_cooldown_s = 600.0
++pool_retry_attempts = 2
++pool_retry_backoff_s = 1.0
++pool_member_queue_wait_s = 0.5
++
++[runtime_routing.endpoint_pools]
++gpt = ["gpt", "gpt_eco", "gpt_student"]
++gpt_judge = ["gpt_judge", "gpt_judge_eco"]
++
++[canvas]
++# Predictive admission protection is disabled; hard token and wall-clock limits remain.
++remaining_time_admission_enabled = false
++remaining_token_admission_enabled = false
++max_agents = 4
++max_rounds = 24
++relay_max_chars = 1000
++
++[canvas.max_total_tokens_by_dataset]
++aime = 65536
++nq_open = 65536
++hotpotqa = 65536
++webshop = 350000
++alfworld = 350000
++healthbench_professional = 65536
++swe_bench = 350000
++
++[solver_skillbank]
++path = "state/formal-training/runtime_state/director_skillbank.v2.json"
++cases_path = "state/formal-training/runtime_state/director_skill_cases.json"
++usage = "off"
++prompt_token_budget = 1024
++retrieve_top_k = 3
++enabled = false
++mode = "director_skill_v2"
++activation_policy = "checked"
++embedding_model_path = "models/e5-base-v2"
++
++[solver_skillbank.pats]
++enabled = false
++ema_alpha = 0.1
++revise_threshold = 0.3
++compress_threshold = 0.85
++max_skills = 30
++max_tokens = 2000
++min_groups = 2
++min_evidence_cards = 2
++review_interval = 1
++max_edits = 4
++max_reviews_per_cycle = 3
++max_evidence_groups = 32
++max_policy_lag = 1
++max_review_input_tokens = 20480
++
++[trace]
++path = "state/formal-training/runtime_state/traces.jsonl"
++
++[verifier]
++mode = "auto"
++
++[answer_submission]
++enabled = true
++qa_model_enabled = true
++runtime_route = "gpt"
++max_tokens = 128
++require_source_span = true
++
++# Pure-local Python execution support for AIME Workers.
++[aime_actions]
++enabled = true
++timeout_s = 5.0
++max_output_chars = 8000
++max_code_chars = 12000
++memory_limit_mb = 1024
++max_initial_calls = 3
++max_revision_calls = 1
++max_total_calls = 4
++
++# Pinned Search-R1 Wiki-18 E5/FAISS service used by NQ-open.
++# HotpotQA follows FlowSteer: its dataset-provided distractor context is used directly.
++# The launcher validates the backend identity before admitting formal runs.
++[retrieval]
++enabled = true
++service_url = "http://127.0.0.1:18010/retrieve"
++top_k = 5
++timeout_s = 240.0
++max_tool_rounds = 3
++
++# The formal launcher owns the pinned official WebShop sidecar on port 18020.
++[webshop]
++enabled = true
++service_url = "http://127.0.0.1:18020"
++timeout_s = 240.0
++max_observation_chars = 0
++max_query_chars = 500
++max_initial_calls = 12
++max_revision_calls = 4
++max_total_calls = 16
++staged_commit_enabled = true
++max_pending_sessions = 8
++pending_ttl_s = 900.0
++# Promoted baseline: 62/128 strict successes; see docs/WEBSHOP_BASELINE.zh-CN.md.
++search_observation_mode = "legacy"
++
++# Local assets are present; the formal environment installs the alfworld extra.
++[alfworld]
++enabled = true
++data_root = "assets/alfworld-data/json_2.1.1"
++max_episode_steps = 50
++max_rollout_steps = 200
++max_observation_chars = 12000
++max_initial_calls = 50
++max_revision_calls = 50
++max_total_calls = 100
++worker_guidance_policy = "factual_memory_v1"
++
++# Local execution storage, trusted remote verifier identity, registry, and
++# pinned dataset revision are provisioned for the formal run.
++[swe]
++enabled = true
++repo_cache_root = "state/formal-training/swe/repo-cache"
++workspace_root = "state/formal-training/swe/workspaces"
++artifact_store_root = "state/formal-training/private/swe/artifacts"
++verifier_registry_path = "state/formal-training/private/swe/verifier-registry.json"
++lifecycle_log_path = "state/formal-training/private/swe/lifecycle.jsonl"
++verifier_log_path = "state/formal-training/private/swe/verifier-client.jsonl"
++verifier_host = "43.134.20.27"
++verifier_user = "sweeval"
++verifier_identity_file = "state/formal-training/private/swe/identity"
++verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
++# Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
++# TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
++cvm_auto_start = false
++cvm_auto_stop = false
++cvm_region = "ap-singapore"
++cvm_instance_id = "ins-5n1zolfw"
++cvm_secret_id_env = "TENCENTCLOUD_SECRET_ID"
++cvm_secret_key_env = "TENCENTCLOUD_SECRET_KEY"
++cvm_endpoint = "cvm.tencentcloudapi.com"
++cvm_timeout_s = 600.0
++cvm_poll_s = 5.0
++dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
++local_test_timeout_s = 60.0
++max_output_chars = 12000
++max_file_chars = 200000
++max_patch_bytes = 2000000
++max_initial_calls = 20
++max_revision_calls = 12
++max_total_calls = 32
++duplicate_responsibility_policy = "record_only"
++
++[swe.test_profiles]
++python_syntax = ["python", "-m", "py_compile"]
++
++[healthbench_judge_audit]
++path = "state/formal-training/private/healthbench_judge"
++runtime_route = "gpt_student"
++expected_model = "gpt-5.5"
++
++[resources]
++proposer_gpu_id = 1
++solver_gpu_id = 1
++# Validation metadata for this evaluation-only profile; the launcher uses existing services.
++allocated_gpu_ids = [1]
++allow_policy_gpu_colocation = true
++proposer_service_gpu_memory_utilization = 0.30
++solver_service_gpu_memory_utilization = 0.30
++
++# Dedicated between-cycle Skill Distiller route.
++[runtimes.skill_refiner]
++base_url = "https://nexus.itssx.com/api/codex/codex_pro/v1"
++api_key_env = "NEXUS_PRO_API_KEY"
++served_model = "gpt-6-astra"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 20
++timeout_s = 240.0
++max_tokens = 4096
++managed_locally = false
++frozen = true
++
++[runtimes.gpt]
++base_url = "https://nexus.itssx.com/api/codex/codex/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 10
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gpt_eco]
++base_url = "https://nexus.itssx.com/api/codex_eco/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 10
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++# Student gateway joined to the existing gpt worker pool; it uses the same
++# queue, health cooldown, retry, and round-robin endpoint selection logic.
++[runtimes.gpt_student]
++base_url = "https://flowsteer.org:2087/v1"
++api_key_file = "~/.config/student-api/flowsteer.key"
++served_model = "lab-gpt-5.5-2"
++request_profile = "responses_text"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++max_concurrency = 5
++timeout_s = 600.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++user_agent = "selfplay-graph-flowsteer/student-gateway"
++
++[runtimes.grok]
++base_url = "https://nexus.itssx.com/api/grok/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "grok-4.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.grok45]
++base_url = "https://nexus.itssx.com/api/grok45/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "grok-4.5"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gemini]
++base_url = "https://uuapi.io/v1"
++api_key_env = "UUAPI_API_KEY"
++served_model = "gemini-3.6-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gemini2]
++base_url = "https://uuapi.io/v1"
++api_key_env = "UUAPI_API_KEY_2"
++served_model = "gemini-3.6-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++max_concurrency = 12
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.deepseek]
++base_url = "https://api.deepseek.com/v1"
++api_key_env = "DEEPSEEK_API_KEY"
++served_model = "deepseek-flash"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++enable_thinking = true
++reasoning_effort = "low"
++max_concurrency = 20
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.minimax]
++base_url = "https://api.minimaxi.com/v1"
++api_key_env = "MINIMAX_API_KEY"
++served_model = "MiniMax-M2.7"
++request_profile = "generic"
++api_surface = "chat_completions"
++network_path = "direct"
++enable_thinking = false
++reasoning_effort = "low"
++max_concurrency = 30
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++# HealthBench Judge shares the same physical GPT endpoint gates and credentials
++# as GPT Worker traffic; only the API surface and request role differ.
++[runtimes.gpt_judge]
++base_url = "https://nexus.itssx.com/api/codex/codex/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++healthbench_grader_reasoning_effort = "low"
++max_concurrency = 16
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
++
++[runtimes.gpt_judge_eco]
++base_url = "https://nexus.itssx.com/api/codex_eco/v1"
++api_key_env = "NEXUS_API_KEY"
++served_model = "gpt-5.5"
++request_profile = "generic"
++api_surface = "responses"
++network_path = "direct"
++reasoning_effort = "low"
++healthbench_grader_reasoning_effort = "low"
++max_concurrency = 16
++timeout_s = 240.0
++max_tokens = 16384
++managed_locally = false
++frozen = true
+diff --git a/b/scripts/formal/audit_webshop_guidance.py b/scripts/formal/audit_webshop_guidance.py
+new file mode 100644
+index 0000000..774cabf
+--- /dev/null
++++ b/scripts/formal/audit_webshop_guidance.py
+@@ -0,0 +1,111 @@
++"""Audit a completed WebShop guidance evaluation without printing model reasoning."""
++from __future__ import annotations
++
++import argparse
++import json
++from collections import Counter
++from pathlib import Path
++
++
++def audit(root: Path, policy: str) -> dict:
++    manifest = json.loads((root / "run_manifest.json").read_text())
++    records = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines() if line]
++    tasks = {row["task_id"] for row in records}
++    if len(records) != 128 or len(tasks) != 128:
++        raise ValueError("Expected 128 unique completed tasks")
++    artifacts_seen, requests_seen, trajectory_tasks = set(), set(), set()
++    guidance, director, routes, requests = Counter(), Counter(), Counter(), Counter()
++    applied_tasks, worker_tasks, mutable_owner_tasks = set(), set(), set()
++    issues = []
++    if manifest.get("director_thinking") is not True:
++        issues.append("Director thinking is not enabled in run manifest")
++    if manifest.get("deepseek_thinking") is not True:
++        issues.append("DeepSeek thinking is not enabled in run manifest")
++    if manifest.get("worker_logical_routes") != ["deepseek"]:
++        issues.append("Unexpected Worker routes in run manifest")
++    for path in sorted((root / "trajectories").glob("*.json")):
++        trajectory = json.loads(path.read_text())
++        task = trajectory["task"]["task_id"]
++        if task in trajectory_tasks:
++            issues.append(f"Duplicate trajectory for {task}")
++        trajectory_tasks.add(task)
++        for turn in trajectory.get("director_run", {}).get("turns", []):
++            kind = turn.get("turn_kind")
++            requested, effective = turn.get("thinking_requested"), turn.get("thinking_effective")
++            director[f"{kind}:requested={requested}:effective={effective}"] += 1
++            if kind == "graph_action" and (requested is not True or effective is not True):
++                issues.append(f"Director thinking mismatch: {task}")
++        for event in trajectory.get("events", []):
++            execution = event.get("payload", {}).get("execution") or {}
++            for artifact in execution.get("artifacts", {}).values():
++                key = (task, artifact["artifact_id"])
++                if key in artifacts_seen:
++                    continue
++                artifacts_seen.add(key)
++                worker_tasks.add(task)
++                routes[str(artifact.get("model_route"))] += 1
++                progress = artifact.get("webshop_progress") or {}
++                if progress:
++                    value = progress.get("worker_guidance") or {}
++                    expected_applied = progress.get("environment_access") == "mutable_owner"
++                    if expected_applied:
++                        mutable_owner_tasks.add(task)
++                    if value.get("policy") != policy or value.get("applied") is not expected_applied:
++                        issues.append(f"Guidance mismatch: {task}/{artifact['artifact_id']}")
++                    guidance["applied" if value.get("applied") else "not_applied"] += 1
++                    if value.get("applied"):
++                        applied_tasks.add(task)
++                for request in artifact.get("backend_request_events", []):
++                    request_id = request.get("event_id")
++                    if not request_id or request_id in requests_seen:
++                        continue
++                    requests_seen.add(request_id)
++                    requests[str(request.get("event"))] += 1
++                    usage = request.get("provider_usage") or {}
++                    reasoning_tokens = usage.get("reasoning_tokens")
++                    if isinstance(reasoning_tokens, (int, float)):
++                        requests["provider_reports_reasoning_tokens"] += 1
++                        if reasoning_tokens > 0:
++                            requests["positive_reasoning_tokens"] += 1
++                    else:
++                        requests["reasoning_tokens_unreported"] += 1
++    if trajectory_tasks != tasks:
++        issues.append("Trajectory task IDs do not match completed records")
++    if applied_tasks != mutable_owner_tasks:
++        issues.append("Guidance application does not match tasks with mutable-owner execution")
++    if not mutable_owner_tasks:
++        issues.append("No mutable-owner executions were found")
++    if set(routes) != {"deepseek"}:
++        issues.append(f"Unexpected Worker artifact routes: {dict(routes)}")
++    return {
++        "run": str(root), "policy": policy, "tasks": len(tasks),
++        "tasks_with_guidance": len(applied_tasks), "unique_artifacts": len(artifacts_seen),
++        "tasks_with_worker_execution": len(worker_tasks),
++        "tasks_with_mutable_owner_execution": len(mutable_owner_tasks),
++        "tasks_without_worker_execution": sorted(tasks - worker_tasks),
++        "guidance_artifacts": dict(guidance), "worker_routes": dict(routes),
++        "director_turns": dict(director), "worker_request_events": dict(requests),
++        "run_manifest_thinking": {
++            "director": manifest.get("director_thinking"),
++            "deepseek": manifest.get("deepseek_thinking"),
++        },
++        "issues": issues,
++    }
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--run", type=Path, required=True)
++    parser.add_argument("--policy", default="laser_checklist_v1")
++    parser.add_argument("--output", type=Path, required=True)
++    args = parser.parse_args()
++    result = audit(args.run, args.policy)
++    args.output.parent.mkdir(parents=True, exist_ok=True)
++    args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
++    print(json.dumps(result, ensure_ascii=False, indent=2))
++    if result["issues"]:
++        raise SystemExit(1)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/b/scripts/formal/report_webshop_env_feedback.py b/scripts/formal/report_webshop_env_feedback.py
+new file mode 100644
+index 0000000..0efe998
+--- /dev/null
++++ b/scripts/formal/report_webshop_env_feedback.py
+@@ -0,0 +1,118 @@
++"""Compare complete WebShop runs and audit feedback delivery / Qwen thinking."""
++from __future__ import annotations
++
++import argparse
++import csv
++import json
++import math
++from collections import Counter
++from pathlib import Path
++from statistics import mean
++
++
++def records(root: Path) -> dict:
++    rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines() if line]
++    result = {row["task_id"]: row for row in rows}
++    if len(rows) != 128 or len(result) != 128:
++        raise ValueError(f"Expected 128 unique completed tasks: {root}, got {len(rows)}")
++    return result
++
++
++def audit(root: Path) -> dict:
++    thinking = Counter()
++    feedback = Counter()
++    task_feedback = Counter()
++    examples = []
++    seen = set()
++    for path in sorted((root / "trajectories").glob("*.json")):
++        trajectory = json.loads(path.read_text())
++        task = trajectory["task"]["task_id"]
++        for turn in trajectory.get("director_run", {}).get("turns", []):
++            key = (
++                f"{turn.get('turn_kind')}:requested={turn.get('thinking_requested')}"
++                f":effective={turn.get('thinking_effective')}"
++            )
++            thinking[key] += 1
++        for event in trajectory.get("events", []):
++            execution = event.get("payload", {}).get("execution") or {}
++            for agent, artifact in execution.get("artifacts", {}).items():
++                for entry in artifact.get("react_trace", []):
++                    action = entry.get("action") or {}
++                    call_id = action.get("call_id") or (
++                        artifact.get("revision"), entry.get("round_index"), entry.get("phase")
++                    )
++                    key = (task, agent, call_id)
++                    if key in seen:
++                        continue
++                    seen.add(key)
++                    observation = (entry.get("observation") or {}).get("output")
++                    if not isinstance(observation, dict):
++                        continue
++                    note = observation.get("env_feedback", "")
++                    if not note:
++                        continue
++                    kind = "repeat_query" if "same search query" in note else "return_to_search"
++                    feedback[kind] += 1
++                    task_feedback[task] += 1
++                    if len(examples) < 6:
++                        examples.append({"task_id": task, "action": action, "feedback": note})
++    return {
++        "director_turns": dict(thinking), "feedback_counts": dict(feedback),
++        "tasks_with_feedback": len(task_feedback), "task_feedback": dict(task_feedback),
++        "examples": examples,
++    }
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--baseline", type=Path, required=True)
++    parser.add_argument("--candidate", type=Path, required=True)
++    parser.add_argument("--output", type=Path, required=True)
++    args = parser.parse_args()
++    before, after = records(args.baseline), records(args.candidate)
++    if before.keys() != after.keys():
++        raise ValueError("Baseline/candidate task IDs differ")
++    transitions = Counter()
++    pairs = []
++    for task in before:
++        old, new = before[task], after[task]
++        transitions[f"{int(bool(old['passed']))}->{int(bool(new['passed']))}"] += 1
++        pairs.append({
++            "task_id": task, "baseline_passed": old["passed"], "candidate_passed": new["passed"],
++            "baseline_reward": old["score"], "candidate_reward": new["score"],
++            "reward_delta": new["score"] - old["score"],
++        })
++    def metrics(rows):
++        values = list(rows.values())
++        successes = sum(bool(row["passed"]) for row in values)
++        return {
++            "examples": len(values), "strict_successes": successes,
++            "strict_success_rate": successes / len(values),
++            "mean_reward": mean(row["score"] for row in values),
++            "mean_token_cost": mean(row["token_cost"] for row in values),
++            "mean_duration_s": mean(row["duration_s"] for row in values),
++        }
++    b, c = metrics(before), metrics(after)
++    discordant = transitions["0->1"] + transitions["1->0"]
++    smaller = min(transitions["0->1"], transitions["1->0"])
++    p_value = min(1.0, 2 * sum(math.comb(discordant, k) for k in range(smaller + 1)) / 2**discordant)
++    summary = {
++        "baseline_run": str(args.baseline), "candidate_run": str(args.candidate),
++        "baseline": b, "candidate": c,
++        "strict_success_delta_pp": 100 * (c["strict_success_rate"] - b["strict_success_rate"]),
++        "mean_reward_delta": c["mean_reward"] - b["mean_reward"],
++        "paired_transitions": dict(transitions), "mcnemar_exact_two_sided_p": p_value,
++        "baseline_audit": audit(args.baseline), "candidate_audit": audit(args.candidate),
++        "interpretation_limit": "Single seeded run against a historical reference, not a restored same-code control; model/source/service drift and sampling variation may contribute.",
++    }
++    args.output.mkdir(parents=True, exist_ok=True)
++    (args.output / "comparison.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
++    with (args.output / "paired_tasks.csv").open("w", newline="") as handle:
++        writer = csv.DictWriter(handle, fieldnames=list(pairs[0]))
++        writer.writeheader()
++        writer.writerows(pairs)
++    print(json.dumps({k: v for k, v in summary.items() if not k.endswith("_audit")}, indent=2))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/b/scripts/formal/run_webshop_laser_checklist_eval.sh b/scripts/formal/run_webshop_laser_checklist_eval.sh
+new file mode 100755
+index 0000000..f281d4a
+--- /dev/null
++++ b/scripts/formal/run_webshop_laser_checklist_eval.sh
+@@ -0,0 +1,34 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
++cd "$ROOT"
++set -a
++source .env
++set +a
++# Evaluation uses a separately provisioned Director; it does not bind a GPU.
++# Resource IDs in the TOML are training metadata, not this service's placement.
++export SPGFS_ALLOWED_PHYSICAL_GPUS=${SPGFS_ALLOWED_PHYSICAL_GPUS:-0,1,2,3,4,5,6,7}
++source scripts/formal/environment.sh
++export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
++
++PYTHON=${SPGFS_PYTHON:-$SPGFS_VENV/bin/python}
++OUTPUT=${SPGFS_WEBSHOP_EVAL_OUTPUT:-state/formal-eval/webshop-laser-checklist-c24-$(date +%Y%m%d-%H%M%S)}
++DIRECTOR_URL=${SPGFS_WEBSHOP_DIRECTOR_URL:-http://127.0.0.1:18623/v1}
++WORKERS=${SPGFS_WEBSHOP_WORKERS:-24}
++if [[ -e "$OUTPUT" ]]; then
++  printf 'Output already exists: %s\n' "$OUTPUT" >&2
++  exit 2
++fi
++curl --noproxy '*' --fail --silent --show-error --max-time 10 \
++  -H 'Authorization: Bearer EMPTY' "$DIRECTOR_URL/models" >/dev/null
++curl --noproxy '*' --fail --silent --show-error --max-time 10 \
++  http://127.0.0.1:18020/health >/dev/null
++
++exec "$PYTHON" -m selfplay_graph_flowsteer benchmark \
++  --config configs/webshop_laser_checklist_eval.toml \
++  --dataset data/formal/eval/webshop_official_test_128.jsonl \
++  --output "$OUTPUT" --seed 0 --workers "$WORKERS" --disable-swe \
++  --worker-route deepseek --director-base-url "$DIRECTOR_URL" \
++  --director-api-key EMPTY --director-model Qwen3.5-9B \
++  --director-thinking --skill-context off --wandb-mode offline
+diff --git a/src/selfplay_graph_flowsteer/adaptive.py b/src/selfplay_graph_flowsteer/adaptive.py
+index 724b777..a8f917a 100644
+--- a/src/selfplay_graph_flowsteer/adaptive.py
++++ b/src/selfplay_graph_flowsteer/adaptive.py
+@@ -437,6 +437,10 @@ class AdaptiveWorkflowSolver:
+             task=solver_task_text(
+                 task, include_submission_contract=self.answer_finalizer is not None
+             ),
++            worker_task=solver_task_text(
++                task,
++                include_submission_contract=self.answer_finalizer is not None,
++            ),
+             director_task=task.prompt,
+             runtime=self.runtime,
+             config=replace(base_canvas_config, max_total_tokens=selected_token_budget),
+diff --git a/src/selfplay_graph_flowsteer/application.py b/src/selfplay_graph_flowsteer/application.py
+index 67a9013..cb66a0e 100644
+--- a/src/selfplay_graph_flowsteer/application.py
++++ b/src/selfplay_graph_flowsteer/application.py
+@@ -63,8 +63,8 @@ from .observability import (
+     MultiAnswerExactMatchVerifier,
+     MultipleChoiceVerifier,
+     NumericVerifier,
+-    TokenF1Verifier,
+     TaskSpec,
++    TokenF1Verifier,
+     VerificationResult,
+     Verifier,
+     task_requires_reference,
+@@ -109,6 +109,7 @@ from .webshop import (
+     webshop_lifecycles,
+ )
+ from .webshop_budget import budget_partition
++from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
+ 
+ 
+ class GraphEvaluationIncompleteError(RuntimeError):
+@@ -346,8 +347,14 @@ class WebShopConfig:
+     max_pending_sessions: int = 8
+     pending_ttl_s: float = 900.0
+     search_observation_mode: str = "structured_only"
++    env_feedback_enabled: bool = False
++    worker_guidance_policy: str = "baseline"
+ 
+     def validate(self) -> None:
++        if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
++            raise ValueError(
++                "webshop.worker_guidance_policy must be baseline or laser_checklist_v1"
++            )
+         if not self.enabled:
+             return
+         if not self.service_url.startswith(("http://", "https://")):
+@@ -559,6 +566,10 @@ class AdaptiveApplicationConfig:
+     runtime_name: str = "default"
+     additional_runtimes: dict[str, FixedRuntimeConfig] = field(default_factory=dict)
+     worker_runtime_routes: tuple[str, ...] = ("default",)
++    # Optional dataset-scoped remapping applied after the Director selects a
++    # Worker route.  This is deliberately narrow: routes not listed here keep
++    # the exact Director selection.
++    dataset_route_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
+     endpoint_pool_retry_attempts: int = 2
+     endpoint_pool_retry_backoff_s: float = 1.0
+@@ -669,6 +680,22 @@ class AdaptiveApplicationConfig:
+         unknown_routes = set(self.worker_runtime_routes) - set(runtime_pool)
+         if unknown_routes:
+             raise ValueError("unknown worker runtime routes: " + ", ".join(sorted(unknown_routes)))
++        for dataset, overrides in self.dataset_route_overrides.items():
++            dataset_key = canonical_dataset_name(dataset)
++            if not dataset_key or not isinstance(overrides, dict):
++                raise ValueError("invalid dataset route override: " + str(dataset))
++            unknown_selected = set(overrides) - set(self.worker_runtime_routes)
++            if unknown_selected:
++                raise ValueError(
++                    "dataset route override selects unavailable Worker routes: "
++                    + ", ".join(sorted(unknown_selected))
++                )
++            unknown_targets = set(overrides.values()) - set(runtime_pool)
++            if unknown_targets:
++                raise ValueError(
++                    "dataset route override targets unknown routes: "
++                    + ", ".join(sorted(unknown_targets))
++                )
+         for logical, members in self.runtime_endpoint_pools.items():
+             if (
+                 logical not in runtime_pool
+@@ -678,8 +705,13 @@ class AdaptiveApplicationConfig:
+             ):
+                 raise ValueError("invalid endpoint pool: " + logical)
+             configs = [runtime_pool[member] for member in (logical, *members)]
+-            if len({(item.served_model, item.reasoning_effort) for item in configs}) != 1:
+-                raise ValueError("endpoint pool must use the same model and effort")
++            # A logical pool may shard compatible provider deployments that
++            # expose different model aliases (for example, a lab gateway
++            # beside the production GPT endpoint). Reasoning effort remains a
++            # pool invariant so the request policy does not change on rotation;
++            # each physical backend supplies its own served model at dispatch.
++            if len({item.reasoning_effort for item in configs}) != 1:
++                raise ValueError("endpoint pool must use the same reasoning effort")
+         if (
+             self.endpoint_pool_retry_attempts < 0
+             or self.endpoint_pool_retry_backoff_s < 0
+@@ -910,6 +942,10 @@ class AdaptiveApplicationConfig:
+                 "action_protocol": "director_model_v1",
+                 "counterfactual_execution": "full_graph_v1",
+                 "worker_routes": list(self.worker_runtime_routes),
++                "dataset_route_overrides": {
++                    canonical_dataset_name(dataset): dict(sorted(overrides.items()))
++                    for dataset, overrides in sorted(self.dataset_route_overrides.items())
++                },
+                 "endpoint_pools": {
+                     key: list(value) for key, value in self.runtime_endpoint_pools.items()
+                 },
+@@ -1064,6 +1100,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
+         worker_runtime_routes=tuple(
+             str(value) for value in runtime_routing.get("worker_routes", [runtime_name])
+         ),
++        dataset_route_overrides={
++            canonical_dataset_name(dataset): {
++                str(selected): str(target)
++                for selected, target in overrides.items()
++            }
++            for dataset, overrides in runtime_routing.get("dataset_route_overrides", {}).items()
++        },
+         runtime_endpoint_pools={
+             str(key): tuple(str(member) for member in value)
+             for key, value in runtime_routing.get("endpoint_pools", {}).items()
+@@ -1231,6 +1274,10 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
+             max_pending_sessions=int(webshop.get("max_pending_sessions", 8)),
+             pending_ttl_s=float(webshop.get("pending_ttl_s", 900.0)),
+             search_observation_mode=str(webshop.get("search_observation_mode", "structured_only")),
++            env_feedback_enabled=bool(webshop.get("env_feedback_enabled", False)),
++            worker_guidance_policy=str(webshop.get("worker_guidance_policy", "baseline"))
++            .strip()
++            .casefold(),
+         ),
+         alfworld=ALFWorldConfig(
+             enabled=bool(alfworld.get("enabled", False)),
+@@ -2155,6 +2202,7 @@ def create_adaptive_application(
+             pending_ttl_s=config.webshop.pending_ttl_s,
+             stage_purchases=config.webshop.staged_commit_enabled,
+             search_observation_mode=config.webshop.search_observation_mode,
++            env_feedback_enabled=config.webshop.env_feedback_enabled,
+         )
+         tools["webshop_search"] = WebShopSearchTool(
+             webshop_lifecycle,
+@@ -2260,6 +2308,7 @@ def create_adaptive_application(
+             action_registry=action_registry,
+             max_tool_rounds=config.retrieval.max_tool_rounds,
+             alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
++            webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
+         )
+     else:
+         if director_backend is None:
+@@ -2297,10 +2346,12 @@ def create_adaptive_application(
+             worker_executor = RoutedModelAgentExecutor(
+                 runtime_backends,
+                 config.worker_runtime_routes,
++                dataset_route_overrides=config.dataset_route_overrides,
+                 tools=tools,
+                 action_registry=action_registry,
+                 max_tool_rounds=config.retrieval.max_tool_rounds,
+                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
++                webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
+             )
+         else:
+             worker_executor = ModelAgentExecutor(
+@@ -2309,6 +2360,7 @@ def create_adaptive_application(
+                 action_registry=action_registry,
+                 max_tool_rounds=config.retrieval.max_tool_rounds,
+                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
++                webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
+             )
+         if distiller_backend is None:
+             distiller_backend = runtime_backends[config.skill_distiller_runtime]
+diff --git a/src/selfplay_graph_flowsteer/canvas.py b/src/selfplay_graph_flowsteer/canvas.py
+index 0c32d6f..a8446e7 100644
+--- a/src/selfplay_graph_flowsteer/canvas.py
++++ b/src/selfplay_graph_flowsteer/canvas.py
+@@ -206,6 +206,7 @@ class GraphCanvas:
+         self,
+         *,
+         task: str,
++        worker_task: str | None = None,
+         director_task: str | None = None,
+         runtime: MultiAgentRuntime,
+         config: CanvasConfig | None = None,
+@@ -223,6 +224,7 @@ class GraphCanvas:
+         binary_relation_policy: bool = False,
+     ) -> None:
+         self.task = task
++        self.worker_task = worker_task if worker_task is not None else task
+         self.director_task = director_task if director_task is not None else task
+         self.runtime = runtime
+         self.config = config or CanvasConfig()
+@@ -1893,7 +1895,7 @@ class GraphCanvas:
+                     }
+                 )
+         report = self.runtime.execute(
+-            task=self.task,
++            task=self.worker_task,
+             graph=self.graph,
+             dirty_agents=executable_dirty if executable_dirty else set(),
+             invalidation_reasons={
+diff --git a/src/selfplay_graph_flowsteer/dataset_adapters.py b/src/selfplay_graph_flowsteer/dataset_adapters.py
+index 621c6b6..072f0a5 100644
+--- a/src/selfplay_graph_flowsteer/dataset_adapters.py
++++ b/src/selfplay_graph_flowsteer/dataset_adapters.py
+@@ -182,9 +182,11 @@ def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = Fals
+     # The QA answer interface is independent of optional model-based formatting.
+     # Apply this on primary and graph re-execution paths alike, without giving
+     # intermediate Workers an obligation to solve the complete task.
+-    contract = (
+-        submission_contract(task) if include_submission_contract or is_short_answer_qa(task) else ""
+-    )
++    # Final submission formatting is injected by the runtime only for the
++    # selected output Agent.  The Canvas/Director may still request it
++    # explicitly, but intermediate QA Workers should receive only the task and
++    # trusted context.
++    contract = submission_contract(task) if include_submission_contract else ""
+     task_text = task.prompt
+     dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+     verifier = str(task.metadata.get("verifier", "")).strip().casefold()
+@@ -207,11 +209,17 @@ def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = Fals
+             rendered.append(f"[{index}] {title}\n{text}")
+     if not rendered:
+         return f"{task_text}\n\n{contract}" if contract else task_text
++    closing_instruction = (
++        "Use the documents as evidence and return the final answer to the question."
++        if contract
++        else "Use the documents as evidence and return your assigned local result."
++    )
+     rendered_task = (
+         f"Question:\n{task_text}\n\n"
+         "Trusted context documents:\n"
+         + "\n\n".join(rendered)
+-        + "\n\nUse the documents as evidence and return the final answer to the question."
++        + "\n\n"
++        + closing_instruction
+     )
+     return f"{rendered_task}\n\n{contract}" if contract else rendered_task
+ 
+diff --git a/src/selfplay_graph_flowsteer/endpoint_pool.py b/src/selfplay_graph_flowsteer/endpoint_pool.py
+index a3a8fc7..641023c 100644
+--- a/src/selfplay_graph_flowsteer/endpoint_pool.py
++++ b/src/selfplay_graph_flowsteer/endpoint_pool.py
+@@ -1,4 +1,4 @@
+-"""Same-model endpoint sharding and bounded, request-local failover."""
++"""Endpoint sharding and bounded, request-local failover."""
+ 
+ from __future__ import annotations
+ 
+diff --git a/src/selfplay_graph_flowsteer/runtime.py b/src/selfplay_graph_flowsteer/runtime.py
+index 55794ad..4c6bc5d 100644
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -17,6 +17,7 @@ from .action_protocol import ActionCall, ActionSpec, action_spec_from_tool
+ from .agent_tools import AgentTool
+ from .artifact_protocol import check_artifact, summarize_worker_protocol
+ from .backend_failures import classify_backend_failure
++from .config import canonical_dataset_name
+ from .contracts import AgentArtifact, AgentNode, CodeArtifactRef, ExecutionReport, RelayPacket
+ from .dataset_actions import DatasetActionRegistry
+ from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
+@@ -35,6 +36,7 @@ from .llm import (
+ )
+ from .qa_submission import is_short_qa_dataset
+ from .webshop_budget import execution_accounting, request_budget_quote
++from .webshop_guidance import webshop_worker_guidance
+ 
+ WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
+ WORKER_PROTOCOL_FAILURE_SENTINEL = "WORKER_PROTOCOL_FAILURE"
+@@ -379,6 +381,7 @@ class ModelAgentExecutor:
+     deadline_monotonic: float | None = None
+     rollout_deadline: RolloutDeadline | None = None
+     budget_scope: str | None = None
++    webshop_worker_guidance_policy: str = "baseline"
+ 
+     def reset(self) -> None:
+         self.budget_ledger.reset()
+@@ -808,6 +811,10 @@ class ModelAgentExecutor:
+             if isinstance(system_managed_contract, dict)
+             else ""
+         )
++        short_answer_qa = is_short_qa_dataset(contract_dataset)
++        selected_output_agent = short_answer_qa and bool(
++            node.metadata.get("_runtime_is_output_agent", False)
++        )
+         public_task_visible = bool(action_adapter) or is_short_qa_dataset(contract_dataset)
+         if public_task_visible:
+             # Dataset adapters and short QA follow the guide's (q, p_v, visible
+@@ -905,8 +912,15 @@ class ModelAgentExecutor:
+                 "Action evidence. "
+             )
+         instruction += _worker_output_instruction(
+-            context["available_actions"], action_adapter=action_adapter
++            context["available_actions"],
++            action_adapter=action_adapter,
++            short_answer_qa=short_answer_qa,
++            is_output_agent=selected_output_agent,
+         )
++        # Keep guidance out of environment observations and the Director prompt.
++        # The same conditional checklist survives state updates and owner revisions.
++        if action_adapter == "webshop" and not stateless_environment_owner:
++            instruction += webshop_worker_guidance(self.webshop_worker_guidance_policy)
+         prompt_context = _action_context_for_prompt(
+             context,
+             action_adapter=action_adapter,
+@@ -1126,6 +1140,8 @@ class ModelAgentExecutor:
+                         credit_label=credit_label,
+                         prior_response=qa_previous_response,
+                         pre_reserved_closure_tokens=closure_reserve(),
++                        short_answer_qa=short_answer_qa,
++                        is_output_agent=selected_output_agent,
+                     )
+                 )
+                 token_in += recovery_token_in
+@@ -1151,6 +1167,8 @@ class ModelAgentExecutor:
+                             action_adapter=action_adapter,
+                             alfworld_worker_guidance_policy=self.alfworld_worker_guidance_policy,
+                         ),
++                        short_answer_qa=short_answer_qa,
++                        is_output_agent=selected_output_agent,
+                     )
+                     reserve_quote = request_budget_quote(
+                         {
+@@ -2088,6 +2106,8 @@ class ModelAgentExecutor:
+                     credit_label=credit_label,
+                     prior_response=qa_previous_response,
+                     pre_reserved_closure_tokens=closure_reserve(),
++                    short_answer_qa=short_answer_qa,
++                    is_output_agent=selected_output_agent,
+                 )
+             )
+             token_in += recovery_token_in
+@@ -2237,6 +2257,11 @@ class ModelAgentExecutor:
+                 "policy_failure": policy_failure,
+                 "prompt_projection": _webshop_prompt_projection_summary(prompt_projection_stats),
+             }
++            if self.webshop_worker_guidance_policy != "baseline":
++                artifact.webshop_progress["worker_guidance"] = {
++                    "policy": self.webshop_worker_guidance_policy,
++                    "applied": not bool(stateless_environment_owner),
++                }
+             if commit_ready:
+                 purchase_status = staged_output.get("purchase_evidence_status", {})
+                 purchase_status = purchase_status if isinstance(purchase_status, dict) else {}
+@@ -2396,6 +2421,8 @@ class ModelAgentExecutor:
+         abort_on_credit_exhaustion: bool = False,
+         credit_label: str = "qa",
+         prior_response: str = "",
++        short_answer_qa: bool = False,
++        is_output_agent: bool = False,
+     ) -> tuple[Any, int, int, list[dict[str, Any]]]:
+         token_in = token_out = 0
+         diagnostics: list[dict[str, Any]] = []
+@@ -2423,6 +2450,8 @@ class ModelAgentExecutor:
+                 visible_context=visible_context,
+                 previous_response=previous_response,
+                 previous_error=previous_error,
++                short_answer_qa=short_answer_qa,
++                is_output_agent=is_output_agent,
+             )
+             started = time.monotonic()
+             try:
+@@ -2561,6 +2590,8 @@ class RoutedModelAgentExecutor:
+         action_registry: DatasetActionRegistry | None = None,
+         max_tool_rounds: int = 3,
+         alfworld_worker_guidance_policy: str = "factual_memory_v1",
++        webshop_worker_guidance_policy: str = "baseline",
++        dataset_route_overrides: dict[str, dict[str, str]] | None = None,
+     ) -> None:
+         if not backends:
+             raise ValueError("at least one runtime backend is required")
+@@ -2575,6 +2606,14 @@ class RoutedModelAgentExecutor:
+         self.action_registry = action_registry
+         self.max_tool_rounds = int(max_tool_rounds)
+         self.alfworld_worker_guidance_policy = str(alfworld_worker_guidance_policy)
++        self.webshop_worker_guidance_policy = str(webshop_worker_guidance_policy)
++        self.dataset_route_overrides = {
++            canonical_dataset_name(dataset): {
++                str(selected): str(target)
++                for selected, target in overrides.items()
++            }
++            for dataset, overrides in (dataset_route_overrides or {}).items()
++        }
+         self.budget_ledger = ActionBudgetLedger()
+         self.deadline_monotonic: float | None = None
+         self.rollout_deadline: RolloutDeadline | None = None
+@@ -2606,8 +2645,8 @@ class RoutedModelAgentExecutor:
+     def route_for(self, node: AgentNode) -> str:
+         explicit = str(node.metadata.get("runtime_route", "")).strip()
+         if not explicit and len(self.routes) == 1:
+-            return self.routes[0]
+-        if not explicit:
++            explicit = self.routes[0]
++        elif not explicit:
+             raise ValueError(
+                 f"Director did not assign runtime_route for agent {node.agent_id}; "
+                 f"choose one of: {', '.join(self.routes)}"
+@@ -2616,6 +2655,19 @@ class RoutedModelAgentExecutor:
+             raise ValueError(
+                 f"agent {node.agent_id} requests unavailable runtime route {explicit!r}"
+             )
++        contract = node.metadata.get("system_managed_contract")
++        dataset = (
++            canonical_dataset_name(contract.get("dataset", ""))
++            if isinstance(contract, dict)
++            else ""
++        )
++        override = self.dataset_route_overrides.get(dataset, {}).get(explicit)
++        if override is not None:
++            if override not in self.backends:
++                raise ValueError(
++                    f"dataset route override targets unavailable runtime route {override!r}"
++                )
++            return override
+         return explicit
+ 
+     def execute(
+@@ -2637,6 +2689,7 @@ class RoutedModelAgentExecutor:
+                 action_registry=self.action_registry,
+                 max_tool_rounds=self.max_tool_rounds,
+                 alfworld_worker_guidance_policy=(self.alfworld_worker_guidance_policy),
++                webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
+                 budget_ledger=self.budget_ledger,
+                 deadline_monotonic=self.deadline_monotonic,
+                 rollout_deadline=self.rollout_deadline,
+@@ -3214,6 +3267,16 @@ class MultiAgentRuntime:
+         reason_codes: list[str],
+     ) -> tuple[AgentArtifact, bool, int, int]:
+         node = graph.nodes[agent_id]
++        # The generic AgentExecutor API intentionally stays dataset-agnostic;
++        # pass the graph role through runtime-owned metadata instead.
++        contract = node.metadata.get("system_managed_contract")
++        contract_dataset = (
++            str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
++        )
++        if is_short_qa_dataset(contract_dataset):
++            node.metadata["_runtime_is_output_agent"] = agent_id == graph.output_agent
++        else:
++            node.metadata.pop("_runtime_is_output_agent", None)
+         payload = self._cache_payload(
+             task=task,
+             node=node,
+@@ -3339,12 +3402,13 @@ class MultiAgentRuntime:
+         # ADD_AGENT precedes Director SET_MODEL, so admission must remain safe
+         # for every route that the Director is allowed to choose.
+         selected = max(estimates, key=lambda item: item.seconds)
+-        return {
++        payload = {
+             "estimated_worker_s": selected.seconds,
+             "call_count": 1,
+             "routes": [item.to_dict() for item in estimates],
+             "estimation_mode": "new_agent_worst_candidate_route",
+         }
++        return payload
+ 
+     def estimate_new_agent_tokens(
+         self,
+@@ -3629,7 +3693,7 @@ class MultiAgentRuntime:
+                 ),
+             }
+ 
+-        return {
++        payload = {
+             "task": task,
+             "agent_prompt": node.prompt,
+             "agent_layer": node.layer,
+@@ -3653,6 +3717,20 @@ class MultiAgentRuntime:
+                 "bidirectional_always_one_wave_v1" if revision else "initial_pass_v1"
+             ),
+         }
++        contract = node.metadata.get("system_managed_contract")
++        contract_dataset = (
++            str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
++        )
++        if is_short_qa_dataset(contract_dataset):
++            payload.update(
++                {
++                    "worker_prompt_version": "qa_role_conditioned_v2",
++                    "is_output_agent": bool(
++                        node.metadata.get("_runtime_is_output_agent", False)
++                    ),
++                }
++            )
++        return payload
+ 
+     @staticmethod
+     def _cache_key(payload: dict[str, Any]) -> str:
+@@ -5377,13 +5455,35 @@ def _bounded_swe_code_memory(react_trace: list[dict[str, Any]]) -> dict[str, Any
+     }
+ 
+ 
+-def _worker_output_instruction(available_actions: object, *, action_adapter: str = "") -> str:
++def _worker_output_instruction(
++    available_actions: object,
++    *,
++    action_adapter: str = "",
++    short_answer_qa: bool = False,
++    is_output_agent: bool = False,
++) -> str:
+     actions = available_actions if isinstance(available_actions, list) else []
++    if short_answer_qa:
++        qa_instruction = (
++            "For short-answer QA, put only a short phrase, entity, date, number, or compact "
++            "relation in answer. If you are the selected output Agent, answer the whole "
++            "question with its shortest direct answer. If you are an intermediate Worker, "
++            "answer only your assigned local sub-question; you do not need to solve the whole "
++            "question. Put all reasoning, evidence, qualifications, and uncertainty in "
++            "summary or evidence, never in answer. "
++        )
++    else:
++        # Preserve the existing guidance for every non-short-QA dataset.
++        qa_instruction = (
++            "For short-answer QA, answer must be the shortest answer span, not a sentence "
++            "or explanation. "
++        )
+     instruction = (
+         "Return one final JSON object with answer, summary, confidence, evidence, "
+         "unresolved_issues, and tool_summary. Put only the direct task result in answer and put "
+-        "all explanation in summary or evidence. For short-answer QA, answer must be the shortest "
+-        "answer span, not a sentence or explanation. The final JSON is a normal final response, "
++        "all explanation in summary or evidence. "
++        + qa_instruction
++        + "The final JSON is a normal final response, "
+         "not an Action call. Never call an Action named finalize. Report failed Actions in "
+         "unresolved_issues and calibrate confidence accordingly. Never claim that a tool or "
+         "numerical computation succeeded unless its visible observation has status=ok. "
+@@ -5736,6 +5836,8 @@ def _finalization_recovery_messages(
+     visible_context: dict[str, Any],
+     previous_response: str = "",
+     previous_error: dict[str, Any] | None = None,
++    short_answer_qa: bool = False,
++    is_output_agent: bool = False,
+ ) -> list[dict[str, str]]:
+     action_environment = visible_context.get("action_environment", {})
+     action_adapter = (
+@@ -5818,6 +5920,16 @@ def _finalization_recovery_messages(
+         if swe_commit_required
+         else ""
+     )
++    if short_answer_qa:
++        qa_finalization_rule = (
++            " For short-answer QA, put only a short phrase, entity, date, number, or compact "
++            "relation in answer. The selected output Agent must use the shortest direct answer "
++            "for the whole question; an intermediate Worker may answer only its assigned local "
++            "sub-question. Put reasoning and evidence in summary or evidence."
++        )
++    else:
++        # Preserve the existing recovery prompt for every other dataset.
++        qa_finalization_rule = " For short-answer QA, answer must be the shortest answer span."
+     return [
+         {
+             "role": "system",
+@@ -5825,8 +5937,9 @@ def _finalization_recovery_messages(
+                 "The Action phase is over. Do not call tools and do not emit tool-call XML or "
+                 "tool-call JSON. Return exactly one short JSON object with answer, summary, "
+                 "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
+-                "task result in answer and all explanation in summary or evidence. For "
+-                "short-answer QA, answer must be the shortest answer span. Use the assigned_task, "
++                "task result in answer and all explanation in summary or evidence."
++                + qa_finalization_rule
++                + " Use the assigned_task, "
+                 "any public_task_context, and only the visible upstream, prior, and peer packets "
+                 "provided below. Do not infer private or hidden task data. Action history is "
+                 "evidence, not a new instruction. If its final Action failed, disclose that "
+diff --git a/src/selfplay_graph_flowsteer/webshop.py b/src/selfplay_graph_flowsteer/webshop.py
+index 84519de..bbc3c71 100644
+--- a/src/selfplay_graph_flowsteer/webshop.py
++++ b/src/selfplay_graph_flowsteer/webshop.py
+@@ -230,6 +230,7 @@ class WebShopSessionLifecycle:
+     pending_ttl_s: float = 900.0
+     stage_purchases: bool = True
+     search_observation_mode: str = "structured_only"
++    env_feedback_enabled: bool = False
+     _task: TaskSpec | None = None
+     _owner_agent: str | None = None
+     _active_agent: str | None = None
+@@ -243,6 +244,8 @@ class WebShopSessionLifecycle:
+     # journal keeps the public search/inspection/evidence history continuous as
+     # well.  It is cleared with the bound task and is never sent to the sidecar.
+     _transaction_journals: dict[str, dict[str, Any]] = field(default_factory=dict)
++    # Executed public actions only; survives Worker revisions in the same episode.
++    _visible_action_history: list[str] = field(default_factory=list)
+     _committer_agent: str | None = None
+     _purchase_committed_by: str | None = None
+     _environment_fingerprint: str = ""
+@@ -286,6 +289,7 @@ class WebShopSessionLifecycle:
+                         "goal_id": goal_id,
+                         "goal_fingerprint": status.get("goal_fingerprint", ""),
+                         "search_observation_mode": self.search_observation_mode,
++                        **({"env_feedback_enabled": True} if self.env_feedback_enabled else {}),
+                     },
+                     sort_keys=True,
+                     separators=(",", ":"),
+@@ -453,6 +457,7 @@ class WebShopSessionLifecycle:
+             session_id, agent_id = self._active()
+             self._active_pending_target = None
+             result = self._bounded(self.client.search(session_id, query))
++            self._append_env_feedback(result, f"search[{query}]")
+             self._results[agent_id] = result
+             return result
+ 
+@@ -496,6 +501,7 @@ class WebShopSessionLifecycle:
+                 if rejection is not None:
+                     rejected = dict(current)
+                     rejected.pop("action_effect", None)
++                    rejected.pop("env_feedback", None)
+                     rejected.update(
+                         {
+                             "commit_pending": False,
+@@ -524,6 +530,7 @@ class WebShopSessionLifecycle:
+                 # its action_effect forward would falsely attribute (for example)
+                 # the previous option selection to the purchase-stage request.
+                 staged.pop("action_effect", None)
++                staged.pop("env_feedback", None)
+                 staged.update(
+                     {
+                         "commit_pending": True,
+@@ -547,6 +554,12 @@ class WebShopSessionLifecycle:
+                 return dict(staged)
+             self._active_pending_target = None
+             result = self._bounded(self.client.click(session_id, target_id))
++            # Use the resolved public label, never opaque transport IDs or goal data.
++            label = str(target.get("label", "")) if target else ""
++            kind = str(target.get("kind", "")) if target else ""
++            if kind == "back_to_search" or label.casefold() == "back to search":
++                label = "Back to Search"
++            self._append_env_feedback(result, f"click[{label}]", previous=current)
+             result["commit_pending"] = False
+             result["commit_ready"] = False
+             if validated_purchase_evidence is not None:
+@@ -705,8 +718,55 @@ class WebShopSessionLifecycle:
+             self._active_agent = None
+             self._execution_open = False
+             self._transaction_journals = {}
++            self._visible_action_history = []
+             self._task = None
+ 
++    def _append_env_feedback(
++        self,
++        result: dict[str, Any],
++        action: str,
++        *,
++        previous: dict[str, Any] | None = None,
++    ) -> None:
++        """SkillFlow-style factual feedback, without constraining the next action.
++
++        Unlike SkillFlow's text-only wrapper, our observation exposes the product
++        being left. Use that public state instead of guessing from the last four
++        clicks. Keep the note separate from page_text so prompt truncation cannot
++        discard it. Call only after a successful environment operation.
++        """
++        if not self.env_feedback_enabled:
++            return
++        history = self._visible_action_history
++        note = ""
++        if action.startswith("search[") and action in history:
++            if "click[Back to Search]" in history[-3:]:
++                note = (
++                    "same search query was reused after Back; this is a repeated "
++                    "query from the visible action history."
++                )
++            else:
++                note = "same search query was already used earlier in the visible action history."
++        elif action == "click[Back to Search]":
++            state = previous or {}
++            product = state.get("product")
++            asin = product.get("asin", "") if isinstance(product, dict) else ""
++            if asin and state.get("page_type") in {"product", "product_section"}:
++                note = (
++                    f"returned from product page to search after inspecting ASIN {asin}; "
++                    "that ASIN is now part of the visible action history."
++                )
++            elif history and history[-1].startswith("search["):
++                note = (
++                    "clicked Back immediately after a search result page; the result "
++                    "list is no longer visible in the current observation."
++                )
++            else:
++                note = "returned to search from the previous visible page state."
++        if note:
++            result["env_feedback"] = "[WEBSHOP ENV FEEDBACK] " + note
++        history.append(action)
++
+     def _active(self) -> tuple[str, str]:
+         if not self._execution_open or not self._active_session or not self._active_agent:
+             raise RuntimeError("WebShop Action called outside an active Worker execution")
+diff --git a/b/src/selfplay_graph_flowsteer/webshop_guidance.py b/src/selfplay_graph_flowsteer/webshop_guidance.py
+new file mode 100644
+index 0000000..1fc1b17
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/webshop_guidance.py
+@@ -0,0 +1,48 @@
++"""Optional Worker instructions inspired by LASER's page-specific WebShop prompts.
++
++Reference: Mayer123/LASER, dc50dafa1f88a4b889945393456b8960144be858,
++prompt_library.py (search/select/verify prompts). This is a prompt-only adaptation,
++not LASER's controller, action mapper, or environment implementation.
++"""
++
++WEBSHOP_WORKER_GUIDANCE_POLICIES = frozenset({"baseline", "laser_checklist_v1"})
++
++LASER_PAGE_CHECKLIST = """
++WebShop page checklist (laser_checklist_v1):
++Before choosing an Action, compare the public request with the latest observation
++using the applicable page checklist below. Use your existing reasoning mode;
++keep the existing Action/final JSON format, without a separate Rationale response
++or a think Action. These checks guide decisions; they do not grant extra Actions.
++If commit_pending, purchased, done, or terminal is true, follow the existing
++completion protocol instead of starting another shopping decision.
++
++- search: Identify the requested product type, distinguishing attributes, price
++  limit, and requested options. Form a query from relevant product terms. When
++  prior searches are visible, identify what a revised query should clarify.
++- search_results: Compare visible candidates against the requested product type,
++  attributes, and price. Treat a title's color/size/default variant as provisional:
++  inspect a relevant candidate to learn its actual customization options rather
++  than assuming a title mismatch rules it out. Prefer inspections that resolve
++  an open requirement; revisit an inspected item when completing its purchase or
++  checking a still-unresolved fact, not merely to repeat the same inspection.
++- product: Check each requested attribute and the price against observed evidence.
++  Distinguish options the item offers from options currently selected; compare
++  the requested values with both. Resolve a missing selection using current
++  option Actions. If evidence is missing, choose a useful visible detail section;
++  if a requirement is contradicted and cannot be fixed by customization, consider
++  another candidate. Before Buy Now, recheck price, attributes, selected options,
++  and unresolved requirements under the existing purchase-evidence/budget rules.
++- product_section: Use the displayed description/features/reviews to resolve the
++  specific open requirement. Missing information stays unknown. Avoid reopening
++  an already-read section without an information need. Return to the product page
++  when needed to select options or stage a purchase, accounting for that Action.
++
++For other page types use the existing protocol. Use only public observations and
++visible history; do not invent options, attribute matches, or successful purchases.
++"""
++
++
++def webshop_worker_guidance(policy: str) -> str:
++    if policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
++        raise ValueError("webshop.worker_guidance_policy must be baseline or laser_checklist_v1")
++    return LASER_PAGE_CHECKLIST if policy == "laser_checklist_v1" else ""

@@ -1,0 +1,3939 @@
+{
+  "schema": "spgfs-public-experiment-catalog-v1",
+  "as_of": "2026-09-23",
+  "scope": "Local evaluation runs in the four documented state roots; synthetic unit tests excluded.",
+  "units": {
+    "mean_score": "0..1 (dataset/verifier dependent)",
+    "pass_rate": "0..1 (verifier dependent)",
+    "mean_token_cost": "reported Worker tokens per completed example; excludes Director"
+  },
+  "warning": "Completion is runner completion, not task success. Manifest-only runs have no verified aggregate result. Historical source is not implied by a run name.",
+  "runs": [
+    {
+      "run": "state/experiments/hotpotqa-format-baseline-20260920-v1",
+      "status": "incomplete",
+      "counts": {
+        "planned": 128,
+        "completed": 0,
+        "failed": 3,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "aggregate_summary.json": "259a71182f8e7276cd6b472806a5dae5acd0af2be243f22a2ec53685358afa98",
+        "run_manifest.json": "e64df8ef6a7b060dcfda2b96e3e22efd6ad4c545f6a6cdb364f6b42f2c1a7803"
+      }
+    },
+    {
+      "run": "state/experiments/hotpotqa-format-baseline-20260920-v2",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 128,
+          "mean_score": 0.7460937500000003,
+          "pass_rate": 0.7421875,
+          "mean_token_cost": 4369.9296875,
+          "mean_duration_s": 55.81746379163815
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 128
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 20,
+        "qa_model_source_span": 108
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "b23f811316a2b32d9d6ec3796b3cd28b5458c238b77f563614efab0f976757ce",
+      "evidence_sha256": {
+        "aggregate_summary.json": "5fa68e32b630dd96e7839c98e7a0f3193a6d4ac9a80ae73a527b97410db2318d",
+        "summary.json": "e10f18a840485912308879e0ffb68fda777f222726564c14cfdc2e52772292eb",
+        "run_manifest.json": "e64df8ef6a7b060dcfda2b96e3e22efd6ad4c545f6a6cdb364f6b42f2c1a7803"
+      }
+    },
+    {
+      "run": "state/experiments/hotpotqa-role-conditioned-20260920",
+      "status": "incomplete",
+      "counts": {
+        "planned": 128,
+        "completed": 57,
+        "failed": 3,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 57,
+          "mean_score": 0.7315789473684211,
+          "pass_rate": 0.5964912280701754,
+          "mean_token_cost": 4039.0,
+          "mean_duration_s": 35.66140839130732
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 57
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 23,
+        "qa_model_source_span": 34
+      },
+      "observed_task_count": 57,
+      "observed_task_set_sha256": "b0f8e9e8e856d8434f4a2bcf1c82cb962f57eaf0a004bfc5cdb5530bbcb42d21",
+      "evidence_sha256": {
+        "aggregate_summary.json": "092dfdd56f70fbd00584760f0cb857db84f0e231e47711174e4a645e9d5ce2ec",
+        "run_manifest.json": "e64df8ef6a7b060dcfda2b96e3e22efd6ad4c545f6a6cdb364f6b42f2c1a7803"
+      }
+    },
+    {
+      "run": "state/experiments/hotpotqa-role-conditioned-20260920-v2",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 128,
+          "mean_score": 0.7257812500000007,
+          "pass_rate": 0.53125,
+          "mean_token_cost": 4336.1328125,
+          "mean_duration_s": 62.53755798237398
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 127,
+        "unscored": 1
+      },
+      "submission_method_counts": {
+        "qa_ambiguous_submission": 1,
+        "qa_deterministic_extraction": 50,
+        "qa_model_source_span": 77
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "b23f811316a2b32d9d6ec3796b3cd28b5458c238b77f563614efab0f976757ce",
+      "evidence_sha256": {
+        "aggregate_summary.json": "ebef2687bf2c264d55438e425d480944b4c8e09c0879a8dc6f07a7d2688b9a81",
+        "summary.json": "fbf2038f5d18da6cb2f36fd9280cde9f7457b049d5cf280374720487b6cde4f9",
+        "run_manifest.json": "e64df8ef6a7b060dcfda2b96e3e22efd6ad4c545f6a6cdb364f6b42f2c1a7803"
+      }
+    },
+    {
+      "run": "state/experiments/hotpotqa-role-conditioned-20260920-v3",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 128,
+          "mean_score": 0.7507812500000004,
+          "pass_rate": 0.75,
+          "mean_token_cost": 4321.0703125,
+          "mean_duration_s": 51.55279545887606
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 128
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 17,
+        "qa_model_source_span": 111
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "b23f811316a2b32d9d6ec3796b3cd28b5458c238b77f563614efab0f976757ce",
+      "evidence_sha256": {
+        "aggregate_summary.json": "f03a8ad73207359f4755f18197c1fa765c9f5313583c3bb38b158fe40c80955a",
+        "summary.json": "f1c205ca1b4e96260487f3ca2a4eb5debcc5f69d5b507c46010300a6acc6d387",
+        "run_manifest.json": "e64df8ef6a7b060dcfda2b96e3e22efd6ad4c545f6a6cdb364f6b42f2c1a7803"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-8",
+      "status": "complete",
+      "counts": {
+        "planned": 8,
+        "completed": 8,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 8,
+          "mean_score": 0.6875000000000001,
+          "pass_rate": 0.625,
+          "mean_token_cost": 5645.0,
+          "mean_duration_s": 54.28709019161761
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 8
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 1,
+        "qa_model_source_span": 7
+      },
+      "observed_task_count": 8,
+      "observed_task_set_sha256": "612b35b4aedc48167611cd1e622acf1ca2b90460efd72d711a16fdc334528c42",
+      "evidence_sha256": {
+        "aggregate_summary.json": "263acf4cee68410627c282a7379216eaa1a6035dff22df058c7f698f842a181d",
+        "summary.json": "d6b4e7a0ab4bf8db1216592a177f656f7b29ad0498acb5915c402f8492b7f3c9",
+        "run_manifest.json": "1824ba7c3aeb59587f2b345cef5b8ad43943eda9a197a5cdb1d6ff3386aca649"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-deepseek-qwen35-9b-128-20260919",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 128,
+          "mean_score": 0.5953125000000004,
+          "pass_rate": 0.5625,
+          "mean_token_cost": 3628.15625,
+          "mean_duration_s": 47.21205951826414
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 127,
+        "unscored": 1
+      },
+      "submission_method_counts": {
+        "qa_ambiguous_submission": 1,
+        "qa_deterministic_extraction": 46,
+        "qa_model_source_span": 81
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "c9a5df50b42aeb8ce2de8da5067e5d9fdd76e9ba49e2c6c5fcb30e268d02103f",
+      "evidence_sha256": {
+        "aggregate_summary.json": "50327eb56c67c78bcd1d10daf7124595b078a38d8415d3979f2c4c375c332c4a",
+        "summary.json": "371d522e725f3c80cdcaf1f635a81387b295537a96c49d918aefedc019143aa2",
+        "run_manifest.json": "72e7504d75b66ba1cd104a2801406d7186468535cf9dcb3b5148a75c6f57d9b1"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-inline-8",
+      "status": "complete",
+      "counts": {
+        "planned": 8,
+        "completed": 8,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 8,
+          "mean_score": 0.6,
+          "pass_rate": 0.5,
+          "mean_token_cost": 6038.75,
+          "mean_duration_s": 28.513783724978566
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 8
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 1,
+        "qa_model_source_span": 7
+      },
+      "observed_task_count": 8,
+      "observed_task_set_sha256": "612b35b4aedc48167611cd1e622acf1ca2b90460efd72d711a16fdc334528c42",
+      "evidence_sha256": {
+        "aggregate_summary.json": "bad74f8d0d2912c2364d4d5a13991dade78f0202f423c4f35d59f479aec5ff80",
+        "summary.json": "7d98beb39c7a6299afb5ee17c7770d553053eb4b929329e38cb7eb091cb27a9a",
+        "run_manifest.json": "1824ba7c3aeb59587f2b345cef5b8ad43943eda9a197a5cdb1d6ff3386aca649"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-inline-8-fixed-20260919",
+      "status": "incomplete",
+      "counts": {
+        "planned": 8,
+        "completed": 0,
+        "failed": 8,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "aggregate_summary.json": "3b86605bf547c168729ef0177b07bc700a4229c01cd104ab7d4faf0735f7bcf8",
+        "run_manifest.json": "1824ba7c3aeb59587f2b345cef5b8ad43943eda9a197a5cdb1d6ff3386aca649"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-inline-8-fixed-20260919-r2",
+      "status": "incomplete",
+      "counts": {
+        "planned": 8,
+        "completed": 0,
+        "failed": 8,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "aggregate_summary.json": "3b86605bf547c168729ef0177b07bc700a4229c01cd104ab7d4faf0735f7bcf8",
+        "run_manifest.json": "1824ba7c3aeb59587f2b345cef5b8ad43943eda9a197a5cdb1d6ff3386aca649"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-inline-8-fixed-20260919-r3",
+      "status": "complete",
+      "counts": {
+        "planned": 8,
+        "completed": 8,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 8,
+          "mean_score": 0.6,
+          "pass_rate": 0.5,
+          "mean_token_cost": 3882.125,
+          "mean_duration_s": 24.11751257767901
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 8
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 1,
+        "qa_model_source_span": 7
+      },
+      "observed_task_count": 8,
+      "observed_task_set_sha256": "612b35b4aedc48167611cd1e622acf1ca2b90460efd72d711a16fdc334528c42",
+      "evidence_sha256": {
+        "aggregate_summary.json": "aa0ba29c6f554b21f5303ffc9a4d1159b45a54caf2aec3aa218067b6369f83bb",
+        "summary.json": "4c17639d3ee21bd4b3b067d93af3bc13e9fc7f5a5878b2c8b44838fe683ce567",
+        "run_manifest.json": "1824ba7c3aeb59587f2b345cef5b8ad43943eda9a197a5cdb1d6ff3386aca649"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-span-regression-8",
+      "status": "complete",
+      "counts": {
+        "planned": 8,
+        "completed": 8,
+        "failed": 0,
+        "workers": 8,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 8,
+          "mean_score": 0.6,
+          "pass_rate": 0.625,
+          "mean_token_cost": 5201.625,
+          "mean_duration_s": 30.78315526107326
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 8,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 8
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 3,
+        "qa_model_source_span": 5
+      },
+      "observed_task_count": 8,
+      "observed_task_set_sha256": "612b35b4aedc48167611cd1e622acf1ca2b90460efd72d711a16fdc334528c42",
+      "evidence_sha256": {
+        "aggregate_summary.json": "7c5d349e5afd68815c92b3c5b28ef5392b91a70055ce86ca565ff6a2824d699d",
+        "summary.json": "d482e2c001dff91a9fffe6132e15b11b825458d6cccdd672e83233037b99d215",
+        "run_manifest.json": "584de8493479e9fa1ce27dae732c869ee41b0c63b6e646c3b35056aa658ba579"
+      }
+    },
+    {
+      "run": "state/experiments/nq-frozen-v1/run-span-type-8",
+      "status": "complete",
+      "counts": {
+        "planned": 8,
+        "completed": 8,
+        "failed": 0,
+        "workers": 8,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 8,
+          "mean_score": 0.55,
+          "pass_rate": 0.625,
+          "mean_token_cost": 4918.25,
+          "mean_duration_s": 27.698998337611556
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 8,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 8,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "flowsteer_qa": 8
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 3,
+        "qa_model_source_span": 5
+      },
+      "observed_task_count": 8,
+      "observed_task_set_sha256": "612b35b4aedc48167611cd1e622acf1ca2b90460efd72d711a16fdc334528c42",
+      "evidence_sha256": {
+        "aggregate_summary.json": "7f248db203da06e2b2d6c5c37b36d4ad0111062b5e2f1a078d2352c71664ba69",
+        "summary.json": "d7afce9808f58ed3953ef3f81fd1ea0df4a0f36a5a82be81076da92b00186f0a",
+        "run_manifest.json": "584de8493479e9fa1ce27dae732c869ee41b0c63b6e646c3b35056aa658ba579"
+      }
+    },
+    {
+      "run": "state/formal-eval/hotpot-flowsteer-aligned-no-skill-deepseek-c10-20260919-v2",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": null,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 25
+      },
+      "submission_method_counts": {
+        "qa_ambiguous_submission": 25
+      },
+      "observed_task_count": 25,
+      "observed_task_set_sha256": "45f0f1fde0b1e9c5e7e492c49f7c170d592c825a4677db3bb2fb3534c8dc778f",
+      "evidence_sha256": {
+        "run_manifest.json": "0e6c1dee908c456e164f29731b384549c8a20f74a41191214badc570b6b2cf45"
+      }
+    },
+    {
+      "run": "state/formal-eval/hotpot-flowsteer-aligned-no-skill-deepseek-c10-20260919-v3",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 23
+      },
+      "submission_method_counts": {
+        "qa_ambiguous_submission": 23
+      },
+      "observed_task_count": 23,
+      "observed_task_set_sha256": "5e68248253e29fcd7879b3e2c26a7faeb0346a93c46a78a45f5cf5cb3490c43f",
+      "evidence_sha256": {
+        "run_manifest.json": "7d505e4599ee962085c0db69b70bac8b0b0af6b45a0102b3c5833cdc7e68d95b"
+      }
+    },
+    {
+      "run": "state/formal-eval/hotpot-flowsteer-aligned-no-skill-deepseek-c10-20260919-v4",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 10,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 128,
+          "mean_score": 0.7153409256695104,
+          "pass_rate": 0.53125,
+          "mean_token_cost": 6802.1328125,
+          "mean_duration_s": 13.185824733809568
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "token_f1": 128
+      },
+      "submission_method_counts": {
+        "qa_deterministic_extraction": 7,
+        "qa_model_source_span": 121
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "b23f811316a2b32d9d6ec3796b3cd28b5458c238b77f563614efab0f976757ce",
+      "evidence_sha256": {
+        "aggregate_summary.json": "29b0ca266e25ef4dba830d050353e8f79059e9f0f0a0c1551636a9a11e28d890",
+        "summary.json": "3e2c66be766e42b6fed11c1e93b20df0c7d2426b7b660aa899e92db63496ffac",
+        "run_manifest.json": "05d4be4a567da152ceb2f736859d763a863ab9571bae2428c614b629536ac84b"
+      }
+    },
+    {
+      "run": "state/formal-eval/hotpot-real-smoke-20260918",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 1,
+          "mean_score": 1.0,
+          "pass_rate": 1.0,
+          "mean_token_cost": 6918.0,
+          "mean_duration_s": 34.93822632730007
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "hotpotqa"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "multi_answer_exact_match": 1
+      },
+      "submission_method_counts": {
+        "qa_model_source_span": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "33025fc9658d90c77c81ac40978932f351769fe65dba85288bab2f0a14eb92e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "54c64cea48b91cf20c25dd3a03df94ebcd6bdf9bbc2a951e3d91638b40e1c400",
+        "summary.json": "8b9e8b0a318d694f0543f3612dc8876bcbb8687721d9bb963bc0dbf8106e4809",
+        "run_manifest.json": "770b290f5a40b4dcfaa834f88f9da62d20fa98d3095960c540bd8bf609a45fd4"
+      }
+    },
+    {
+      "run": "state/formal-eval/nq-real-smoke-20260918",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "nq_open": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 4564.0,
+          "mean_duration_s": 46.63040009513497
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "nq_open"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "multi_answer_exact_match": 1
+      },
+      "submission_method_counts": {
+        "qa_model_source_span": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "b343b5dd6d9b156b1e5028b6521c3cbd7ec74b3cef988c3756a8411170815246",
+      "evidence_sha256": {
+        "aggregate_summary.json": "7930d7188186f32f2939f9f80aaa37b20581505ca0494c5ebc9756c01c176f56",
+        "summary.json": "595433c219f1bb7964dc77340383b4d35c32cb684b311fbf1ca3be6a42019a04",
+        "run_manifest.json": "664fd120c400e02c797fe4015a9ab7a451074f84d6241bbfe5c00e2b55bddecd"
+      }
+    },
+    {
+      "run": "state/formal-eval/qa-sota-no-skill-c10-20260918",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "hotpotqa",
+          "nq_open"
+        ],
+        "examples_planned": 256,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "1fd154e49a475fe9158e0042a8e6c7acf372914a1dca155af607411d9b6c5eb4"
+      }
+    },
+    {
+      "run": "state/formal-eval/qa-sota-no-skill-deepseek-c10-20260918",
+      "status": "complete",
+      "counts": {
+        "planned": 256,
+        "completed": 256,
+        "failed": 0,
+        "workers": 10,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 128,
+          "mean_score": 0.5703125,
+          "pass_rate": 0.5703125,
+          "mean_token_cost": 7448.59375,
+          "mean_duration_s": 44.11527316865977
+        },
+        "nq_open": {
+          "examples": 128,
+          "mean_score": 0.2734375,
+          "pass_rate": 0.2734375,
+          "mean_token_cost": 8021.1796875,
+          "mean_duration_s": 201.61401418791502
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "hotpotqa",
+          "nq_open"
+        ],
+        "examples_planned": 256,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "multi_answer_exact_match": 254,
+        "unscored": 2
+      },
+      "submission_method_counts": {
+        "qa_ambiguous_submission": 2,
+        "qa_deterministic_extraction": 14,
+        "qa_model_source_span": 240
+      },
+      "observed_task_count": 256,
+      "observed_task_set_sha256": "ce4894a604ce40a8a5cc9f16f2bd512a8b0776f720ee90565df559d3fd8f0a0d",
+      "evidence_sha256": {
+        "aggregate_summary.json": "93b0870757bdb433a558a466d26190d0cbabaec5a9fe7e9bdb701196a32c911c",
+        "summary.json": "07502879eef07705d8ed0ce7f39a2f8b4f1162b3c7ab515a60c254123cd10df3",
+        "run_manifest.json": "af5b4fa60e0a87e01f18b4e3cbef9cec70fe09a23fa8e1cf4e3512080253132b"
+      }
+    },
+    {
+      "run": "state/formal-eval/swe-full-c10-20260918-1805",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 10,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "swe_bench": {
+          "examples": 128,
+          "mean_score": 0.5546875,
+          "pass_rate": 0.5546875,
+          "mean_token_cost": 153950.28125,
+          "mean_duration_s": 307.1945355865464
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "swe_bench"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "swe_outcome": 127,
+        "unscored": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "40229fb6ef25455ebbf11805e97b7ed9eedb448b3f8340548beed1e8147bd7bb",
+      "evidence_sha256": {
+        "aggregate_summary.json": "97da09718f0775f31535beae3c6b2a03e6e363fd63d4d276847cd6704c0b0ade",
+        "summary.json": "a442cbfd9686261dd3e1b1cda712c2707176fe3dcf3f9abe96dd5e95de22aab9",
+        "run_manifest.json": "c0a3126d2d0ac7d9a3a779ddda3e7874e446bd4647215bf07cbc3f9a151fa194"
+      }
+    },
+    {
+      "run": "state/formal-eval/swe-full-debug",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 10,
+        "datasets": [
+          "swe_bench"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "swe_outcome": 6
+      },
+      "submission_method_counts": {
+        "passthrough": 6
+      },
+      "observed_task_count": 6,
+      "observed_task_set_sha256": "0b813028772e94ee48fbeb5613b3d706bfa412887b23762287c3499c4b5d73da",
+      "evidence_sha256": {
+        "run_manifest.json": "c0a3126d2d0ac7d9a3a779ddda3e7874e446bd4647215bf07cbc3f9a151fa194"
+      }
+    },
+    {
+      "run": "state/formal-eval/swe-smoke-c10-20260918-174513",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "swe_bench": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 6.102127492427826
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "swe_bench"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "eb79138ebecfbd98e4f11898ef2a1eaced071da280bc9435ccfe10d633340e4d",
+      "evidence_sha256": {
+        "aggregate_summary.json": "c3dc647245bd20147ea0dcf2fee04897ae6ea2ba0c9fd045aea741480627b39a",
+        "summary.json": "8a8876f8a3c84147c6379b3da68de38bf2ab3c332be2e89456b7d2187aa2c2f7",
+        "run_manifest.json": "9ea08806aafe74ece067363a405289ae73e271973594b4f1f92f9108836e002e"
+      }
+    },
+    {
+      "run": "state/formal-eval/swe-smoke-c10-retry",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "swe_bench": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 317177.0,
+          "mean_duration_s": 517.8516959249973
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "swe_bench"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": true
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "swe_outcome": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "eb79138ebecfbd98e4f11898ef2a1eaced071da280bc9435ccfe10d633340e4d",
+      "evidence_sha256": {
+        "aggregate_summary.json": "bf565ccf49a31bf9f71564a1a361767e50460243beac2bf06760b491687d79e6",
+        "summary.json": "ffbd0f04ba022c0959611d5886b796860d4e485f3a6c661b755a0a222a0df65a",
+        "run_manifest.json": "9ea08806aafe74ece067363a405289ae73e271973594b4f1f92f9108836e002e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-budget-off-laser-c24-20260923-191922",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.7102213541666668,
+          "pass_rate": 0.4921875,
+          "mean_token_cost": 68111.6875,
+          "mean_duration_s": 105.03143107151845
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "c4309c07b0864da5cfb839255be28b544d08a40fcc77dcc90e84fa13ecb9d2d8",
+        "summary.json": "857b90f32a842a84cdd07b91f69672d8ddc2eb5070fd629714d7fba0c5f70db5",
+        "run_manifest.json": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-20260918-161911",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-20260918-162136",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-noskill-20260918-162212",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-noskill-20260918-162427",
+      "status": "incomplete",
+      "counts": {
+        "planned": 128,
+        "completed": 0,
+        "failed": 3,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "aggregate_summary.json": "259a71182f8e7276cd6b472806a5dae5acd0af2be243f22a2ec53685358afa98",
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-noskill-20260918-162524",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-noskill-20260918-164206",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-inference-noskill-c24-20260918-165403",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "8c9afe5fb5af45c7f8aab55d4939ac3fa9f03135956d4d7c523bc54ce924496e"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-deepseek-reasoning-noskill-c24-20260918-170329",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.648359375,
+          "pass_rate": 0.453125,
+          "mean_token_cost": 69401.2265625,
+          "mean_duration_s": 97.94096279740916
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": true,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "0fc9861bc9ea02d0dedfa8456eae88b81d5fe9c18baf4b1003003d231744860e",
+        "summary.json": "61e0f5c6fc38fd8759544191a9b93941c7f027d64e1876145ead6eca19b858f9",
+        "run_manifest.json": "dd9ea2d55f2c8fc931895702c0c3ccc13d085c54f80ab0bb00eb9cac94b7d471"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-detail-unlimited-c24-20260923-205311",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.676953125,
+          "pass_rate": 0.46875,
+          "mean_token_cost": 73625.7265625,
+          "mean_duration_s": 114.18994550139178
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "e2d5e3771b7a543911f8f969f3af5a879d6fefe30442054034d4673c6e7127df",
+        "summary.json": "3b814579840d00ced88e49665306f692e458946bff3abe1fb11a58d53f6b653a",
+        "run_manifest.json": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-env-feedback-c24-20260923",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.6751953125000001,
+          "pass_rate": 0.453125,
+          "mean_token_cost": 67659.3984375,
+          "mean_duration_s": 108.30734191968804
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "b8e097b01f52c31035a310957ec84248766a0ca85c2e7842a6a028f5d104b2c9",
+        "summary.json": "d00d069849afc307655c68777da0558e66fe5117fcab777c239a85e9f6f376a4",
+        "run_manifest.json": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-identity-fix-c24-20260923-202622",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.7075520833333334,
+          "pass_rate": 0.4765625,
+          "mean_token_cost": 72622.7890625,
+          "mean_duration_s": 103.86100940866163
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "be371501b520a7cd6eab08e9242f9b5e4d15945961fceb3dd1a081b7ef9ce834",
+        "summary.json": "b3ff5fa8de11347ea37dfc173ffe2ed3795342e19cd5b502797010e1d1ed7ffe",
+        "run_manifest.json": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-laser-checklist-c24-20260923-182224",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.6950520833333333,
+          "pass_rate": 0.484375,
+          "mean_token_cost": 69492.0859375,
+          "mean_duration_s": 108.3364226553822
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "cd05423c82748693d9441c790d9460b3b04c36b99ac3087920de868d19cf85f7",
+        "summary.json": "f3c0d8e2e6420be7f42dc6ae265ca71a91c1cdc15b6ddaa0f32e2152a92e824a",
+        "run_manifest.json": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-legacy-page-only-reasoning-c24-20260918-172320",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.6906249999999999,
+          "pass_rate": 0.484375,
+          "mean_token_cost": 65542.90625,
+          "mean_duration_s": 94.67463313377812
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": true,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "ce0a78d5760c43d0a19fcf5283d6d476025acfec5a219e07d073ca720fcc004d",
+        "summary.json": "6ff2dff9f73107a39947dabf8bfa5ee3a30a42386ec229a64ac250545d610692",
+        "run_manifest.json": "dd9ea2d55f2c8fc931895702c0c3ccc13d085c54f80ab0bb00eb9cac94b7d471"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-skillflow-history-c24-20260923-213558",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.7189453125,
+          "pass_rate": 0.46875,
+          "mean_token_cost": 57157.296875,
+          "mean_duration_s": 90.02784249786055
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 128
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "d130c1189d4ec811443f9b422427f0a5321fb6db2ddf3dbd596de8cca3c6719e",
+        "summary.json": "26d5f6748060c92f09a0a3adb577e8f853f9905c1d547cbe1e59a562bdfacc8b",
+        "run_manifest.json": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-skillflow-native10-20260923-223240",
+      "status": "complete",
+      "counts": {
+        "planned": 10,
+        "completed": 10,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 10,
+          "mean_score": 0.3716666666666667,
+          "pass_rate": 0.1,
+          "mean_token_cost": 44936.8,
+          "mean_duration_s": 209.2724071621895
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 10,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "runtime_policy_terminal": 1,
+        "webshop_environment": 9
+      },
+      "submission_method_counts": {
+        "passthrough": 10
+      },
+      "observed_task_count": 10,
+      "observed_task_set_sha256": "70090923dd0bd3989dd47d6ee48ce7a1f230fff92a97e36d49c538dbe87dbe39",
+      "evidence_sha256": {
+        "aggregate_summary.json": "91f2bf08f7abff764b24fa20bf9ec1927260f9b9921f794dd83c267605c58e38",
+        "summary.json": "7dc657f82347fc25f682552d1707ecf662c2859caf5a44f1533e85eb601c584a",
+        "run_manifest.json": "1854a74be9f420ddceb8642651ffeebd6b803fb8a27c0206fb1b3e94736234b8"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-smoke-legacy-20260918-172159",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 1,
+          "mean_score": 0.6666666666666666,
+          "pass_rate": 0.0,
+          "mean_token_cost": 32627.0,
+          "mean_duration_s": 60.524533182382584
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": true,
+        "deepseek_thinking": true,
+        "minimax_thinking": true,
+        "workers": 1,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "95733e56c4ecf7ec36e354609df8f326024ab04516d771354f9a5fd3ceec7b92",
+      "evidence_sha256": {
+        "aggregate_summary.json": "b73578611cf00cf6e6b322ea9702593f079711d36b4404dfc552a888bf3f37ae",
+        "summary.json": "eab444dc3e4dd315c7a919096322c8ce3e5fb3b79d3d7cf818aeb3d107e06493",
+        "run_manifest.json": "bcc75936238659f0c34abc16633b6c9b4b9f721407c4bec2505ad0219f208eff"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-smoke-noskill-20260918-170142",
+      "status": "incomplete",
+      "counts": {
+        "planned": 1,
+        "completed": 0,
+        "failed": 1,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "aggregate_summary.json": "f24b935b9c6e6a0d8bac5fc0ec6bc0896d6af87b2aa5bfaa9df2828a960d7dbd",
+        "run_manifest.json": "082e409bd7dacfc636804b24b5f827333fcb0d141d0af96e0e823a59b64fb6dc"
+      }
+    },
+    {
+      "run": "state/formal-eval/webshop-smoke-noskill-20260918-170237",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 1,
+          "mean_score": 0.6666666666666666,
+          "pass_rate": 0.0,
+          "mean_token_cost": 27969.0,
+          "mean_duration_s": 16.430389370769262
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "95733e56c4ecf7ec36e354609df8f326024ab04516d771354f9a5fd3ceec7b92",
+      "evidence_sha256": {
+        "aggregate_summary.json": "a6dca64dce0452d10757521e20f6d93941433a348019aa7fa95c2057d64476fa",
+        "summary.json": "8ad3cffedf1be2cee6ef63502adf94a642efa9f79bed297f23a3b1f4b86d1825",
+        "run_manifest.json": "082e409bd7dacfc636804b24b5f827333fcb0d141d0af96e0e823a59b64fb6dc"
+      }
+    },
+    {
+      "run": "state/sota-20260916/alfworld-deepseek-finish-targeted-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 3,
+        "completed": 3,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "alfworld": {
+          "examples": 3,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 128260.33333333333,
+          "mean_duration_s": 166.93597730599868
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld"
+        ],
+        "examples_planned": 3,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 2,
+        "unscored": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 3
+      },
+      "observed_task_count": 3,
+      "observed_task_set_sha256": "f7e3a7c08e539ee762822af5ecee5f6d7fe7c232dd33f070032e704ec08e2b4b",
+      "evidence_sha256": {
+        "aggregate_summary.json": "b914b3f075940410b61639926d2e8f20f0056a64ccf85a7b3a8c6fcaa6a2f22c",
+        "summary.json": "01b49a29a579f15c5497d285b97f35632235b4db244df1851e65f2769f2f18f0",
+        "run_manifest.json": "aa7052cb43fbe1fc38cad3c44c7cb5d6c2d71de51dae4c0615e20565a374bcac"
+      }
+    },
+    {
+      "run": "state/sota-20260916/alfworld-deepseek-memory-targeted-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 7,
+        "completed": 7,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "alfworld": {
+          "examples": 7,
+          "mean_score": 0.42857142857142855,
+          "pass_rate": 0.42857142857142855,
+          "mean_token_cost": 167255.0,
+          "mean_duration_s": 118.61234090100022
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld"
+        ],
+        "examples_planned": 7,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 6,
+        "unscored": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 7
+      },
+      "observed_task_count": 7,
+      "observed_task_set_sha256": "2b9cbcee972413a4fe3014cf6fa73330233532b0db36f437e7f5ac049662faef",
+      "evidence_sha256": {
+        "aggregate_summary.json": "02ce78b8fcedbdfba7e10871b50c0b500bbbb6492b9b3dc5782aea78e5ff8fe6",
+        "summary.json": "0bbbfaf0815f2ca06efebde538516b9d42656c05b68c300eb176b6557777ac92",
+        "run_manifest.json": "adbbae8ad4187c95a5fc24c4a4f1ed04b8fda9d5d0f503af3d496617dbca0198"
+      }
+    },
+    {
+      "run": "state/sota-20260916/alfworld-deepseek-public-goal-targeted-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 2,
+        "completed": 2,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "alfworld": {
+          "examples": 2,
+          "mean_score": 1.0,
+          "pass_rate": 1.0,
+          "mean_token_cost": 18148.0,
+          "mean_duration_s": 27.36558383850206
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld"
+        ],
+        "examples_planned": 2,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 2
+      },
+      "submission_method_counts": {
+        "passthrough": 2
+      },
+      "observed_task_count": 2,
+      "observed_task_set_sha256": "f80868dce339cf9128d628509e75b27d68fb66dbffa6784f3383b26745ca1379",
+      "evidence_sha256": {
+        "aggregate_summary.json": "757a5cadea30ac0056af24eded9c1858873f360718a4b0716aae4425792aecd0",
+        "summary.json": "009fd0b4474d9ec06eab4bcbf4b5ea0b95092ce129b464d49d4fb40fc446406b",
+        "run_manifest.json": "17ca56f566fe86d27750ed0268e57c083c65e5824c35eef0ea3a88d20c934850"
+      }
+    },
+    {
+      "run": "state/sota-20260916/alfworld-deepseek-thinking-full-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "alfworld": {
+          "examples": 128,
+          "mean_score": 0.8125,
+          "pass_rate": 0.8125,
+          "mean_token_cost": 43949.90625,
+          "mean_duration_s": 126.63746594563321
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": true,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 105,
+        "unscored": 23
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "2c3363f025ff87a7f3715818fe6c5054a2d118f1886b5a1b90a4ee48b86b1c9c",
+      "evidence_sha256": {
+        "aggregate_summary.json": "e1073ba82c8dfcc76547287eb4558504735a9bf376729a00cf07f62011fcbfee",
+        "summary.json": "49bca7a88acf4ff520c684d01f78d940897e96aa5baba28d6e97f27aabbed3da",
+        "run_manifest.json": "ed69e4c9b775a04bdee5bbebe9f19078cef1b51e9f6175a297c6f8535e4477de"
+      }
+    },
+    {
+      "run": "state/sota-20260916/alfworld-qwen35-9b-deepseek-no-skill-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "alfworld": {
+          "examples": 128,
+          "mean_score": 0.15625,
+          "pass_rate": 0.15625,
+          "mean_token_cost": 87928.34375,
+          "mean_duration_s": 207.93367228714084
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 95,
+        "unscored": 33
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "2c3363f025ff87a7f3715818fe6c5054a2d118f1886b5a1b90a4ee48b86b1c9c",
+      "evidence_sha256": {
+        "aggregate_summary.json": "9cd855ca3a482e7c230e1da064900fa616f139f9a6a09f9881b60a7c6289a8fc",
+        "summary.json": "3a85f6a71b5f8ffebc62f6cbbc7ffb9354c2596a14efeeb293b724170a5ce24c",
+        "run_manifest.json": "5ec9b24a18b8d3fe6e57aedc21d26913282a96f5a5f54953513d9454559acfba"
+      }
+    },
+    {
+      "run": "state/sota-20260916/alfworld-qwen35-9b-no-skill-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "alfworld": {
+          "examples": 128,
+          "mean_score": 0.3515625,
+          "pass_rate": 0.3515625,
+          "mean_token_cost": 37300.5859375,
+          "mean_duration_s": 739.7549425964373
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 66,
+        "unscored": 62
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "2c3363f025ff87a7f3715818fe6c5054a2d118f1886b5a1b90a4ee48b86b1c9c",
+      "evidence_sha256": {
+        "aggregate_summary.json": "320a1ae3736a063817a56bb1f5fad3e09023d89a1e08a782ffe98400a76550bd",
+        "summary.json": "10ac3b4db83a57dc728678c902d081c20e10e9f31325e3ac46469d0d150e74ac",
+        "run_manifest.json": "5d9387ceb958805f2622829df89ea71ce35ba2518a9a9fd636165c62c195b854"
+      }
+    },
+    {
+      "run": "state/sota-20260916/dev-aime-v2",
+      "status": "summary_only",
+      "counts": {},
+      "metrics": {
+        "aime": {
+          "recorded": 1,
+          "completed": 0,
+          "failed": 1,
+          "mean_score": null,
+          "pass_rate": null
+        }
+      },
+      "settings": {},
+      "director_skill_enabled": null,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "summary.json": "c69d725727de34eccee66107651799f12bf88d6d2ee311d31ccc89b0a96fc736"
+      }
+    },
+    {
+      "run": "state/sota-20260916/dev-aime-v3",
+      "status": "summary_only",
+      "counts": {},
+      "metrics": {
+        "aime": {
+          "recorded": 1,
+          "completed": 0,
+          "failed": 1,
+          "mean_score": null,
+          "pass_rate": null
+        }
+      },
+      "settings": {},
+      "director_skill_enabled": null,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "summary.json": "c69d725727de34eccee66107651799f12bf88d6d2ee311d31ccc89b0a96fc736"
+      }
+    },
+    {
+      "run": "state/sota-20260916/dev-aime-v4",
+      "status": "summary_only",
+      "counts": {},
+      "metrics": {
+        "aime": {
+          "recorded": 1,
+          "completed": 1,
+          "failed": 0,
+          "mean_score": 1.0,
+          "pass_rate": 1.0
+        }
+      },
+      "settings": {},
+      "director_skill_enabled": null,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "summary.json": "85399dde1274b1bb96d854a72301f795d0e96daf3092c3331451f1122b9955c7"
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-full-v1",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "aime",
+          "alfworld",
+          "healthbench_professional",
+          "hotpotqa",
+          "nq_open",
+          "webshop"
+        ],
+        "examples_planned": 670,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": true,
+      "verifier_counts": {
+        "alfworld_environment": 1
+      },
+      "submission_method_counts": {
+        "legacy_passthrough": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "dc44534431325b20a79ec9f297bd21f8b57af74587da963c0d74d5cc20d5b1d4",
+      "evidence_sha256": {
+        "run_manifest.json": "ef7d1274833de25d1d9b10253b5578afbfadbcca1b276fb215b76f0383fd223e"
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-full-v2",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "aime",
+          "alfworld",
+          "healthbench_professional",
+          "hotpotqa",
+          "nq_open",
+          "webshop"
+        ],
+        "examples_planned": 670,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": true,
+      "verifier_counts": {},
+      "submission_method_counts": {},
+      "observed_task_count": 0,
+      "observed_task_set_sha256": null,
+      "evidence_sha256": {
+        "run_manifest.json": "06f682aa65d785091aa4d642ccf2bd486f262de5f1dfdbaa2b0ec3e777b9e5a8"
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-full-v3",
+      "status": "complete_with_exclusions",
+      "counts": {
+        "planned": 670,
+        "completed": 670,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 128,
+          "mean_score": 0.21875,
+          "pass_rate": 0.21875,
+          "mean_token_cost": 1077.203125,
+          "mean_duration_s": 70.87829670202342
+        },
+        "alfworld": {
+          "examples": 128,
+          "mean_score": 0.3046875,
+          "pass_rate": 0.3046875,
+          "mean_token_cost": 31108.6328125,
+          "mean_duration_s": 579.8618769608042
+        },
+        "healthbench_professional": {
+          "examples": 128,
+          "mean_score": 0.2165755314571821,
+          "pass_rate": 0.2890625,
+          "mean_token_cost": 5074.203125,
+          "mean_duration_s": 377.9378207092421
+        },
+        "nq_open": {
+          "examples": 128,
+          "mean_score": 0.15625,
+          "pass_rate": 0.15625,
+          "mean_token_cost": 1043.2265625,
+          "mean_duration_s": 130.58641598689846
+        },
+        "aime": {
+          "examples": 30,
+          "mean_score": 0.7,
+          "pass_rate": 0.7,
+          "mean_token_cost": 6754.233333333334,
+          "mean_duration_s": 206.01928114313338
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "aime",
+          "alfworld",
+          "healthbench_professional",
+          "hotpotqa",
+          "nq_open",
+          "webshop"
+        ],
+        "examples_planned": 670,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": true,
+      "verifier_counts": {
+        "alfworld_environment": 94,
+        "healthbench_rubric": 94,
+        "multi_answer_exact_match": 246,
+        "numeric": 21,
+        "unscored": 87
+      },
+      "submission_method_counts": {
+        "aime_strict_submission_v1": 30,
+        "legacy_passthrough": 512
+      },
+      "observed_task_count": 542,
+      "observed_task_set_sha256": "312e9735987d279170680fdefe2b4f1139aa1f40e929debbce32bb1652e8ffd1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "643d62bfaac3254cc2bd8fe63ef07cc9b4db073fa80fb12ef7551e5223a0449e",
+        "summary.json": "c8285dc4ce38d17d3a78060a847dcf818f81d3ad6aa257d3859ac486cdde5187",
+        "run_manifest.json": "d5c5218e4e7393cb36360224b4413be682d28e7c94e0dda074e415ca8985d41b"
+      },
+      "exclusions": {
+        "removed_dataset": "webshop",
+        "removed_examples": 128,
+        "reason": "invalid prompt/environment goal mapping",
+        "retained_examples": 542,
+        "run_counts_are_historical": true
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-smoke-v2",
+      "status": "complete",
+      "counts": {
+        "planned": 6,
+        "completed": 6,
+        "failed": 0,
+        "workers": 6,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 144.52463487299974
+        },
+        "webshop": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 27.37578443500388
+        },
+        "alfworld": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 42.894588592003856
+        },
+        "aime": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 32.7463724679983
+        },
+        "nq_open": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 30.505387625002186
+        },
+        "healthbench_professional": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 0.0,
+          "mean_duration_s": 25.855519083001127
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 6,
+        "datasets": [
+          "aime",
+          "alfworld",
+          "healthbench_professional",
+          "hotpotqa",
+          "nq_open",
+          "webshop"
+        ],
+        "examples_planned": 6,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": true,
+      "verifier_counts": {
+        "alfworld_environment": 1,
+        "unscored": 4,
+        "webshop_environment": 1
+      },
+      "submission_method_counts": {
+        "none": 6
+      },
+      "observed_task_count": 6,
+      "observed_task_set_sha256": "2e82853379e78b1ce09dbbef345a0ecdf6cfaf5c3f3d60fd4a6e5a1fb0c95892",
+      "evidence_sha256": {
+        "aggregate_summary.json": "d6cc28dcbf32c8ad602d32a5869f966c88db485d5d1dbfe5e8b34304db4d3d91",
+        "summary.json": "1bd23d71889cb73e6f499dd03d48ff439b7f61dc3036f4e88b1cc0a0c3fa3f43",
+        "run_manifest.json": "b816dae1e33b10deb84d87f5d0c3f49b6c2ca878cc18fb8985e3439d849cabab"
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-smoke-v3",
+      "status": "complete",
+      "counts": {
+        "planned": 6,
+        "completed": 6,
+        "failed": 0,
+        "workers": 6,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "hotpotqa": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 974.0,
+          "mean_duration_s": 34.69406085499941
+        },
+        "webshop": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 19905.0,
+          "mean_duration_s": 97.71202177700616
+        },
+        "alfworld": {
+          "examples": 1,
+          "mean_score": 1.0,
+          "pass_rate": 1.0,
+          "mean_token_cost": 32941.0,
+          "mean_duration_s": 196.2533557190036
+        },
+        "aime": {
+          "examples": 1,
+          "mean_score": 1.0,
+          "pass_rate": 1.0,
+          "mean_token_cost": 6530.0,
+          "mean_duration_s": 67.0934407310051
+        },
+        "nq_open": {
+          "examples": 1,
+          "mean_score": 0.0,
+          "pass_rate": 0.0,
+          "mean_token_cost": 1020.0,
+          "mean_duration_s": 45.581764019996626
+        },
+        "healthbench_professional": {
+          "examples": 1,
+          "mean_score": 0.045540599999999994,
+          "pass_rate": 0.0,
+          "mean_token_cost": 4724.0,
+          "mean_duration_s": 126.60166001800098
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 6,
+        "datasets": [
+          "aime",
+          "alfworld",
+          "healthbench_professional",
+          "hotpotqa",
+          "nq_open",
+          "webshop"
+        ],
+        "examples_planned": 6,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": true,
+      "verifier_counts": {
+        "alfworld_environment": 1,
+        "healthbench_rubric": 1,
+        "multi_answer_exact_match": 2,
+        "numeric": 1,
+        "webshop_environment": 1
+      },
+      "submission_method_counts": {
+        "aime_strict_submission_v1": 1,
+        "legacy_passthrough": 5
+      },
+      "observed_task_count": 6,
+      "observed_task_set_sha256": "2e82853379e78b1ce09dbbef345a0ecdf6cfaf5c3f3d60fd4a6e5a1fb0c95892",
+      "evidence_sha256": {
+        "aggregate_summary.json": "c84c3314e5b1eb812cc451d216509947db5e72d62d73a9378643cbc488b4e1b4",
+        "summary.json": "52f0ed1cae903703b689a6d12103520d19c0aff4465c29d23ff0889460da19ce",
+        "run_manifest.json": "8409d1135ea8e16207bc28e28e691cbd166a3d243e588b6113197a8c8baeab8c"
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-webshop-fixed-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.37330729166666665,
+          "pass_rate": 0.1796875,
+          "mean_token_cost": 48522.1796875,
+          "mean_duration_s": 464.8875128673749
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": true,
+      "verifier_counts": {
+        "unscored": 28,
+        "webshop_environment": 100
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "6c5be9b345d3659c97f9aa78b28a73b238600467b0d2dd83d26a190ff1f5b505",
+        "summary.json": "7a0521779dbb963b424fc613e3da0540189e9a2498ebc8c170204d7232d000f6",
+        "run_manifest.json": "7f9da940372b6dbb31aa65723a3a075785d3c3404ee7b1c0e7d94097cbb55816"
+      }
+    },
+    {
+      "run": "state/sota-20260916/qwen35-9b-director-webshop-no-skill-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.41966145833333324,
+          "pass_rate": 0.1953125,
+          "mean_token_cost": 62599.7265625,
+          "mean_duration_s": 283.8048469995312
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 9,
+        "webshop_environment": 119
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "950d0807dd896381fee838de0da1a5bccb1d7a0a70ecaf818784354d2aaf29e3",
+        "summary.json": "7388d3e804b87ad0f673c4c25c8c9d1fbddff3afdf7a09cac1be77176c63cddc",
+        "run_manifest.json": "e70c74a2fd9a2b9fdee5d65c8e436d14e2ac27867533ca4b49c335675aab58e1"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-closure-ablation-deepseek-v1/best_so_far",
+      "status": "complete",
+      "counts": {
+        "planned": 30,
+        "completed": 30,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 30,
+          "mean_score": 0.27466666666666667,
+          "pass_rate": 0.06666666666666667,
+          "mean_token_cost": 113917.8,
+          "mean_duration_s": 86.14521125360042
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 30,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 30
+      },
+      "submission_method_counts": {
+        "passthrough": 30
+      },
+      "observed_task_count": 30,
+      "observed_task_set_sha256": "6bf6e88d70afd11ae74177f0727d85f990e55fe6fed1f6c836152f9de10fadb3",
+      "evidence_sha256": {
+        "aggregate_summary.json": "4d08dd4203e7f93571b168391cb350b5b31ab5c986e4e9e8822a7becadc8e4a1",
+        "summary.json": "b3641c21b2187886d97f048e7aef15da6793536e1f692ebe5b6cdab20c1bd577",
+        "run_manifest.json": "8d130c02d17ee4c5c1de2f5b61dd6432fee33cdc6359f10118fc3a4849877324"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-closure-ablation-deepseek-v1/original",
+      "status": "complete",
+      "counts": {
+        "planned": 30,
+        "completed": 30,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 30,
+          "mean_score": 0.012777777777777777,
+          "pass_rate": 0.0,
+          "mean_token_cost": 118552.1,
+          "mean_duration_s": 105.92629881659984
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 30,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 3,
+        "webshop_environment": 27
+      },
+      "submission_method_counts": {
+        "passthrough": 30
+      },
+      "observed_task_count": 30,
+      "observed_task_set_sha256": "6bf6e88d70afd11ae74177f0727d85f990e55fe6fed1f6c836152f9de10fadb3",
+      "evidence_sha256": {
+        "aggregate_summary.json": "a2905bc75f88d14d05336556030fc4f0043e7bae76448e3794d2b8b25b401a51",
+        "summary.json": "81524c2682defe7ce484d87d36970c98cb49174158abb513aad1ec5e2fb6d31b",
+        "run_manifest.json": "8d130c02d17ee4c5c1de2f5b61dd6432fee33cdc6359f10118fc3a4849877324"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-closure-ablation-deepseek-v1/removed",
+      "status": "complete",
+      "counts": {
+        "planned": 30,
+        "completed": 30,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 30,
+          "mean_score": 0.05555555555555555,
+          "pass_rate": 0.03333333333333333,
+          "mean_token_cost": 107404.56666666667,
+          "mean_duration_s": 114.82695738503269
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 30,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 6,
+        "webshop_environment": 24
+      },
+      "submission_method_counts": {
+        "passthrough": 30
+      },
+      "observed_task_count": 30,
+      "observed_task_set_sha256": "6bf6e88d70afd11ae74177f0727d85f990e55fe6fed1f6c836152f9de10fadb3",
+      "evidence_sha256": {
+        "aggregate_summary.json": "2ffa4e37a98b73be13130723f6dc1b436a7a6276ee585bb8de70549953eb927e",
+        "summary.json": "247943ac7e2a0be0e9b1676e19e6189713d13684624ad131c0bbcfb79a9ca49f",
+        "run_manifest.json": "8d130c02d17ee4c5c1de2f5b61dd6432fee33cdc6359f10118fc3a4849877324"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-closure-ablation-v1/original",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 30,
+        "worker_logical_routes": [
+          "gpt",
+          "grok",
+          "gemini",
+          "deepseek",
+          "minimax"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 17
+      },
+      "submission_method_counts": {
+        "passthrough": 17
+      },
+      "observed_task_count": 17,
+      "observed_task_set_sha256": "210f31a5a9c48d77a105084e0cd0e5a7b6dc582ccf6e3925868537201ddb2329",
+      "evidence_sha256": {
+        "run_manifest.json": "0e4182c2426de60ca92560602731fa9ae23caaf0a4abfaf99b9b0d05c479e0c8"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-full-index-deepseek-no-skill-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 128,
+        "completed": 128,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 128,
+          "mean_score": 0.6335677083333333,
+          "pass_rate": 0.4140625,
+          "mean_token_cost": 61116.28125,
+          "mean_duration_s": 56.60573771607818
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 128,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 4,
+        "webshop_environment": 124
+      },
+      "submission_method_counts": {
+        "passthrough": 128
+      },
+      "observed_task_count": 128,
+      "observed_task_set_sha256": "10fa21d19a90424a5aa70ec505ee2ae399e5d64aa146956bed777d7f813862e1",
+      "evidence_sha256": {
+        "aggregate_summary.json": "364316787810b65c85090c381c2d694e13748c534583c237c296e4023a070916",
+        "summary.json": "f75d19044c305275acd474f4ab2550f32a766cdc6e519f2d3c2845da5496778f",
+        "run_manifest.json": "8e37427455999c92ccdc9eb602629176f0a19865d22cc73f89f9a5f63bc492ba"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-option-fixes-deepseek-no-skill-retry-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 20,
+        "completed": 20,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 20,
+          "mean_score": 0.6725,
+          "pass_rate": 0.35,
+          "mean_token_cost": 62793.7,
+          "mean_duration_s": 68.97650007534976
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 20,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 1,
+        "webshop_environment": 19
+      },
+      "submission_method_counts": {
+        "passthrough": 20
+      },
+      "observed_task_count": 20,
+      "observed_task_set_sha256": "559965bc8dcfade92832495bb4c47d44d97d505074c4ed4ece87c90b7e0f1425",
+      "evidence_sha256": {
+        "aggregate_summary.json": "35e2c3733db621077917760186e37ba878c765217e0f410fb700446787916e20",
+        "summary.json": "3376516cf21881f82d5268634595784dae83e9fd091161de4c987a39c479d0c6",
+        "run_manifest.json": "088f7aec7311dbbd93e829673d3ec0d3983c63cedf95f091ca8294c1660d9628"
+      }
+    },
+    {
+      "run": "state/sota-20260916/webshop-option-fixes-deepseek-no-skill-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 21,
+        "completed": 21,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 21,
+          "mean_score": 0.047619047619047616,
+          "pass_rate": 0.047619047619047616,
+          "mean_token_cost": 6828.333333333333,
+          "mean_duration_s": 66.71482742395199
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 21,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "unscored": 20,
+        "webshop_environment": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 21
+      },
+      "observed_task_count": 21,
+      "observed_task_set_sha256": "c4e6949ec8bd7e8fc4e9c2716f910c10a8bbd92471da6f44a7f20482a49d3049",
+      "evidence_sha256": {
+        "aggregate_summary.json": "a744a264605519dbd6a708e0fcf421bdd5882bb46c874e49ab335224548d1207",
+        "summary.json": "f8a3ba432b9ab161406530b856db5eafce046295df355214c436f876ee1c7aa5",
+        "run_manifest.json": "a361f7eae377555c602aff94232895e3fec60d5ba686b5875feb22cc5befee6d"
+      }
+    },
+    {
+      "run": "state/sota-20260917/webshop-alfworld-gpt-nexus-no-skill-v1",
+      "status": "manifest_only",
+      "counts": {},
+      "metrics": {},
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "alfworld",
+          "webshop"
+        ],
+        "examples_planned": 256,
+        "worker_logical_routes": [
+          "gpt"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "alfworld_environment": 19
+      },
+      "submission_method_counts": {
+        "passthrough": 19
+      },
+      "observed_task_count": 19,
+      "observed_task_set_sha256": "c17ad6e8544b4a7c2c8e20b0a17d06a7d4c028a1821cd472a8924e12f32c2d64",
+      "evidence_sha256": {
+        "run_manifest.json": "a07de5651f8241fb9c85e16b16bcfa7505ba1d2a88cddccbc273b9d3aebcebbd"
+      }
+    },
+    {
+      "run": "state/sota-20260917/webshop-budget-aware-deepseek-no-skill-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 27,
+        "completed": 27,
+        "failed": 0,
+        "workers": 24,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 27,
+          "mean_score": 0.43549382716049373,
+          "pass_rate": 0.0,
+          "mean_token_cost": 48396.96296296296,
+          "mean_duration_s": 61.1368809696295
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 24,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 27,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 27
+      },
+      "submission_method_counts": {
+        "passthrough": 27
+      },
+      "observed_task_count": 27,
+      "observed_task_set_sha256": "ad3756e3ea8a5316634c697f765ae309691b7a9f4936fc6d58507d48aeb257e9",
+      "evidence_sha256": {
+        "aggregate_summary.json": "13ee29b507b1bf1ddfccd0abc8390695044debf27655704eb40cfc6e13d60301",
+        "summary.json": "0ab4ed7e3d6c4537210678839f4e6149c214e9961486a50af567f34b6fbd0269",
+        "run_manifest.json": "81ba247b784e1047557395582099e674fb9b8deacbf11491c6d91ed6bbde32fe"
+      }
+    },
+    {
+      "run": "state/sota-20260917/webshop-price-range-deepseek-goal234-v1",
+      "status": "complete",
+      "counts": {
+        "planned": 1,
+        "completed": 1,
+        "failed": 0,
+        "workers": 1,
+        "parameter_updates": 0
+      },
+      "metrics": {
+        "webshop": {
+          "examples": 1,
+          "mean_score": 0.5,
+          "pass_rate": 0.0,
+          "mean_token_cost": 67866.0,
+          "mean_duration_s": 72.87559046100068
+        }
+      },
+      "settings": {
+        "evaluation_only": true,
+        "parameter_updates": 0,
+        "director_model": "Qwen3.5-9B",
+        "director_thinking": false,
+        "deepseek_thinking": false,
+        "minimax_thinking": false,
+        "workers": 1,
+        "datasets": [
+          "webshop"
+        ],
+        "examples_planned": 1,
+        "worker_logical_routes": [
+          "deepseek"
+        ],
+        "dataset_token_limits": {
+          "aime": 65536,
+          "nq_open": 65536,
+          "hotpotqa": 65536,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 65536,
+          "swe_bench": 350000
+        },
+        "swe_enabled": false
+      },
+      "director_skill_enabled": false,
+      "verifier_counts": {
+        "webshop_environment": 1
+      },
+      "submission_method_counts": {
+        "passthrough": 1
+      },
+      "observed_task_count": 1,
+      "observed_task_set_sha256": "4d2d2861002bb93e9875b391f8f308f5d418c7e08bc8a7c23be31f3765f543b0",
+      "evidence_sha256": {
+        "aggregate_summary.json": "913a518af27b317363342f5bf8ad78be9325007bcfb065916a84a93d4bee2b1e",
+        "summary.json": "e351be206723c521498209f379fd8a178d7fe27612c00bed66f078edf90c7679",
+        "run_manifest.json": "c6a2ff82b9ad1c590747bf5145fc52c32061b50f151dcefd32549e070ea6f8de"
+      }
+    }
+  ]
+}

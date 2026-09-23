@@ -18,11 +18,16 @@ scripts/formal/run_experiment.sh
 DeepSeek、MiniMax、Search-R1 检索、WebShop sidecar、ALFWorld，以及远程 SWE verifier。
 正式启动还要求新鲜的 `state/formal-training/route_report.json`；报告超过 1,800 秒会被拒绝。
 
+WebShop 正式页面模式为 `legacy`。选定的无 skill 基线是 2026-09-18 的
+62/128 严格成功（48.4375%）运行；专用配置、启动入口及 58/128 历史版本归档见
+[WebShop 正式基线](WEBSHOP_BASELINE.zh-CN.md)。通用训练的 Worker 路由与 skill
+开关独立于这项基线选择，不能将基线成绩直接归给其它模型或训练配置。
+
 本工作区当前已恢复的私密配置状态如下（只记录状态，不在文档中复制密钥正文）：
 
 - 根目录 `.env` 已存在且权限为 `0600`，路由 key、数据解密 key、W&B 变量和 CVM 变量均已设置。
 - `state/formal-training/private/swe/identity`、`known_hosts`、`verifier-registry.json` 均已存在且权限为 `0600`。
-- `state/formal-training/route_report.json` 已由当前 `.env` 对 11 个配置路由执行认证 `/models` 探测后生成。
+- 现有 `state/formal-training/route_report.json` 覆盖原有候选路由；加入 `gpt_student` 后，正式运行前需在目标网络重新探测并生成覆盖 12 个候选路由的报告。
 
 如需查看或替换真实值，直接编辑 `.env`；不要把密钥复制到 TOML 或普通公共文档。现有私密
 配置备忘位于 `docs/PRIVATE_CONFIG.local.md`，其内容同样只能留在受控本机环境。
@@ -70,14 +75,17 @@ git check-ignore -q .env && echo '.env is ignored'
 
 ## 3. 路由、模型和密钥变量
 
-以下表格与 `configs/formal_training.toml` 一致。`gpt`/`gpt_eco` 是正式 Worker 池，
-`gpt_judge`/`gpt_judge_eco` 是 HealthBench Judge 池；`skill_refiner` 仅用于周期之间的
-Skill Distiller，不属于 Worker 选择池。
+以下表格与 `configs/formal_training.toml` 一致。`gpt` 池包含 `gpt`、`gpt_eco` 和
+`gpt_student`；HealthBench 的 Worker 路由覆盖会把 Director 选择的 `gpt` 定向到
+`gpt_student`，而其它选择保持原路由。HealthBench Judge 也固定使用 `gpt_student`；
+`gpt_judge`/`gpt_judge_eco` 保留为兼容配置但不参与本正式训练。`skill_refiner` 仅用于
+周期之间的 Skill Distiller，不属于 Worker 选择池。
 
 | 逻辑路由 | Endpoint | served model | `.env` 变量 | 并发 |
 |---|---|---|---|---:|
 | `gpt` | `https://nexus.itssx.com/api/codex/codex/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 10 |
 | `gpt_eco` | `https://nexus.itssx.com/api/codex_eco/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 10 |
+| `gpt_student` | `https://flowsteer.org:2087/v1` | `lab-gpt-5.5-2` | `~/.config/student-api/flowsteer.key` | 5 |
 | `gpt_judge` | `https://nexus.itssx.com/api/codex/codex/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 16 |
 | `gpt_judge_eco` | `https://nexus.itssx.com/api/codex_eco/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 16 |
 | `skill_refiner` | `https://nexus.itssx.com/api/codex/codex_pro/v1` | `gpt-6-astra` | `NEXUS_PRO_API_KEY` | 20 |
@@ -88,7 +96,9 @@ Skill Distiller，不属于 Worker 选择池。
 | `deepseek` | `https://api.deepseek.com/v1` | `deepseek-flash` | `DEEPSEEK_API_KEY` | 20 |
 | `minimax` | `https://api.minimaxi.com/v1` | `MiniMax-M2.7` | `MINIMAX_API_KEY` | 30 |
 
-当前 `runtime_routing.worker_routes = ["gpt"]`，池为 `gpt,gpt_eco`；正式脚本用
+当前 `runtime_routing.worker_routes = ["gpt"]`，池为 `gpt,gpt_eco,gpt_student`；三者共用同一套
+排队、健康冷却、重试和轮换机制，但 HealthBench 的 `gpt` 选择会按
+`runtime_routing.dataset_route_overrides` 固定走 `gpt_student`。正式脚本用
 `--minimum-selected-routes 1`，因此至少要有一个 Worker 池成员可用，但 route report 仍须
 覆盖所有配置候选路由和池成员。HealthBench 启用时还必须成功探测 Judge 路由。
 

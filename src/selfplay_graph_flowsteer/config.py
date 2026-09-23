@@ -112,6 +112,8 @@ class CanvasConfig:
             "swe_bench": 120.0,
         }
     )
+    # Includes WebShop serialized-request estimates and closure token reservations.
+    # False retains post-execution actual-usage checks and environment action limits.
     remaining_token_admission_enabled: bool = True
     worker_token_quantile: float = 0.95
     worker_token_window: int = 64

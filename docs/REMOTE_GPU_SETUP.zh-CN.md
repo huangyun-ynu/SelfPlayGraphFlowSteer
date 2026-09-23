@@ -67,9 +67,10 @@ ALFWorld、SWE、按数据集图复验流水线、Proposer/Solver 并行训练�
   `gpt` 与 `gpt_eco`，两者共用 `NEXUS_API_KEY`。
 - 每个池成员最多等待本地并发槽位 0.5 秒；槽位仍满时立即切换另一个成员，
   该队列超时不计入持久路由熔断。
-- WebShop 正式配置使用 `search_observation_mode = "retain_page_text"`、
-  `max_observation_chars = 0`，即保留完整页面文本；`.alfworld_webshop_gpu4.toml`
-  是兼容旧协议的 legacy 配置，使用前要明确选择它。
+- WebShop 正式配置使用 `search_observation_mode = "legacy"`、
+  `max_observation_chars = 0`；专用无 skill 评测使用 `configs/webshop_official_eval.toml`。
+  该版本采用 62/128 严格成功的历史基线；58/128 的 `retain_page_text` 设置已归档，
+  版本来源与运行方式见 [WebShop 正式基线](WEBSHOP_BASELINE.zh-CN.md)。
 - NQ-open 使用配置中的 Search-R1 检索服务；HotpotQA 直接使用数据集上下文。
   NQ-open 启动前必须验证 Wiki-18 语料、E5/FAISS 索引和服务身份。
 - Qwen3.5 Director 推理评测若遇到 reasoning 通道有内容但 action 通道为空，

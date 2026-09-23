@@ -34,6 +34,7 @@ class CommitActivation(StrEnum):
     NONE = "none"
     EXECUTE_ON_OUTPUT = "execute_on_output"
     COMMIT_PENDING_ON_OUTPUT = "commit_pending_on_output"
+    COMMIT_PENDING_ON_FINISH = "commit_pending_on_finish"
     EXPORT_LATEST_ARTIFACT = "export_latest_artifact"
 
 
@@ -158,7 +159,9 @@ class DatasetActionRegistry:
         dataset = str(task.metadata.get("dataset", "")).strip().casefold()
         # Frozen-context NQ keeps the canonical dataset name (so metrics and
         # budgets remain comparable) but deliberately has no runtime search.
-        if dataset == "nq_open" and str(task.metadata.get("evidence_mode", "")).strip().casefold() in {
+        if dataset == "nq_open" and str(
+            task.metadata.get("evidence_mode", "")
+        ).strip().casefold() in {
             "provided_context",
             "frozen_retrieval",
             "provided_context_inline",
@@ -180,6 +183,7 @@ def default_dataset_action_registry(
     retrieval_initial_budget: int = 3,
     webshop_budgets: tuple[int, int, int] = (12, 4, 16),
     webshop_staged_commit: bool = True,
+    webshop_commit_on_finish: bool = False,
     alfworld_budgets: tuple[int, int, int] = (50, 50, 100),
     swe_budgets: tuple[int, int, int] = (28, 12, 40),
 ) -> DatasetActionRegistry:
@@ -269,7 +273,9 @@ def default_dataset_action_registry(
                 action_execution=ActionExecution.SEQUENTIAL,
                 commit_policy=CommitPolicy.SINGLE_COMMITTER,
                 commit_activation=(
-                    CommitActivation.COMMIT_PENDING_ON_OUTPUT
+                    CommitActivation.COMMIT_PENDING_ON_FINISH
+                    if webshop_commit_on_finish
+                    else CommitActivation.COMMIT_PENDING_ON_OUTPUT
                     if webshop_staged_commit
                     else CommitActivation.EXECUTE_ON_OUTPUT
                 ),
