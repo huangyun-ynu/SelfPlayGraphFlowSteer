@@ -5,16 +5,18 @@ base_url = "http://127.0.0.1:18601/v1"
 api_key = "EMPTY"
 served_model = "Qwen3.5-9B"
 base_model_path = "models/Qwen3.5-9B"
-checkpoint_path = "state/formal-training/checkpoints/proposer"
+checkpoint_path = "state/formal-training-output-contract-v2/checkpoints/proposer"
 trainable = true
+enable_thinking = true
 
 [models.solver]
 base_url = "http://127.0.0.1:18602/v1"
 api_key = "EMPTY"
 served_model = "Qwen3.5-9B"
 base_model_path = "models/Qwen3.5-9B"
-checkpoint_path = "state/formal-training/checkpoints/solver"
+checkpoint_path = "state/formal-training-output-contract-v2/checkpoints/solver"
 trainable = true
+enable_thinking = true
 
 [runtime]
 name = "default"
@@ -29,22 +31,24 @@ network_path = "direct"
 request_profile = "qwen"
 
 [runtime_routing]
-# Use the two existing Codex endpoints; judge aliases share the same pool.
-worker_routes = ["gpt"]
+health_state_path = "state/formal-training-output-contract-v2/runtime_state/route_health.json"
+# Director selects each Worker model; equivalent endpoints are pooled below.
+worker_routes = ["gpt", "grok", "gemini", "deepseek", "minimax"]
 skill_distiller = "skill_refiner"
 health_cooldown_s = 600.0
 pool_retry_attempts = 2
 pool_retry_backoff_s = 1.0
 pool_member_queue_wait_s = 0.5
 
+# Dataset candidates: the Director selects each Worker model; no fixed-route remapping.
+[runtime_routing.dataset_worker_routes]
+webshop = ["gpt", "grok", "gemini", "deepseek", "minimax"]
+
 [runtime_routing.endpoint_pools]
 gpt = ["gpt", "gpt_eco", "gpt_student"]
+grok = ["grok", "grok45"]
+gemini = ["gemini", "gemini2"]
 gpt_judge = ["gpt_judge", "gpt_judge_eco"]
-
-# HealthBench uses the student gateway whenever the Director selects the GPT
-# Worker route. Other selected routes, and all other datasets, are unchanged.
-[runtime_routing.dataset_route_overrides.healthbench_professional]
-gpt = "gpt_student"
 
 [canvas]
 # Predictive admission protection is disabled; hard token and wall-clock limits remain.
@@ -55,17 +59,17 @@ max_rounds = 24
 relay_max_chars = 1000
 
 [canvas.max_total_tokens_by_dataset]
-aime = 65536
-nq_open = 65536
-hotpotqa = 65536
+aime = 240000
+nq_open = 240000
+hotpotqa = 240000
 webshop = 350000
 alfworld = 350000
-healthbench_professional = 65536
+healthbench_professional = 240000
 swe_bench = 350000
 
 [solver_skillbank]
-path = "state/formal-training/runtime_state/director_skillbank.v2.json"
-cases_path = "state/formal-training/runtime_state/director_skill_cases.json"
+path = "state/formal-training-output-contract-v2/runtime_state/director_skillbank.v2.json"
+cases_path = "state/formal-training-output-contract-v2/runtime_state/director_skill_cases.json"
 usage = "training_only"
 prompt_token_budget = 1024
 retrieve_top_k = 3
@@ -91,17 +95,14 @@ max_policy_lag = 1
 max_review_input_tokens = 20480
 
 [trace]
-path = "state/formal-training/runtime_state/traces.jsonl"
+path = "state/formal-training-output-contract-v2/runtime_state/traces.jsonl"
 
 [verifier]
 mode = "auto"
 
 [answer_submission]
 enabled = true
-qa_model_enabled = true
-runtime_route = "gpt"
-max_tokens = 128
-require_source_span = true
+# The output Agent owns the answer; retain deterministic extraction only.
 
 # Pure-local Python execution support for AIME Workers.
 [aime_actions]
@@ -114,15 +115,20 @@ max_initial_calls = 3
 max_revision_calls = 1
 max_total_calls = 4
 
-# Pinned Search-R1 Wiki-18 E5/FAISS service used by NQ-open.
-# HotpotQA follows FlowSteer: its dataset-provided distractor context is used directly.
-# The launcher validates the backend identity before admitting formal runs.
+# NQ reads eight frozen passages embedded in each sample; HotpotQA reads Evidence.
+# Neither dataset uses online search in the formal provided-context setup.
+# Historical retrieval-enabled controls keep their own configuration.
 [retrieval]
-enabled = true
+enabled = false
 service_url = "http://127.0.0.1:18010/retrieve"
 top_k = 5
 timeout_s = 240.0
 max_tool_rounds = 3
+hotpotqa_search_enabled = false
+nq_frozen_top_k = 8
+
+[director]
+prompt_variant = "v2.2"
 
 # The formal launcher owns the pinned official WebShop sidecar on port 18020.
 [webshop]
@@ -137,8 +143,15 @@ max_total_calls = 16
 staged_commit_enabled = true
 max_pending_sessions = 8
 pending_ttl_s = 900.0
-# Promoted baseline: 62/128 strict successes; see docs/WEBSHOP_BASELINE.zh-CN.md.
+# M02: merged guidance + identity fix; 62/128, mean score 73.5221.
 search_observation_mode = "legacy"
+
+compatibility_profile = "m02_merged_identity_v1"
+worker_guidance_policy = "merged_checklist_v1"
+worker_memory_policy = "factual_memory_v1"
+worker_execution_policy = "graph_tools_v1"
+native_conversation_history = false
+env_feedback_enabled = false
 
 # Local assets are present; the formal environment installs the alfworld extra.
 [alfworld]
@@ -156,16 +169,16 @@ worker_guidance_policy = "factual_memory_v1"
 # pinned dataset revision are provisioned for the formal run.
 [swe]
 enabled = true
-repo_cache_root = "state/formal-training/swe/repo-cache"
-workspace_root = "state/formal-training/swe/workspaces"
-artifact_store_root = "state/formal-training/private/swe/artifacts"
-verifier_registry_path = "state/formal-training/private/swe/verifier-registry.json"
-lifecycle_log_path = "state/formal-training/private/swe/lifecycle.jsonl"
-verifier_log_path = "state/formal-training/private/swe/verifier-client.jsonl"
+repo_cache_root = "state/formal-training-output-contract-v2/swe/repo-cache"
+workspace_root = "state/formal-training-output-contract-v2/swe/workspaces"
+artifact_store_root = "state/formal-training-output-contract-v2/private/swe/artifacts"
+verifier_registry_path = "state/formal-training-output-contract-v2/private/swe/verifier-registry.json"
+lifecycle_log_path = "state/formal-training-output-contract-v2/private/swe/lifecycle.jsonl"
+verifier_log_path = "state/formal-training-output-contract-v2/private/swe/verifier-client.jsonl"
 verifier_host = "43.134.20.27"
 verifier_user = "sweeval"
-verifier_identity_file = "state/formal-training/private/swe/identity"
-verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
+verifier_identity_file = "state/formal-training-output-contract-v2/private/swe/identity"
+verifier_known_hosts_file = "state/formal-training-output-contract-v2/private/swe/known_hosts"
 # Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
 # TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
 cvm_auto_start = false
@@ -179,8 +192,12 @@ cvm_timeout_s = 600.0
 cvm_poll_s = 5.0
 dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
 local_test_timeout_s = 60.0
+# Enables built-in public_tests and public_smoke; fixed argv profiles remain below.
+public_test_environment_root = "state/swe/public-test-envs"
+public_test_setup_timeout_s = 600.0
 max_output_chars = 12000
 max_file_chars = 200000
+max_file_bytes = 10485760
 max_patch_bytes = 2000000
 max_initial_calls = 20
 max_revision_calls = 12
@@ -191,7 +208,7 @@ duplicate_responsibility_policy = "record_only"
 python_syntax = ["python", "-m", "py_compile"]
 
 [healthbench_judge_audit]
-path = "state/formal-training/private/healthbench_judge"
+path = "state/formal-training-output-contract-v2/private/healthbench_judge"
 runtime_route = "gpt_student"
 expected_model = "gpt-5.5"
 
@@ -249,7 +266,7 @@ frozen = true
 # queue, health cooldown, retry, and round-robin endpoint selection logic.
 [runtimes.gpt_student]
 base_url = "https://flowsteer.org:2087/v1"
-api_key_file = "~/.config/student-api/flowsteer.key"
+api_key_env = "FLOWSTEER_API_KEY"
 served_model = "lab-gpt-5.5-2"
 request_profile = "responses_text"
 api_surface = "responses"

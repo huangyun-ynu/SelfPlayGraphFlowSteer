@@ -9,6 +9,8 @@ if [[ -d "$SPGFS_CUDA_COMPAT_ROOT" ]]; then
 fi
 
 export SPGFS_ALLOWED_PHYSICAL_GPUS="${SPGFS_ALLOWED_PHYSICAL_GPUS:-1}"
+# Preserve sampled Director thinking/action prefixes; Canvas audit data stays offline.
+export SPGFS_DIRECTOR_CONTEXT_MODE="${SPGFS_DIRECTOR_CONTEXT_MODE:-append_only}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-$SPGFS_ALLOWED_PHYSICAL_GPUS}"
 export OMP_NUM_THREADS=4
 export MKL_NUM_THREADS=4
@@ -24,7 +26,16 @@ export TORCHINDUCTOR_CACHE_DIR="${TORCHINDUCTOR_CACHE_DIR:-$ROOT/.cache/torchind
 export CUDA_CACHE_PATH="${CUDA_CACHE_PATH:-$ROOT/.cache/cuda}"
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
-export SPGFS_VENV="${SPGFS_VENV:-$ROOT/../.venvs/spgfs-pats-gpu}"
+if [[ -z "${SPGFS_VENV:-}" ]]; then
+  # Preserve the shared training environment when installed; this pod uses .venv.
+  if [[ -x "$ROOT/../.venvs/spgfs-pats-gpu/bin/python" ]]; then
+    export SPGFS_VENV="$ROOT/../.venvs/spgfs-pats-gpu"
+  elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+    export SPGFS_VENV="$ROOT/.venv"
+  else
+    export SPGFS_VENV="$ROOT/../.venvs/spgfs-pats-gpu"
+  fi
+fi
 export PATH="$SPGFS_VENV/bin:$PATH"
 export SPGFS_FORMAL_TASK_POOL="${SPGFS_FORMAL_TASK_POOL:-$ROOT/state/formal-data/validated_task_pool.jsonl}"
 export SPGFS_RETRIEVAL_INDEX="${SPGFS_RETRIEVAL_INDEX:-$ROOT/state/formal-data/retrieval/nq_open_wikipedia.sqlite3}"

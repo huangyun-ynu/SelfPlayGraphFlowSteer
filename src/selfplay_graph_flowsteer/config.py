@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 DEFAULT_DATASET_MAX_TOTAL_TOKENS = {
-    "aime": 65_536,
-    "nq_open": 65_536,
-    "hotpotqa": 65_536,
+    "aime": 240_000,
+    "nq_open": 240_000,
+    "hotpotqa": 240_000,
     "webshop": 350_000,
     "alfworld": 350_000,
-    "healthbench_professional": 65_536,
+    "healthbench_professional": 240_000,
     "swe_bench": 350_000,
 }
 
@@ -89,8 +89,18 @@ class ModelGatewayConfig:
 
 @dataclass
 class CanvasConfig:
+    # Historical traces keep legacy semantics; new runs explicitly select v1.
+    submission_protocol: str = "legacy"
+    submission_journal_dir: str = "state/submissions"
+    max_recovery_executions: int = 2
+    action_budget_policy: str = "phase_split_v1"
     max_agents: int = 8
     max_rounds: int = 20
+    director_budget_policy: str = "rounds_v1"
+    # Successful graph mutations, including initial construction. None adds no
+    # separate cap; invalid/no-op decisions still consume max_rounds.
+    max_director_edits: int | None = None
+    max_director_edits_by_dataset: dict[str, int] = field(default_factory=dict)
     max_total_tokens: int = 32_768
     max_total_tokens_by_dataset: dict[str, int] = field(
         default_factory=lambda: dict(DEFAULT_DATASET_MAX_TOTAL_TOKENS)
@@ -115,6 +125,7 @@ class CanvasConfig:
     # Includes WebShop serialized-request estimates and closure token reservations.
     # False retains post-execution actual-usage checks and environment action limits.
     remaining_token_admission_enabled: bool = True
+    native_webshop_output_materialization: bool = False
     worker_token_quantile: float = 0.95
     worker_token_window: int = 64
     worker_token_min_samples: int = 3
@@ -126,6 +137,29 @@ class CanvasConfig:
     structural_exploration_policy: str = "off"
     bidirectional_revision_policy: str = "always"
     bidirectional_revision_confidence_threshold: float = 0.8
+
+    def __post_init__(self) -> None:
+        if self.submission_protocol not in {"legacy", "unified_task_result_v1"}:
+            raise ValueError("unsupported submission_protocol")
+        if self.max_recovery_executions < 0:
+            raise ValueError("max_recovery_executions must be non-negative")
+        if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
+            raise ValueError("unknown canvas.action_budget_policy")
+        limits = [*self.max_director_edits_by_dataset.values()]
+        if self.max_director_edits is not None:
+            limits.append(self.max_director_edits)
+        if any(type(value) is not int or value < 0 for value in limits):
+            raise ValueError("Director edit limits must be non-negative integers")
+        if self.director_budget_policy not in {"rounds_v1", "edits_v1"}:
+            raise ValueError("unknown Director budget policy")
+        if self.director_budget_policy == "edits_v1" and (
+                self.submission_protocol != "unified_task_result_v1" or self.max_director_edits is None):
+            raise ValueError("edits_v1 requires unified submission and a finite default edit limit")
+
+    def director_edit_limit(self, dataset: object) -> int | None:
+        overrides = {canonical_dataset_name(key): value
+                     for key, value in self.max_director_edits_by_dataset.items()}
+        return overrides.get(canonical_dataset_name(dataset), self.max_director_edits)
 
     def token_budget_for_dataset(self, dataset: object) -> tuple[str, int]:
         dataset_key = canonical_dataset_name(dataset)

@@ -12,6 +12,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from .config import canonical_dataset_name
 from .features import GraphFeatures, execution_policy_features_many, graph_kernel_matrix
 from .graph import MultiAgentGraph
 from .graph_learning import build_graph_training_batch
@@ -190,6 +191,29 @@ class QwenTaskProposer:
         )
 
 
+def _selection_prompt_preview(
+    prompt: str, metadata: dict[str, Any], *, dataset: str, max_chars: int
+) -> str:
+    """Keep the public question visible when evidence precedes it."""
+    if canonical_dataset_name(dataset) == "hotpotqa" and prompt.startswith(
+        "Based on the following passages, answer the question."
+    ):
+        context, separator, question = prompt.rpartition("\nQuestion:")
+        if separator and question.strip():
+            # FlowSteer places the question after all passages. Reorder only
+            # this selector view; the immutable Solver task keeps full context.
+            context = context.partition("\n")[2].strip()
+            prompt = f"Question: {question.strip()}\n\nContext preview:\n{context}"
+    question = metadata.get("original_question")
+    if (
+        canonical_dataset_name(dataset) == "nq_open"
+        and isinstance(question, str)
+        and question.strip()
+    ):
+        prompt = question.strip()
+    return prompt[:max_chars]
+
+
 class FixedPoolQwenProposer:
     """Trainable Qwen selector constrained to ADS+TSDS fixed-pool candidates."""
 
@@ -273,7 +297,12 @@ class FixedPoolQwenProposer:
                 "candidate_id": pool_id,
                 "dataset": self.pool.tasks[pool_id].dataset,
                 "task_type": self.pool.tasks[pool_id].task.task_type,
-                "prompt_preview": self.pool.tasks[pool_id].task.prompt[: self.prompt_preview_chars],
+                "prompt_preview": _selection_prompt_preview(
+                    self.pool.tasks[pool_id].task.prompt,
+                    self.pool.tasks[pool_id].task.metadata,
+                    dataset=self.pool.tasks[pool_id].dataset,
+                    max_chars=self.prompt_preview_chars,
+                ),
                 "previous_success": self.scheduler.task_success.get(pool_id),
                 "selection_count": self.scheduler.selection_count[pool_id],
             }
@@ -292,7 +321,13 @@ class FixedPoolQwenProposer:
                 "role": "user",
                 "content": json.dumps(
                     {
-                        "anchor": seed_spec.content[: self.prompt_preview_chars],
+                        "anchor": _selection_prompt_preview(
+                            seed_spec.content,
+                            self.pool.tasks[anchor_id].task.metadata
+                            if anchor_id else seed_spec.metadata,
+                            dataset=target_dataset,
+                            max_chars=self.prompt_preview_chars,
+                        ),
                         "candidates": candidates,
                     },
                     ensure_ascii=False,
@@ -926,6 +961,11 @@ def assemble_selfplay_result(
     proposer_baseline: dict[str, Any] | None = None,
 ) -> DryRunSelfPlayResult:
     """Assemble the two trainer-ready batches after SESA-style K rollouts."""
+
+    from .submission_contract import validate_primary_training_outcome
+
+    for rollout in [*all_rollouts, *(frontier_evidence or [])]:
+        validate_primary_training_outcome(rollout.trajectory.metadata)
 
     validate_pats_group_context(all_rollouts)
     if frontier_evidence is not None:

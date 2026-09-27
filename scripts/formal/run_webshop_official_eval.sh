@@ -12,7 +12,7 @@ export CUDA_VISIBLE_DEVICES=1
 source scripts/formal/environment.sh
 
 PYTHON=${SPGFS_PYTHON:-$ROOT/.venv/bin/python}
-OUTPUT=${SPGFS_WEBSHOP_EVAL_OUTPUT:-state/formal-eval/webshop-official-legacy-$(date +%Y%m%d-%H%M%S)}
+OUTPUT=${SPGFS_WEBSHOP_EVAL_OUTPUT:-state/formal-eval/webshop-official-m02-$(date +%Y%m%d-%H%M%S)}
 DIRECTOR_URL=${SPGFS_WEBSHOP_DIRECTOR_URL:-http://127.0.0.1:18603/v1}
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 

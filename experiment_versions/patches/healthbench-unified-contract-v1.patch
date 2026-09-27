@@ -1,0 +1,90 @@
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -22,6 +22,7 @@
+ from .dataset_actions import DatasetActionRegistry
+ from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
+ from .graph import MultiAgentGraph
++from .healthbench_protocol import healthbench_answer_instruction
+ from .latency import (
+     RouteLatencyEstimate,
+     RouteLatencyTracker,
+@@ -5610,21 +5611,6 @@
+     }
+ 
+ 
+-def _healthbench_answer_instruction() -> str:
+-    """Keep the deliverable self-contained in the field submitted to the grader."""
+-    return (
+-        "For HealthBench, answer must contain the complete, self-contained result for your "
+-        "assigned responsibility, including the explanation, supporting evidence, "
+-        "qualifications, and uncertainty needed to understand and use that result. "
+-        "The reader must not need summary or evidence to understand answer. "
+-        "Use summary for a brief internal collaboration summary and evidence for internal "
+-        "evidence records; information essential to the reader must also appear in answer. "
+-        "An intermediate Worker should complete only its assigned sub-task. When your "
+-        "responsibility is the final reply, answer must be the complete user-facing response "
+-        "to the healthcare conversation. "
+-    )
+-
+-
+ def _worker_output_instruction(
+     available_actions: object,
+     *,
+@@ -5660,7 +5646,7 @@
+         output_instruction = (
+             "Return one final JSON object with answer, summary, confidence, evidence, "
+             "unresolved_issues, and tool_summary. "
+-            + _healthbench_answer_instruction()
++            + healthbench_answer_instruction()
+         )
+     instruction = (
+         output_instruction
+@@ -6146,7 +6132,7 @@
+         output_instruction = (
+             "Return exactly one JSON object with answer, summary, confidence, evidence, "
+             "unresolved_issues, and tool_summary. "
+-            + _healthbench_answer_instruction()
++            + healthbench_answer_instruction()
+         )
+         recovery_context["artifact_schema"]["answer"] = (
+             "the complete, self-contained result for the assigned responsibility, including "
+--- a/src/selfplay_graph_flowsteer/answer_submission.py
++++ b/src/selfplay_graph_flowsteer/answer_submission.py
+@@ -8,6 +8,7 @@
+ from typing import Any
+ 
+ from .aime_submission import is_aime_dataset, parse_aime_answer
++from .healthbench_protocol import healthbench_answer_instruction
+ from .llm import ChatBackend
+ from .observability import TaskSpec
+ from .qa_submission import extract_qa_answer, is_short_qa_dataset
+@@ -283,6 +284,10 @@
+ 
+ 
+ def submission_contract(task: TaskSpec) -> str:
++    dataset = str(task.metadata.get("dataset", "")).strip().casefold()
++    verifier = str(task.metadata.get("verifier", "")).strip().casefold()
++    if dataset == "healthbench_professional" or verifier == "healthbench_rubric":
++        return "Submission contract: " + healthbench_answer_instruction().strip()
+     if is_aime_dataset(task.metadata.get("dataset", "")):
+         return (
+             "Submission contract: The selected output Agent must put one final integer "
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/healthbench_protocol.py
+@@ -0,0 +1,16 @@
++"""Shared HealthBench deliverable contract for generation and submission."""
++
++
++def healthbench_answer_instruction() -> str:
++    """Keep the deliverable self-contained in the field submitted to the grader."""
++    return (
++        "For HealthBench, answer must contain the complete, self-contained result for your "
++        "assigned responsibility, including the explanation, supporting evidence, "
++        "qualifications, and uncertainty needed to understand and use that result. "
++        "The reader must not need summary or evidence to understand answer. "
++        "Use summary for a brief internal collaboration summary and evidence for internal "
++        "evidence records; information essential to the reader must also appear in answer. "
++        "An intermediate Worker should complete only its assigned sub-task. When your "
++        "responsibility is the final reply, answer must be the complete user-facing response "
++        "to the healthcare conversation. "
++    )

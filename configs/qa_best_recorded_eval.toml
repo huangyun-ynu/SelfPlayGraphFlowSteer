@@ -1,0 +1,92 @@
+# Fixed-route QA control only. Never use this profile for formal training.
+# Historical settings recovered from complete 128-task runs; runtime code has
+# evolved since those runs, so this is not a claim of bit-exact reproduction.
+[models.proposer]
+base_url = "http://127.0.0.1:18601/v1"
+served_model = "Qwen3.5-9B"
+trainable = true
+
+[models.solver]
+base_url = "http://127.0.0.1:18603/v1"
+served_model = "Qwen3.5-9B"
+trainable = true
+enable_thinking = true
+
+[runtime]
+name = "deepseek"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+served_model = "deepseek-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+enable_thinking = false
+reasoning_effort = "low"
+max_concurrency = 24
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtime.max_concurrency_by_dataset]
+hotpotqa = 20
+nq_open = 24
+
+[runtime_routing]
+worker_routes = ["deepseek"]
+skill_distiller = "gpt"
+
+[runtimes.gpt]
+# Answer formatting only; this model is not in the Director's Worker pool.
+base_url = "https://nexus.itssx.com/api/codex/codex/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 10
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[director]
+prompt_variant = "v2.1"
+
+[director.thinking_by_dataset]
+hotpotqa = true
+nq_open = false
+
+[canvas]
+max_agents = 4
+max_rounds = 24
+relay_max_chars = 1000
+remaining_time_admission_enabled = false
+remaining_token_admission_enabled = false
+
+[canvas.max_total_tokens_by_dataset]
+hotpotqa = 65536
+nq_open = 65536
+
+[retrieval]
+enabled = true
+service_url = "http://127.0.0.1:18010/retrieve"
+top_k = 5
+timeout_s = 240.0
+max_tool_rounds = 3
+hotpotqa_search_enabled = true
+nq_frozen_top_k = 8
+
+[answer_submission]
+enabled = true
+
+[solver_skillbank]
+enabled = false
+usage = "off"
+
+[trace]
+path = "state/formal-eval/qa-best-recorded/traces.jsonl"
+
+[verifier]
+mode = "flowsteer_qa"

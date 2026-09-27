@@ -13,7 +13,7 @@ import json
 
 from jsonschema import validate
 
-SEMANTIC_REVISION = "director_runtime_semantics_v1"
+SEMANTIC_REVISION = "director_runtime_semantics_v5_action_json"
 _CARD_FIELDS = ("name", "description", "trigger", "plan", "pitfall", "constraint", "kind")
 
 
@@ -25,13 +25,18 @@ def _hash(value):
     return hashlib.sha256(_json(value).encode()).hexdigest()
 
 
-def runtime_contract() -> str:
+def runtime_contract(prompt_variant: str = "v2.1") -> str:
     # Reuse the real Director's action examples and instructions. This avoids
     # maintaining a second, shorter action API that omits important conditions.
-    from .director import DIRECTOR_BASE_PROMPT
+    from .director import director_prompt_components
+
+    director_prompt, _ = director_prompt_components(prompt_variant)
+    if str(prompt_variant).casefold() == "v3":
+        from .actions import UNIFIED_ACTION_FIELDS
+        return director_prompt + "\nAction fields: " + json.dumps(UNIFIED_ACTION_FIELDS, sort_keys=True)
 
     actions = "\n".join(
-        line for line in DIRECTOR_BASE_PROMPT.splitlines() if line.startswith('{"action":')
+        line for line in director_prompt.splitlines() if line.startswith('{"action":')
     )
     # Sections 4/5 describe graph-design preferences, not extra API preconditions.
     # Giving those to a legality checker invites it to invent mandatory graphs.
@@ -45,7 +50,7 @@ def runtime_contract() -> str:
         "## "
         + start
         + "\n"
-        + DIRECTOR_BASE_PROMPT.split("## " + start + "\n", 1)[1]
+        + director_prompt.split("## " + start + "\n", 1)[1]
         .split("## " + end + "\n", 1)[0]
         .strip()
         for start, end in sections
@@ -67,14 +72,16 @@ def runtime_contract() -> str:
         "or infrastructure failure. Adding an Agent grants no new tools, permissions, "
         "retrieval access or external evidence.\n"
         "3. SET_OUTPUT targets are exactly the current legal_action_parameters.set_output."
-        "targets. Generally they have a configured Agent and a nonempty usable artifact; "
+        "targets. Text tasks also allow binding the current pending Agent after SET_PROMPT "
+        "and before SET_MODEL, without an artifact, while preserving awaiting_model. "
+        "A binding assigns final-task responsibility; it is not proof of execution. "
         "stateful environments can impose additional commit conditions. configured is a "
         "configuration predicate, not proof of completed execution or answer correctness; "
-        "there is no Agent 'finished' state to require. In AIME, integer submission validity "
-        "is distinct from SET_OUTPUT target legality. A usable artifact can be selected "
-        "before its final answer format is repaired; protocol_failure revision evidence for "
-        "invalid AIME submission is exposed for the selected output. Do not require repair "
-        "before output selection when selecting it is a prerequisite to the repair. See "
+        "there is no Agent 'finished' state to require. Answer format, range and correctness "
+        "are verifier concerns, not SET_OUTPUT or FINISH prerequisites. An AIME output with "
+        "invalid answer format can provide unresolved_issue evidence for an optional revision; "
+        "it is not a Worker protocol failure. Do not require format repair before selection "
+        "or submission of a current, complete artifact. See "
         "canvas.py _artifact_is_usable_output, _eligible_output_agents and "
         "_eligible_prompt_revision_evidence.\n"
         "4. Directed relations require source.layer < target.layer; bidirectional relations "
@@ -103,25 +110,52 @@ def runtime_contract() -> str:
         "structural-repair requirement comes from the current authoritative Canvas.\n"
         "7. Concrete legal output lifecycle: a configured Agent may have a nonempty artifact "
         "whose AIME final submission format is invalid. It can still appear in the legal "
-        "SET_OUTPUT targets. Selecting it can be necessary BEFORE Canvas exposes a "
-        "protocol_failure basis to revise that selected output. Therefore, an unconditional "
-        "ban on selecting any invalid-format artifact, combined with requiring repair first, "
-        "can deadlock a legal workflow. Treat that ban as an incompatible precondition, not "
-        "as harmless caution or as a mandatory runtime rule. Checking format is useful, but "
-        "a format check must preserve this legal selection-then-repair sequence."
+        "SET_OUTPUT targets and be submitted by a real Director FINISH. The verifier gives "
+        "invalid AIME answers zero; it never truncates, takes a modulus or chooses a candidate. "
+        "Likewise, conflicting NQ/HotpotQA declarations are preserved for grading instead "
+        "of being cleared or resolved by the controller. Format inspection can motivate a "
+        "Director revision but cannot impose a mandatory repair before submission."
+    )
+    supplements += (
+        "\n8. Current output lifecycle: selected text Agents deliver the original whole task, "
+        "intermediate Agents keep their delegated scope. A text output identity change "
+        "invalidates old/new output components and downstream inputs. FINISH executes legal "
+        "dirty work then accepts only a current bound Artifact. A legal graph does not "
+        "automatically finish: Director must issue FINISH. The controller never selects a "
+        "winner or prunes nodes to close a graph. ALFWorld rewards use only the selected "
+        "Agent's trusted episode; text cannot erase official success. WebShop staged commit "
+        "and SWE code evidence keep their adapter-specific prerequisites. No mandatory roles, "
+        "summarizer, topology, or extra workflow reward is introduced. These lifecycle rules "
+        "override outdated termination advice in older prompt variants."
+        " For AIME, NQ, HotpotQA and HealthBench, SET_OUTPUT assigns responsibility but "
+        "does not submit an answer. Only an accepted real Director FINISH freezes a "
+        "submission. Candidate answers cannot release task rewards. FINISH provides no "
+        "correctness feedback or reward bonus and adds no Worker call for a current output. "
+        "Submit before the authoritative budget expires; Canvas never submits automatically."
+        "\n9. Director action encoding failures have separate JSON syntax, missing-object, "
+        "multiple-object and action-schema error codes; they do not establish a responsibility "
+        "violation. Canvas reports exact syntax locations or field requirements, never edits "
+        "sampled policy tokens or chooses a JSON object to execute. A corrected response is "
+        "a new ordinary Director turn within the original budget. Four consecutive complete "
+        "invalid action responses can exhaust the existing no-progress allowance; this is "
+        "a protocol policy failure, not an answer submission."
     )
     return "Director action examples:\n" + actions + "\n\n" + director + "\n\n" + supplements
 
 
-def contract_hash() -> str:
-    return hashlib.sha256(runtime_contract().encode()).hexdigest()
+def contract_hash(prompt_variant: str = "v2.1") -> str:
+    return hashlib.sha256(runtime_contract(prompt_variant).encode()).hexdigest()
 
 
-def director_design_reference() -> str:
+def director_design_reference(prompt_variant: str = "v2.1") -> str:
     """Design guidance is useful to the Refiner, but is not an API legality test."""
-    from .director import DIRECTOR_BASE_PROMPT
+    from .director import director_prompt_components
 
-    return "## 4. Decision Order\n" + DIRECTOR_BASE_PROMPT.split("## 4. Decision Order\n", 1)[1].split(
+    director_prompt, _ = director_prompt_components(prompt_variant)
+    if str(prompt_variant).casefold() == "v3":
+        return director_prompt
+
+    return "## 4. Decision Order\n" + director_prompt.split("## 4. Decision Order\n", 1)[1].split(
         "## 6. Delegation Contract\n", 1
     )[0].strip()
 
@@ -130,23 +164,23 @@ def _candidate(record):
     return record.get("provenance") != "human_seed"
 
 
-def _identity_fields(scope, record):
+def _identity_fields(scope, record, prompt_variant="v2.1"):
     return {
         "scope": scope,
         "skill_id": record["card"]["skill_id"],
         "version": record["version"],
         "content_sha256": _hash(record["card"]),
-        "contract_sha256": contract_hash(),
+        "contract_sha256": contract_hash(prompt_variant),
         "validator_revision": SEMANTIC_REVISION,
     }
 
 
-def card_identity(scope, record) -> str:
-    return _hash(_identity_fields(scope, record))
+def card_identity(scope, record, prompt_variant="v2.1") -> str:
+    return _hash(_identity_fields(scope, record, prompt_variant))
 
 
-def _overlays(store, scope, records):
-    identities = {card_identity(scope, record) for record in records if _candidate(record)}
+def _overlays(store, scope, records, prompt_variant="v2.1"):
+    identities = {card_identity(scope, record, prompt_variant) for record in records if _candidate(record)}
     if not identities:
         return {}
     with store.connect() as db:
@@ -166,16 +200,16 @@ def _overlays(store, scope, records):
         return result
 
 
-def semantic_approvals(store, scope, records) -> dict[str, bool]:
-    return {key: value["approved"] for key, value in _overlays(store, scope, records).items()}
+def semantic_approvals(store, scope, records, prompt_variant="v2.1") -> dict[str, bool]:
+    return {key: value["approved"] for key, value in _overlays(store, scope, records, prompt_variant).items()}
 
 
-def filter_semantic_cards(store, scope, records) -> list[dict]:
-    approvals = semantic_approvals(store, scope, records)
+def filter_semantic_cards(store, scope, records, prompt_variant="v2.1") -> list[dict]:
+    approvals = semantic_approvals(store, scope, records, prompt_variant)
     return [
         copy.deepcopy(record)
         for record in records
-        if not _candidate(record) or approvals.get(card_identity(scope, record)) is True
+        if not _candidate(record) or approvals.get(card_identity(scope, record, prompt_variant)) is True
     ]
 
 
@@ -205,7 +239,7 @@ def _schema(aliases):
 
 
 def audit_semantic_cards(
-    store, scope, records, *, backend, token_counter, max_input_tokens=20480, run, step
+    store, scope, records, *, backend, token_counter, max_input_tokens=20480, run, step, prompt_variant="v2.1"
 ) -> dict:
     """Check at most 32 whole cards in one separately budgeted logical model call.
 
@@ -220,8 +254,8 @@ def audit_semantic_cards(
     )
 
     candidates = [record for record in records if _candidate(record)]
-    identities = {card_identity(scope, record): record for record in candidates}
-    audit_id = _hash([run, step, scope, sorted(identities), contract_hash(), SEMANTIC_REVISION])
+    identities = {card_identity(scope, record, prompt_variant): record for record in candidates}
+    audit_id = _hash([run, step, scope, sorted(identities), contract_hash(prompt_variant), SEMANTIC_REVISION])
     with store.path.with_suffix(".pats.semantic.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         with store.connect() as db:
@@ -240,7 +274,7 @@ def audit_semantic_cards(
                 cache_hit=True, original_checker_calls=receipt["checker_calls"], checker_calls=0
             )
             return receipt
-        previous = _overlays(store, scope, candidates)
+        previous = _overlays(store, scope, candidates, prompt_variant)
         pending = [
             (key, record) for key, record in sorted(identities.items()) if key not in previous
         ]
@@ -250,7 +284,7 @@ def audit_semantic_cards(
             "step": step,
             "scope": scope,
             "validator_revision": SEMANTIC_REVISION,
-            "contract_sha256": contract_hash(),
+            "contract_sha256": contract_hash(prompt_variant),
             "checker_calls": 0,
             "status": "cached" if not pending else "pending",
             "cache_hit": not pending,
@@ -288,7 +322,7 @@ def audit_semantic_cards(
                 "the task benefit is untested. If interface consistency remains ambiguous, reject with "
                 "the specific ambiguity. Do not rewrite cards. Output exactly the supplied "
                 "JSON schema: one boolean decision and a concise public reason for each alias.\n\n"
-                + runtime_contract()
+                + runtime_contract(prompt_variant)
             )
             supplied = {}
             for identity, record in pending[:32]:
@@ -316,7 +350,7 @@ def audit_semantic_cards(
                 ]
                 schema = _schema(supplied)
                 receipt.update(
-                    runtime_contract=runtime_contract(),
+                    runtime_contract=runtime_contract(prompt_variant),
                     request_sha256=_hash(messages),
                     response_schema_sha256=_hash(schema),
                     input_tokens_director_tokenizer=token_counter(system + "\n" + body),
@@ -359,7 +393,7 @@ def audit_semantic_cards(
                     for alias, decision in payload["cards"].items():
                         identity = supplied[alias]["card_identity"]
                         judgments[identity] = {
-                            **_identity_fields(scope, identities[identity]),
+                            **_identity_fields(scope, identities[identity], prompt_variant),
                             "identity": identity,
                             "audit_id": audit_id,
                             "approved": decision["approved"],
@@ -377,7 +411,7 @@ def audit_semantic_cards(
                 ]
         combined = {**previous, **judgments}
         receipt["checks"] = [
-            combined.get(identity, {**_identity_fields(scope, record), "identity": identity})
+            combined.get(identity, {**_identity_fields(scope, record, prompt_variant), "identity": identity})
             for identity, record in sorted(identities.items())
         ]
         receipt["approved_count"] = sum(item.get("approved") is True for item in receipt["checks"])

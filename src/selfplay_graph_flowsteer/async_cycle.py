@@ -301,9 +301,13 @@ def validate_batch_lineage(
     learner_proposer_snapshot: str,
     learner_solver_snapshot: str,
     expected_skill_context: dict[str, Any] | None = None,
+    expected_execution_semantics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate one bounded-stale batch immediately before optimizer creation."""
 
+    from .execution_contract import validate_training_contract
+
+    validate_training_contract(proposer_batch, solver_batch, expected=expected_execution_semantics)
     proposer_lineage = proposer_batch.metadata.get("policy_lineage")
     solver_lineage = solver_batch.metadata.get("policy_lineage")
     if proposer_lineage is None and solver_lineage is None:

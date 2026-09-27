@@ -1,49 +1,23 @@
-# WebShop 正式基线
+# WebShop 正式训练版本：M02
 
-2026-09-23 按用户指定，将 `legacy` 页面模式的无 skill 评测选为正式参考版本，
-将 `retain_page_text` 的 45.3125% 版本归档。
+2026-09-25 按用户指定，将 **M02（合并提示＋商品身份/访问判断修复）** 更新为正式训练采用的 WebShop 实现。它的历史128题结果是 **62/128，EM 48.4375%，平均分73.5221354/100**，平均reward为0.7352213542；WebShop没有官方F1。
 
-| 状态 | 页面模式 | 严格成功率 | 平均 reward | 原始运行 |
-| --- | --- | --- | --- | --- |
-| 正式参考 | `legacy` | 62/128 = 48.4375% | 0.690625 | `webshop-legacy-page-only-reasoning-c24-20260918-172320` |
-| 历史归档 | `retain_page_text` | 58/128 = 45.3125% | 0.648359375 | `webshop-deepseek-reasoning-noskill-c24-20260918-170329` |
+这不是早期同为62/128、平均分69.0625的W05，也不是63/128的W08。此前的W08选择保存在[历史选择记录](../configs/history/webshop_w08_budget_off_20260924.json)。各版本成绩不覆盖。
 
-两次原始结果均位于 `state/formal-eval/<原始运行>/`。不移动、不覆盖这些目录，
-以保留轨迹、W&B 和其它引用。严格成功要求完成购买且环境 reward 为 1；平均 reward
-不是严格成功率。
+## 正式训练采用的设置
 
-## 正式设置
+- [正式配置](../configs/formal_training.toml)及两个H200训练/评测配置启用`m02_merged_identity_v1`兼容配置。
+- 保留M02合并Worker提示、W09内部ASIN识别及访问判断修复、legacy观察、单会话所有者、暂存购买及SET_OUTPUT提交。
+- factual memory；恢复M02每段详情1400字符、最多6个商品的原有边界。未加入后续M03记忆来源修复、W10详情扩容、W11/Native执行方式或S01人工Skill卡。
+- 初始12次动作、修订4次、总16次；Worker总token预算350000；请求token预测拦截关闭。
+- Qwen thinking开启。Director选择逻辑模型`gpt/grok/gemini/deepseek/minimax`；程序负责物理接口选择，Director不选择接口URL、凭据或池成员。
+- GPT池含3个接口，Grok/Gemini池各2个接口；保留跨实例轮换、失败切换、0.5秒成员排队上限。已经发出的HTTP请求仍受请求超时控制，未增加并行竞速请求。
+- 保留正式训练既有PATS/SkillBank学习管线；历史M02参考评测无Skill，不把该参考成绩冒充动态模型选择或训练后的成绩。
 
-- 通用正式配置：`configs/formal_training.toml` 的 WebShop 页面模式为 `legacy`。
-- 专用无 skill 配置：`configs/webshop_official_eval.toml`，固定 DeepSeek Worker
-  路由、`deepseek-flash`、thinking 开启、Worker 路由并发 20、输出上限 16384 tokens。
-- Director：Qwen3.5-9B，thinking 开启；不注入 Director skill，不使用 SkillBank。
-- 数据集：`data/formal/eval/webshop_official_test_128.jsonl`，128 题，seed 0，24 个评测 workers。
-- WebShop：初始 12 次动作、修订 4 次、总计 16 次；暂存提交开启；观察字符上限 0。
-- 正式来源、指标及文件 SHA256：`configs/webshop_official_baseline.json`。
+## 历史评测与正式训练的区别
 
-2026-09-23 按用户要求，`[canvas].remaining_token_admission_enabled = false`
-同时关闭 WebShop 的调度预测检查、请求发送前的 token 估算拦截和收尾 token 预留。
-普通执行、完整图复评和购买收尾均遵守该开关。实际 Worker token 仍累计计费，并在
-执行报告返回后检查 350000 总上限；这不是请求前的精确限额，单次执行可能越过上限。
-12+4=16 次动作预算保持不变。历史 48.4375% 结果未重跑，不能视为此修改后的成绩。
+历史M02使用Qwen3.5-9B Director、固定DeepSeek Worker、双方thinking开启、DeepSeek low、无Director Skill、24题并发、seed 0。封存证据在`state/experiments/webshop-merged-identity-128-20260924-run1/`。
 
-在既有 Director 和 WebShop sidecar 服务就绪、项目 `.env` 已配置的情况下运行：
+[参考评测配置](../configs/webshop_official_eval.toml)及[评测入口](../scripts/formal/run_webshop_official_eval.sh)保留固定DeepSeek无Skill设置，用于后续对照；正式训练入口是[run_experiment.sh](../scripts/formal/run_experiment.sh)，采用上面的模型选择与接口池策略。
 
-```bash
-bash scripts/formal/run_webshop_official_eval.sh
-```
-
-脚本输出到新的带时间戳目录，不覆盖选定的参考运行。可用
-`SPGFS_WEBSHOP_EVAL_OUTPUT` 指定一个新输出目录，或用 `SPGFS_WEBSHOP_DIRECTOR_URL`
-指定 Director 服务地址。脚本不启动训练或模型服务。
-
-## 历史归档与成绩边界
-
-`configs/history/webshop_retain_page_text_20260918.json` 保存从 45.3125% 原始轨迹提取的
-完整 WebShop 配置、模型与评测参数、成绩、原始文件路径及 SHA256。
-它是历史参数快照，不是供正式入口自动加载的配置。
-
-48.4375% 是选定原始运行的实测成绩。本次只提升版本地位、固化配置和归档，
-没有重跑评测，也没有恢复该历史时刻的完整源码或全部运行环境。
-专用 TOML 基于当前正式配置构建；当前代码的新运行必须另行报告实测结果。
+本次没有启动训练、重跑128题或操作Director服务。历史分数只属于原封存运行；当前正式训练组合需要另行记录实测成绩。详见[同步与验证记录](WEBSHOP_FORMAL_PROMOTION_2026-09-25.zh-CN.md)及[机器可读选择记录](../configs/webshop_official_baseline.json)。

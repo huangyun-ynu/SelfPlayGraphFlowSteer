@@ -1,0 +1,110 @@
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -6359,6 +6359,8 @@
+             item["evidence_status"] = (
+                 "already_observed_and_retained"
+                 if section in viewed and section in evidence
++                else "already_observed_not_retained"
++                if section in viewed
+                 else "not_yet_observed"
+             )
+             item["action_semantics"] = (
+@@ -6893,7 +6895,12 @@
+ def _webshop_action_decision_support(
+     state: dict[str, Any], *, progress: dict[str, Any]
+ ) -> list[dict[str, Any]]:
+-    """Describe public effects of legal Actions without ranking or choosing one."""
++    """Describe legal Actions using facts recorded before prompt compaction.
++
++    Absence from the bounded prompt's inspection list is not a negative fact.
++    Prefer live action annotations and the identity-matched current checkpoint;
++    retain inspection records only as a positive/identity-matched fallback.
++    """
+ 
+     inspections = progress.get("product_inspections", [])
+     inspected_asins = (
+@@ -6906,6 +6913,7 @@
+         else set()
+     )
+     viewed_sections: set[str] = set()
++    sections_known = False
+     raw_product = state.get("product", {})
+     current_asin = (
+         str(raw_product.get("asin", "")).strip().casefold() if isinstance(raw_product, dict) else ""
+@@ -6921,6 +6929,20 @@
+             for value in item.get("sections_viewed", [])
+             if str(value).strip()
+         )
++        sections_known = True
++    checkpoint = progress.get("decision_checkpoint")
++    checkpoint = checkpoint if isinstance(checkpoint, dict) else {}
++    checkpoint_product = checkpoint.get("current_product")
++    checkpoint_product = checkpoint_product if isinstance(checkpoint_product, dict) else {}
++    checkpoint_asin = str(checkpoint_product.get("asin", "")).strip().casefold()
++    checkpoint_sections = checkpoint.get("public_sections_observed")
++    if current_asin and checkpoint_asin == current_asin and isinstance(checkpoint_sections, list):
++        viewed_sections = {
++            str(value).strip().casefold()
++            for value in checkpoint_sections
++            if str(value).strip()
++        }
++        sections_known = True
+     support: list[dict[str, Any]] = []
+     actions = state.get("valid_subactions", [])
+     for action in actions if isinstance(actions, list) else []:
+@@ -6934,20 +6956,51 @@
+         }
+         if kind == "open_product":
+             asin = visible_product_asin(action)
++            status = action.get("inspection_status")
++            already_inspected = (
++                status == "inspected"
++                if asin and status in {"inspected", "not_inspected"}
++                else True
++                if asin and asin in inspected_asins
++                else None
++            )
+             item.update(
+                 {
+                     "asin": asin,
+-                    "already_inspected": bool(asin and asin in inspected_asins),
+-                    "may_add_product_page_evidence": bool(asin and asin not in inspected_asins),
++                    "already_inspected": already_inspected,
++                    "may_add_product_page_evidence": (
++                        not already_inspected if already_inspected is not None else None
++                    ),
+                 }
+             )
+         elif kind == "view_section":
+             section = str(action.get("section", action.get("label", ""))).strip()
++            target = str(action.get("target_id", ""))
++            section_target, _, target_asin = target.partition(":")
++            matches_product = bool(
++                current_asin
++                and target_asin.strip().casefold() == current_asin
++                and section_target == f"view_{section.casefold()}"
++            )
++            evidence_status = action.get("evidence_status")
++            already_observed = (
++                section.casefold() in viewed_sections
++                if matches_product and sections_known
++                else evidence_status != "not_yet_observed"
++                if matches_product
++                and evidence_status in {
++                    "already_observed_and_retained", "already_observed_not_retained",
++                    "not_yet_observed",
++                }
++                else None
++            )
+             item.update(
+                 {
+                     "section": section,
+-                    "already_observed": section.casefold() in viewed_sections,
+-                    "may_add_section_evidence": section.casefold() not in viewed_sections,
++                    "already_observed": already_observed,
++                    "may_add_section_evidence": (
++                        not already_observed if already_observed is not None else None
++                    ),
+                 }
+             )
+         elif kind == "select_option":

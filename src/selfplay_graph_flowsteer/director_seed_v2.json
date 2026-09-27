@@ -158,12 +158,12 @@
   {
     "card": {
       "skill_id": "director_seed_output",
-      "name": "根据可用产物选择输出Agent",
-      "description": "Select an output agent using actual complete artifacts, not model names or confident claims.",
-      "trigger": "有多个输出候选，或当前输出Agent没有有效产物。",
-      "plan": "比较候选的实际产物是否完整、相关并有公开证据支持；另一个候选更合适且允许切换时再切换。如果所有候选都无效，先修复具体缺口。",
-      "pitfall": "不要仅凭角色名、模型名或自信程度选择；不要在无效候选之间反复切换。",
-      "constraint": "遵守会话、工作区、状态持有者和提交约束；不为形式上的切换重复执行已完成任务。",
+      "name": "明确输出责任并检查当前产物",
+      "description": "Bind final-task responsibility with SET_OUTPUT and submit the current result of the selected Agent.",
+      "trigger": "需要明确最终交付责任，或当前输出产物缺失、过期、没有覆盖原题。",
+      "plan": "按当前合法动作指定输出责任；文本任务允许时可在 SET_PROMPT 后、SET_MODEL 前绑定。选中节点交付原题结果，局部节点保留委派范围；输入变化后检查重跑产生的当前产物，再由 Director 显式 FINISH。",
+      "pitfall": "不要把局部事实直接当作整题答案，也不要把图已合法当作自动结束；不强制增加总结节点。",
+      "constraint": "输出身份变化会触发相关子图重跑；环境与代码任务遵守可信会话、工作区及提交条件，不替 Director 选择成功节点或删图。",
       "kind": "orchestration",
       "task_types": [],
       "evidence": [

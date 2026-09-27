@@ -174,18 +174,12 @@ def nq_open() -> list[dict[str, Any]]:
 
 
 def hotpotqa() -> list[dict[str, Any]]:
-    rows = [
-        qa_row(
-            public,
-            private,
-            dataset="hotpotqa",
-            task_type="multi_hop_qa",
-            verifier="flowsteer_qa",
-            source_split="dev_distractor",
-        )
-        for public, private in protocol_rows("hotpotqa-v1.1-dev-distractor")
-    ]
-    return select(rows, "hotpotqa", 128)
+    # Frozen FlowSteer public 128: never silently regenerate the former hash sample.
+    path = ROOT / "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl"
+    rows = read_jsonl(path)
+    if len(rows) != 128 or len({row["source_id"] for row in rows}) != 128:
+        raise ValueError("FlowSteer HotpotQA evaluation requires 128 unique rows")
+    return rows
 
 
 def alfworld_population(population: str, source_split: str) -> list[dict[str, Any]]:
@@ -252,6 +246,12 @@ def main() -> None:
             "sha256": digest(path),
             "unique_source_rows": len({row["source_id"] for row in rows}),
         }
+    manifest["datasets"]["hotpotqa"].update(
+        selection="flowsteer_public_eval_128",
+        source_url="https://huggingface.co/datasets/beita6969/FlowSteer-Dataset/resolve/main/eval/hotpotqa.jsonl",
+        canonical_path="data/formal/eval/hotpotqa_flowsteer_public_128.jsonl",
+        source_sha256=digest(ROOT / "data/formal/sources/flowsteer/hotpotqa_eval_128.raw.jsonl"),
+    )
     path = OUT / "static_eval_split_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False, indent=2))

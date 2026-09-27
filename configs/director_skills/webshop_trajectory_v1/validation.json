@@ -1,0 +1,1605 @@
+{
+  "validation_kind": "offline_structure_token_budget_eligibility_and_E5_retrieval_only",
+  "snapshot_id": "webshop-trajectory-orchestration-v1-f9565df1906fdf49",
+  "snapshot_sha256": "329d31a2731b1b695f8af2e7e599242c7d0997375cf1b5eced7e29151db60b68",
+  "director_inference_calls": 0,
+  "worker_inference_calls": 0,
+  "model_training": false,
+  "skill_count": 12,
+  "skill_format_checks": {
+    "ws-public-constraints": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-session-owner": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-variant-capability": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-live-options": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-targeted-evidence": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-candidate-comparison": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-search-revision": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-evidence-recovery": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-completion-budget": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-transaction-closure": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-bounded-review": {
+      "valid": true,
+      "message": "Skill is valid!"
+    },
+    "ws-local-revision": {
+      "valid": true,
+      "message": "Skill is valid!"
+    }
+  },
+  "frozen_loader_compatibility": {
+    "skills.py": {
+      "identical_to_frozen_candidate": true,
+      "sha256": "18338b3d9c98b99dbf3c39e8e09c96b0fb7ee9fca0c772735a2f1fb35dd78289"
+    },
+    "skill_evolution_v2.py": {
+      "identical_to_frozen_candidate": true,
+      "sha256": "b7b8d2addb1051ac64f6695b9e8145d486ac6747f5bc2fc85452bb93c5da48a5"
+    },
+    "adaptive.py": {
+      "identical_to_frozen_candidate": true,
+      "sha256": "7673881efaa7741662e0f7e8b430eb1ce563d2e25bec493d2e72cc7b74f065b1"
+    }
+  },
+  "model_visible_heuristic_boundary_checks": {
+    "task_id": true,
+    "catalog_asin": true,
+    "hidden_rubric_fields": true,
+    "credential_assignment": true,
+    "fixed_action_call": true,
+    "source_paths": true
+  },
+  "tokenizer": "models/Qwen3.5-9B",
+  "individual_context_tokens": {
+    "ws-public-constraints": 175,
+    "ws-session-owner": 167,
+    "ws-variant-capability": 178,
+    "ws-live-options": 161,
+    "ws-targeted-evidence": 168,
+    "ws-candidate-comparison": 169,
+    "ws-search-revision": 180,
+    "ws-evidence-recovery": 179,
+    "ws-completion-budget": 179,
+    "ws-transaction-closure": 182,
+    "ws-bounded-review": 173,
+    "ws-local-revision": 164
+  },
+  "all_three_card_combinations": {
+    "count": 220,
+    "min_tokens": 474,
+    "max_tokens": 523,
+    "budget": 1024,
+    "all_fit": true
+  },
+  "scope_checks": [
+    {
+      "task_type": "qa",
+      "tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "selected_count": 0
+    },
+    {
+      "task_type": "household",
+      "tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "selected_count": 0
+    },
+    {
+      "task_type": "shopping",
+      "tools": [],
+      "selected_count": 0
+    },
+    {
+      "task_type": "shopping",
+      "tools": [
+        "webshop_search"
+      ],
+      "selected_count": 0
+    },
+    {
+      "task_type": "shopping",
+      "tools": [
+        "webshop_click"
+      ],
+      "selected_count": 0
+    }
+  ],
+  "embedder": "models/e5-base-v2",
+  "embedding_device": "cpu",
+  "synthetic_state_queries": {
+    "purpose": "retrieval routing smoke only; not production phase-trigger validation or a benchmark",
+    "expected_top3_hits": 12,
+    "total": 12,
+    "cases": [
+      {
+        "query": "I am assigning a shopping task to an Agent. The customer permits either of two colors but requires a particular size and a price ceiling. Preserve all the original requirements and alternatives in the delegation.",
+        "expected": "ws-public-constraints",
+        "selected": [
+          "ws-public-constraints",
+          "ws-variant-capability",
+          "ws-transaction-closure"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 517
+      },
+      {
+        "query": "A shopping browser session is held by one Agent. I want to add a helper to the graph without losing who controls that session. How should feedback and execution ownership be connected?",
+        "expected": "ws-session-owner",
+        "selected": [
+          "ws-session-owner",
+          "ws-local-revision",
+          "ws-transaction-closure"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 495
+      },
+      {
+        "query": "Search returned a plausible product whose title mentions a different capacity and pack size. We have not inspected its configurable variants. Should the shopping Agent reject it yet?",
+        "expected": "ws-variant-capability",
+        "selected": [
+          "ws-variant-capability",
+          "ws-evidence-recovery",
+          "ws-candidate-comparison"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 508
+      },
+      {
+        "query": "The shopping Agent left a product and reopened it. Its earlier selected size and color may have been cleared. Establish what configuration is actually active now.",
+        "expected": "ws-live-options",
+        "selected": [
+          "ws-live-options",
+          "ws-evidence-recovery",
+          "ws-transaction-closure"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 504
+      },
+      {
+        "query": "A shopping candidate claims to satisfy the request but the evidence checklist omits required compatibility. Determine whether this particular requirement is supported, contradicted or still unknown.",
+        "expected": "ws-targeted-evidence",
+        "selected": [
+          "ws-targeted-evidence",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 497
+      },
+      {
+        "query": "We have several shopping candidates with different known features, unknown properties, prices and return costs. Compare them fairly before replacing the previously viable product with the latest one.",
+        "expected": "ws-candidate-comparison",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-targeted-evidence"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 497
+      },
+      {
+        "query": "The shopping Agent keeps changing query wording but gets the same results and learns nothing about the missing requirement. Revise the unproductive search objective.",
+        "expected": "ws-search-revision",
+        "selected": [
+          "ws-search-revision",
+          "ws-local-revision",
+          "ws-variant-capability"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 504
+      },
+      {
+        "query": "Shopping memory was shortened. A visited flag survives but the earlier product evidence is missing, and another field discourages revisits. Decide what targeted information needs recovering.",
+        "expected": "ws-evidence-recovery",
+        "selected": [
+          "ws-evidence-recovery",
+          "ws-search-revision",
+          "ws-live-options"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 502
+      },
+      {
+        "query": "Only a few shopping actions remain. The current page is a detail section, required options are unselected, and purchasing needs more steps. Decide whether another inspection leaves enough budget to finish.",
+        "expected": "ws-completion-budget",
+        "selected": [
+          "ws-completion-budget",
+          "ws-search-revision",
+          "ws-transaction-closure"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 523
+      },
+      {
+        "query": "A shopping Agent reports a candidate and a staged purchase, while another Agent writes a review. Choose the graph output so the actual owner's transaction can be committed under the existing runtime protocol.",
+        "expected": "ws-transaction-closure",
+        "selected": [
+          "ws-transaction-closure",
+          "ws-session-owner",
+          "ws-local-revision"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 495
+      },
+      {
+        "query": "Should an independent shopping reviewer be added for a specific contradiction? It can only inspect existing evidence. Define a narrow question and useful feedback without duplicating the owner's work.",
+        "expected": "ws-bounded-review",
+        "selected": [
+          "ws-bounded-review",
+          "ws-candidate-comparison",
+          "ws-targeted-evidence"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 492
+      },
+      {
+        "query": "New feedback identifies one missing shopping prerequisite after useful work. Modify only the necessary responsibility or graph dependency, preserving the owner, evidence and remaining budget.",
+        "expected": "ws-local-revision",
+        "selected": [
+          "ws-local-revision",
+          "ws-search-revision",
+          "ws-session-owner"
+        ],
+        "expected_in_top3": true,
+        "prompt_tokens": 493
+      }
+    ]
+  },
+  "initial_128_task_retrieval": {
+    "purpose": "observational coverage of original public requests, not skill-effect evaluation",
+    "task_count": 128,
+    "selection_counts": {
+      "ws-public-constraints": 13,
+      "ws-session-owner": 2,
+      "ws-variant-capability": 117,
+      "ws-live-options": 7,
+      "ws-targeted-evidence": 4,
+      "ws-candidate-comparison": 119,
+      "ws-search-revision": 0,
+      "ws-evidence-recovery": 10,
+      "ws-completion-budget": 76,
+      "ws-transaction-closure": 1,
+      "ws-bounded-review": 31,
+      "ws-local-revision": 4
+    },
+    "never_selected": [
+      "ws-search-revision"
+    ],
+    "cases": [
+      {
+        "task_id": "webshop/goal-00352",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "e4f10bcece5cdb9792193bd4ef5ab68fe9dd9764d2486109c333a0d2704c8b7b"
+      },
+      {
+        "task_id": "webshop/goal-00478",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "4b89e1e6af78dc37774ebacaf23f0cde3cd1d27436c9b7892d15626332c1e838"
+      },
+      {
+        "task_id": "webshop/goal-00269",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-live-options"
+        ],
+        "prompt_tokens": 491,
+        "context_sha256": "525f72ffd38422e29613d5b4ead42048918bb37f18dd2868df6aa881dba10b1a"
+      },
+      {
+        "task_id": "webshop/goal-00090",
+        "selected": [
+          "ws-variant-capability",
+          "ws-session-owner",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 506,
+        "context_sha256": "ea7eff42f70f1d2b376c4c4e0715caa724b1d4f98a5e86306eb611fe3fee9b37"
+      },
+      {
+        "task_id": "webshop/goal-00362",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00369",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "4b89e1e6af78dc37774ebacaf23f0cde3cd1d27436c9b7892d15626332c1e838"
+      },
+      {
+        "task_id": "webshop/goal-00241",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00342",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00004",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "4b89e1e6af78dc37774ebacaf23f0cde3cd1d27436c9b7892d15626332c1e838"
+      },
+      {
+        "task_id": "webshop/goal-00311",
+        "selected": [
+          "ws-variant-capability",
+          "ws-live-options",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 490,
+        "context_sha256": "8f2a830bd29594f0c4dbc0443f648ebe2eb9ae7500f8d88e7cfbdce305ce86a1"
+      },
+      {
+        "task_id": "webshop/goal-00029",
+        "selected": [
+          "ws-public-constraints",
+          "ws-variant-capability",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "ed5fa88b712d3f9546ef514c9575514fca12ac2073354a1bab95adb67e2ba6c9"
+      },
+      {
+        "task_id": "webshop/goal-00487",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00082",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 503,
+        "context_sha256": "357ab0e422bf57dedcab70fd2a2962d3cf4b269064c95ea723ee822ac1b199b8"
+      },
+      {
+        "task_id": "webshop/goal-00365",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00318",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00284",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "29c5a396a959821caf5484de8f6b88999cbb74ba21c90212295fd8ba98e8c7e1"
+      },
+      {
+        "task_id": "webshop/goal-00045",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00186",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00024",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "29235a3dcab95e9b8fc65cdca0a53f187bb9d63abdbbcd31fc43975834ee312d"
+      },
+      {
+        "task_id": "webshop/goal-00248",
+        "selected": [
+          "ws-bounded-review",
+          "ws-candidate-comparison",
+          "ws-targeted-evidence"
+        ],
+        "prompt_tokens": 492,
+        "context_sha256": "f02cd77a859b451e426362881f67322625c378cb5be93bbbcd64007d2b1c3ad4"
+      },
+      {
+        "task_id": "webshop/goal-00380",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-local-revision"
+        ],
+        "prompt_tokens": 493,
+        "context_sha256": "a894f41fcdab7a66a45e655a001dd6dd55ce1798532ef7c600ac178326b0c018"
+      },
+      {
+        "task_id": "webshop/goal-00063",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00134",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00433",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00420",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00043",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00040",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00163",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00170",
+        "selected": [
+          "ws-bounded-review",
+          "ws-variant-capability",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "3dac48f9489bdee609275d8beecb243c1ddffd80e646f120625d041cd0c5b2b4"
+      },
+      {
+        "task_id": "webshop/goal-00122",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00319",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00345",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 503,
+        "context_sha256": "f5f478a3b82bdf21ac6c1a7bac3ff9014da4cc59fbde37e76bfb65c5ba20eeed"
+      },
+      {
+        "task_id": "webshop/goal-00139",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00358",
+        "selected": [
+          "ws-variant-capability",
+          "ws-public-constraints",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 514,
+        "context_sha256": "c89397e663ba60c1d54e6219f37ae0521b7fd050a12573d2a00c2dabfec89163"
+      },
+      {
+        "task_id": "webshop/goal-00268",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00235",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00481",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "b6e80864dec99e4945835489cdaa547104faf39f25a2c133e99fea2247056ff0"
+      },
+      {
+        "task_id": "webshop/goal-00367",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00188",
+        "selected": [
+          "ws-completion-budget",
+          "ws-variant-capability",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "4aa3d2d29ba85df73adb113543efc0e03fbf2980b73681b935e12b61eeef20a9"
+      },
+      {
+        "task_id": "webshop/goal-00143",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "6e7a9c3bbb98eddcc4e68ffd0de83f0094b6ce1dc276c236392a88cb6aa5d7f5"
+      },
+      {
+        "task_id": "webshop/goal-00232",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-live-options"
+        ],
+        "prompt_tokens": 490,
+        "context_sha256": "0b1f088a7dc7320ac5c34426c72846b7c567c02a8ef5b8ecea033aca4e8a19e5"
+      },
+      {
+        "task_id": "webshop/goal-00407",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "88ac246e1620c15149235ff8bcf678b200a4e3274c7c9f742ad61d5c876adb9e"
+      },
+      {
+        "task_id": "webshop/goal-00282",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00075",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00202",
+        "selected": [
+          "ws-variant-capability",
+          "ws-bounded-review",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 512,
+        "context_sha256": "3a4323b7ec10bdf0bc7e84415a7b3d165b689fbda5f3153373c5a919f7cc4a5e"
+      },
+      {
+        "task_id": "webshop/goal-00071",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00291",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "b6e80864dec99e4945835489cdaa547104faf39f25a2c133e99fea2247056ff0"
+      },
+      {
+        "task_id": "webshop/goal-00135",
+        "selected": [
+          "ws-session-owner",
+          "ws-public-constraints",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "89787abe7ad5007f1c751eca57622c3c28dc7f28f8c30d44cb1fe4cdc9ff1830"
+      },
+      {
+        "task_id": "webshop/goal-00427",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "6e7a9c3bbb98eddcc4e68ffd0de83f0094b6ce1dc276c236392a88cb6aa5d7f5"
+      },
+      {
+        "task_id": "webshop/goal-00293",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "b6e80864dec99e4945835489cdaa547104faf39f25a2c133e99fea2247056ff0"
+      },
+      {
+        "task_id": "webshop/goal-00221",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00354",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00453",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00340",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "29c5a396a959821caf5484de8f6b88999cbb74ba21c90212295fd8ba98e8c7e1"
+      },
+      {
+        "task_id": "webshop/goal-00097",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "e4f10bcece5cdb9792193bd4ef5ab68fe9dd9764d2486109c333a0d2704c8b7b"
+      },
+      {
+        "task_id": "webshop/goal-00185",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00417",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "ee36e2e4751f709f16150c31b787ee40c78d643be418a9609edfc8ea4cf2c6d4"
+      },
+      {
+        "task_id": "webshop/goal-00167",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-evidence-recovery",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "af3b7e0c59676113096afe2a710d287686e62e2f6fceeb00b99a4ae8013cc3aa"
+      },
+      {
+        "task_id": "webshop/goal-00152",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "29c5a396a959821caf5484de8f6b88999cbb74ba21c90212295fd8ba98e8c7e1"
+      },
+      {
+        "task_id": "webshop/goal-00030",
+        "selected": [
+          "ws-bounded-review",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "116d402ed4a0f75819f5097b9e75a705364b558c930eba8915c06c25ae5fc6b0"
+      },
+      {
+        "task_id": "webshop/goal-00121",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00155",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00060",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00477",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00341",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 512,
+        "context_sha256": "7a1aef33819f059cefc19e9b317a6088aab992cd6f94b2a2ecdf5704c6048f70"
+      },
+      {
+        "task_id": "webshop/goal-00386",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "ee36e2e4751f709f16150c31b787ee40c78d643be418a9609edfc8ea4cf2c6d4"
+      },
+      {
+        "task_id": "webshop/goal-00105",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "ee36e2e4751f709f16150c31b787ee40c78d643be418a9609edfc8ea4cf2c6d4"
+      },
+      {
+        "task_id": "webshop/goal-00494",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00400",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00271",
+        "selected": [
+          "ws-bounded-review",
+          "ws-evidence-recovery",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 512,
+        "context_sha256": "edf15151f2e527e2f7db34741fd3b08c2cea54283f2899d9ae0f72d38842ea4b"
+      },
+      {
+        "task_id": "webshop/goal-00055",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-live-options"
+        ],
+        "prompt_tokens": 490,
+        "context_sha256": "0b1f088a7dc7320ac5c34426c72846b7c567c02a8ef5b8ecea033aca4e8a19e5"
+      },
+      {
+        "task_id": "webshop/goal-00330",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-live-options"
+        ],
+        "prompt_tokens": 490,
+        "context_sha256": "ab807163ed03548aaf3389e12cb8553ad4bb582799b6efc7ba52307fa345571d"
+      },
+      {
+        "task_id": "webshop/goal-00299",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "e4f10bcece5cdb9792193bd4ef5ab68fe9dd9764d2486109c333a0d2704c8b7b"
+      },
+      {
+        "task_id": "webshop/goal-00256",
+        "selected": [
+          "ws-public-constraints",
+          "ws-bounded-review",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "48f746d3a9b8bdf206f2d783fc00e53d5363d42f77407b58883733218bf47554"
+      },
+      {
+        "task_id": "webshop/goal-00065",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "29c5a396a959821caf5484de8f6b88999cbb74ba21c90212295fd8ba98e8c7e1"
+      },
+      {
+        "task_id": "webshop/goal-00371",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00213",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-local-revision",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 494,
+        "context_sha256": "151d396a5a4aa03e02a8833c4a64fba35d7dc0d0ae62eafdbe1d8c78a06aa4b3"
+      },
+      {
+        "task_id": "webshop/goal-00107",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00054",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00471",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00129",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-live-options"
+        ],
+        "prompt_tokens": 491,
+        "context_sha256": "525f72ffd38422e29613d5b4ead42048918bb37f18dd2868df6aa881dba10b1a"
+      },
+      {
+        "task_id": "webshop/goal-00064",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "b6e80864dec99e4945835489cdaa547104faf39f25a2c133e99fea2247056ff0"
+      },
+      {
+        "task_id": "webshop/goal-00051",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-live-options"
+        ],
+        "prompt_tokens": 490,
+        "context_sha256": "ab807163ed03548aaf3389e12cb8553ad4bb582799b6efc7ba52307fa345571d"
+      },
+      {
+        "task_id": "webshop/goal-00255",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 509,
+        "context_sha256": "692a5715a3950bfa48ef1aca51a38f3d135a85f63072541a74f5dac43e29acca"
+      },
+      {
+        "task_id": "webshop/goal-00219",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00440",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-local-revision"
+        ],
+        "prompt_tokens": 493,
+        "context_sha256": "0a657387a43d0f1aecd05d754e5f00b19d70055035700ab8ffbe34574222089d"
+      },
+      {
+        "task_id": "webshop/goal-00012",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00273",
+        "selected": [
+          "ws-bounded-review",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "116d402ed4a0f75819f5097b9e75a705364b558c930eba8915c06c25ae5fc6b0"
+      },
+      {
+        "task_id": "webshop/goal-00457",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00193",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00328",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-transaction-closure"
+        ],
+        "prompt_tokens": 511,
+        "context_sha256": "991cb6aebba5fd2ace3063391392d1e6a1fbeba771f59a8c5245678443bfbcc7"
+      },
+      {
+        "task_id": "webshop/goal-00234",
+        "selected": [
+          "ws-completion-budget",
+          "ws-variant-capability",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "4aa3d2d29ba85df73adb113543efc0e03fbf2980b73681b935e12b61eeef20a9"
+      },
+      {
+        "task_id": "webshop/goal-00197",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-local-revision"
+        ],
+        "prompt_tokens": 493,
+        "context_sha256": "a894f41fcdab7a66a45e655a001dd6dd55ce1798532ef7c600ac178326b0c018"
+      },
+      {
+        "task_id": "webshop/goal-00126",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "e4f10bcece5cdb9792193bd4ef5ab68fe9dd9764d2486109c333a0d2704c8b7b"
+      },
+      {
+        "task_id": "webshop/goal-00264",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00206",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "ee36e2e4751f709f16150c31b787ee40c78d643be418a9609edfc8ea4cf2c6d4"
+      },
+      {
+        "task_id": "webshop/goal-00069",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "ee36e2e4751f709f16150c31b787ee40c78d643be418a9609edfc8ea4cf2c6d4"
+      },
+      {
+        "task_id": "webshop/goal-00244",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00085",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-evidence-recovery"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "29c5a396a959821caf5484de8f6b88999cbb74ba21c90212295fd8ba98e8c7e1"
+      },
+      {
+        "task_id": "webshop/goal-00157",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "6e7a9c3bbb98eddcc4e68ffd0de83f0094b6ce1dc276c236392a88cb6aa5d7f5"
+      },
+      {
+        "task_id": "webshop/goal-00203",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00397",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "ee36e2e4751f709f16150c31b787ee40c78d643be418a9609edfc8ea4cf2c6d4"
+      },
+      {
+        "task_id": "webshop/goal-00201",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00061",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "88ac246e1620c15149235ff8bcf678b200a4e3274c7c9f742ad61d5c876adb9e"
+      },
+      {
+        "task_id": "webshop/goal-00109",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "b6e80864dec99e4945835489cdaa547104faf39f25a2c133e99fea2247056ff0"
+      },
+      {
+        "task_id": "webshop/goal-00424",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "6e7a9c3bbb98eddcc4e68ffd0de83f0094b6ce1dc276c236392a88cb6aa5d7f5"
+      },
+      {
+        "task_id": "webshop/goal-00419",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-completion-budget",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 503,
+        "context_sha256": "e732096ad8a773e48360ce9daf77a934067251251f440d68479c57dd690da0de"
+      },
+      {
+        "task_id": "webshop/goal-00446",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 503,
+        "context_sha256": "f5f478a3b82bdf21ac6c1a7bac3ff9014da4cc59fbde37e76bfb65c5ba20eeed"
+      },
+      {
+        "task_id": "webshop/goal-00132",
+        "selected": [
+          "ws-variant-capability",
+          "ws-bounded-review",
+          "ws-targeted-evidence"
+        ],
+        "prompt_tokens": 501,
+        "context_sha256": "7408999ce24615210bb3d2440746f799a518e41be7d360635a302ad623a7584e"
+      },
+      {
+        "task_id": "webshop/goal-00411",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00214",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00216",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00010",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-targeted-evidence"
+        ],
+        "prompt_tokens": 497,
+        "context_sha256": "478054ff7a256dbfa9fee9d7caba8e850439dbf2adfe713b28846aa2070670ad"
+      },
+      {
+        "task_id": "webshop/goal-00031",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "4b89e1e6af78dc37774ebacaf23f0cde3cd1d27436c9b7892d15626332c1e838"
+      },
+      {
+        "task_id": "webshop/goal-00434",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00370",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "88ac246e1620c15149235ff8bcf678b200a4e3274c7c9f742ad61d5c876adb9e"
+      },
+      {
+        "task_id": "webshop/goal-00438",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00094",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00436",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00387",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-bounded-review",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 503,
+        "context_sha256": "f5f478a3b82bdf21ac6c1a7bac3ff9014da4cc59fbde37e76bfb65c5ba20eeed"
+      },
+      {
+        "task_id": "webshop/goal-00447",
+        "selected": [
+          "ws-candidate-comparison",
+          "ws-variant-capability",
+          "ws-targeted-evidence"
+        ],
+        "prompt_tokens": 497,
+        "context_sha256": "d5b77d9aba63ef196c0fa79b5af9f54fef09c26ee601e3ce34b5dd66b74b130b"
+      },
+      {
+        "task_id": "webshop/goal-00351",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-completion-budget"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "afb9500f773bcec8ec2af51cbb5a340617610cc7f706f8527b17fdd4a73239e8"
+      },
+      {
+        "task_id": "webshop/goal-00118",
+        "selected": [
+          "ws-bounded-review",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 503,
+        "context_sha256": "f9d8815d43706761d20bd8a084e2338f5d64df5801e84ecbec1f3c3231214827"
+      },
+      {
+        "task_id": "webshop/goal-00428",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-bounded-review"
+        ],
+        "prompt_tokens": 502,
+        "context_sha256": "9c05b41e913f500b19629dc279d63ea4c5bde4dabed2773414ee7e717dc644db"
+      },
+      {
+        "task_id": "webshop/goal-00194",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00053",
+        "selected": [
+          "ws-completion-budget",
+          "ws-candidate-comparison",
+          "ws-variant-capability"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "5e0e284393aa229f40c40b8df26b6a503639b033b90b888eb5e027ec7b166aa3"
+      },
+      {
+        "task_id": "webshop/goal-00015",
+        "selected": [
+          "ws-variant-capability",
+          "ws-completion-budget",
+          "ws-candidate-comparison"
+        ],
+        "prompt_tokens": 508,
+        "context_sha256": "1e18f0e97c2ea58d601af09419b8692cbe627271dd109640c727dfd88c957400"
+      },
+      {
+        "task_id": "webshop/goal-00225",
+        "selected": [
+          "ws-variant-capability",
+          "ws-candidate-comparison",
+          "ws-public-constraints"
+        ],
+        "prompt_tokens": 504,
+        "context_sha256": "e4f10bcece5cdb9792193bd4ef5ab68fe9dd9764d2486109c333a0d2704c8b7b"
+      }
+    ]
+  },
+  "pairwise_embedding_similarity": {
+    "purpose": "review aid only; shared domain can yield similar vectors without interchangeable behavior",
+    "maximum": {
+      "left": "ws-targeted-evidence",
+      "right": "ws-candidate-comparison",
+      "cosine": 0.9102370491700968
+    },
+    "pairs_at_least_0_90": [
+      {
+        "left": "ws-targeted-evidence",
+        "right": "ws-candidate-comparison",
+        "cosine": 0.9102370491700968
+      }
+    ]
+  },
+  "limitations": [
+    "No new 128-task inference or causal improvement test was run.",
+    "The source corpus repeats the same 128 development-used tasks across three runs.",
+    "Current runtime retrieves once from the initial task; synthetic state queries are not automatically used later.",
+    "No baseline config, model, worker route or inference effort was changed."
+  ]
+}

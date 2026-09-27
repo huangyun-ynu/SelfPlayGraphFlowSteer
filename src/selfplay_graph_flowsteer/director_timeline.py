@@ -1,7 +1,7 @@
-"""Opt-in chronological Director input for collection/accuracy experiments.
+"""Incremental Director history, context versioning, and exact token-prefix audits.
 
-This does not merge PPO calls. Provider token-prefix checks attest whether a
-future timeline trainer may reuse the saved behavior probabilities.
+Online history retains the sampled thinking and actions. Exact token-prefix
+checks gate timeline merging without changing the masked GRPO objective.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ from typing import Any
 
 DEFAULT_CONTEXT_MODE = "snapshot_dedup"
 APPEND_CONTEXT_MODE = "append_only"
-DELTA_CONTEXT_MODE = "delta_timeline"
-TIMELINE_CONTEXT_MODES = frozenset({APPEND_CONTEXT_MODE, DELTA_CONTEXT_MODE})
+TIMELINE_CONTEXT_MODES = frozenset({APPEND_CONTEXT_MODE})
+HISTORY_THINKING_VISIBILITY = "online_and_training_v1"
 
 
 def persist_context_policy(output_dir: Path, *, resume: bool) -> None:
@@ -28,6 +28,8 @@ def persist_context_policy(output_dir: Path, *, resume: bool) -> None:
         if mode in TIMELINE_CONTEXT_MODES
         else None,
         "ppo_call_layout": "per_call",
+        "relation_audit_visibility": "offline_only_v1",
+        "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
     }
     marker = output_dir / "director_context_policy.json"
     if marker.exists():
@@ -36,15 +38,18 @@ def persist_context_policy(output_dir: Path, *, resume: bool) -> None:
                 "Director context policy differs from saved collection; use a new output directory"
             )
         return
-    if mode in TIMELINE_CONTEXT_MODES and resume:
-        raise ValueError("cannot resume an unmarked collection with append-only Director context")
+    if resume:
+        raise ValueError("cannot resume an unmarked collection with the current Director context policy")
     marker.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
 
 
 def director_context_mode() -> str:
     mode = os.environ.get("SPGFS_DIRECTOR_CONTEXT_MODE", DEFAULT_CONTEXT_MODE)
     if mode not in {DEFAULT_CONTEXT_MODE, *TIMELINE_CONTEXT_MODES}:
-        raise ValueError(f"unsupported SPGFS_DIRECTOR_CONTEXT_MODE: {mode!r}")
+        raise ValueError(
+            f"unsupported SPGFS_DIRECTOR_CONTEXT_MODE: {mode!r}; "
+            f"use {DEFAULT_CONTEXT_MODE!r} or {APPEND_CONTEXT_MODE!r}"
+        )
     return mode
 
 

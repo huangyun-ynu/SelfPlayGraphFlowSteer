@@ -1,5 +1,7 @@
 # WebShop SkillFlow 完整历史模式：128 题实验
 
+归档说明（2026-09-27）：当前代码已移除 `skillflow_history_v1`，本文保留2026-09-23的实验结果。2026-09-27使用新基线的独立128题复跑为52/128，基线56/128，详见[最新复跑报告](../state/audits/webshop-engineering-20260927/online-history128-v2/REPORT.zh-CN.md)。复现旧实验须使用对应冻结源码。
+
 对照：`webshop-detail-unlimited-c24-20260923-205311`（已取消单段 1,400 字符上限，旧事实记忆模式）。
 本轮：`webshop-skillflow-history-c24-20260923-213558`，`worker_memory_policy = "skillflow_history_v1"`。
 

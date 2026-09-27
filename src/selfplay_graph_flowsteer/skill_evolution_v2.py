@@ -1147,8 +1147,8 @@ def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
         candidates = [
             record for record in scoped["cards"] if record.get("provenance") != "human_seed"
         ]
-        approvals = semantic_approvals(store, scope, candidates)
-        pending = [record for record in candidates if card_identity(scope, record) not in approvals]
+        approvals = semantic_approvals(store, scope, candidates, config.pats.director_prompt_variant)
+        pending = [record for record in candidates if card_identity(scope, record, config.pats.director_prompt_variant) not in approvals]
         if not pending or checker_calls >= config.pats.max_reviews_per_cycle:
             continue
         review = audit_semantic_cards(
@@ -1160,6 +1160,7 @@ def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
             max_input_tokens=config.pats.max_review_input_tokens,
             run=str(cycle_dir.parent.resolve()),
             step=step if step is not None else state["step"] + 1,
+            prompt_variant=config.pats.director_prompt_variant,
         )
         reviews.append({"scope": scope, **review})
         checker_calls += review["checker_calls"]
@@ -1170,7 +1171,7 @@ def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
         receipt = {
             "event": "precollection_semantic_review",
             "semantic_gate_revision": SEMANTIC_REVISION,
-            "semantic_contract_sha256": contract_hash(),
+            "semantic_contract_sha256": contract_hash(config.pats.director_prompt_variant),
             "run": str(cycle_dir.parent.resolve()),
             "collection_cycle": cycle_dir.name,
             "next_collection_step": step,
@@ -1299,6 +1300,11 @@ def _validate_pats_snapshot(config, snapshot):
     }:
         raise ValueError("unknown PATS selection revision in frozen collection")
     _validate_semantic_snapshot(frozen)
+    if enabled:
+        from .pats_semantics import contract_hash
+
+        if frozen.get("semantic_contract_sha256") != contract_hash(config.pats.director_prompt_variant):
+            raise ValueError("frozen PATS runtime contract changed; use a fresh collection")
 
 
 def load_bank(config, *, embedder=None):

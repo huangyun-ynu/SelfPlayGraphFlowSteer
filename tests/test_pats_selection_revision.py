@@ -202,8 +202,8 @@ def test_new_cycles_freeze_revision_and_scoped_versions_without_changing_old_res
     monkeypatch.setattr(
         pats_semantics,
         "semantic_approvals",
-        lambda store, scope, records: {
-            pats_semantics.card_identity(scope, record): True for record in records
+        lambda store, scope, records, prompt_variant: {
+            pats_semantics.card_identity(scope, record, prompt_variant): True for record in records
         },
     )
     config = replace(

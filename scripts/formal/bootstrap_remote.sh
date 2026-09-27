@@ -47,8 +47,8 @@ for required in \
   assets/webshop/prepared/products.sqlite3 \
   assets/webshop/prepared/goals.jsonl \
   assets/webshop/private-evaluation \
-  state/formal-training/private/swe/identity \
-  state/formal-training/private/swe/known_hosts; do
+  state/formal-training-output-contract-v2/private/swe/identity \
+  state/formal-training-output-contract-v2/private/swe/known_hosts; do
   if [[ ! -e "$required" ]]; then
     printf 'Missing required asset: %s\n' "$ROOT/$required" >&2
     missing=1
@@ -83,8 +83,8 @@ Before training, provision:
   $ROOT/models/e5-base-v2
   $ROOT/assets/alfworld-data/json_2.1.1
   $ROOT/assets/webshop/
-  $ROOT/state/formal-training/private/swe/identity
-  $ROOT/state/formal-training/private/swe/known_hosts
-Then generate a fresh state/formal-training/route_report.json and run:
+  $ROOT/state/formal-training-output-contract-v2/private/swe/identity
+  $ROOT/state/formal-training-output-contract-v2/private/swe/known_hosts
+Then generate a fresh state/formal-training-output-contract-v2/route_report.json and run:
   scripts/formal/run_experiment.sh
 EOF

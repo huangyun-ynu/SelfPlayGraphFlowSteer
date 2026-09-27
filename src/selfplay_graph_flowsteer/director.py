@@ -5,9 +5,10 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from .actions import DIRECTOR_ACTION_PROTOCOL_VERSION, POLICY_PARSE_ERROR_CODES
 from .canvas import CanvasState, GraphCanvas
 from .director_timeline import (
-    DELTA_CONTEXT_MODE,
+    HISTORY_THINKING_VISIBILITY,
     TIMELINE_CONTEXT_MODES,
     director_context_mode,
     timeline_assistant_content,
@@ -20,15 +21,20 @@ from .llm import (
     MockBackend,
     director_recovery_budget,
 )
+from .submission_contract import (
+    SubmissionReceipt,
+    _director_call_context,
+    is_text_submission_dataset,
+)
 
 # Per-action ceiling. The gateway separately admits the exact templated prompt
 # plus completion within the service context; a constant alone cannot ensure fit.
 DIRECTOR_ACTION_MAX_TOKENS = 1000
 DIRECTOR_PROMPT_MAX_TOKENS = 1000
 DIRECTOR_INVALID_ACTION = '{"action":"invalid"}'
-DIRECTOR_CONTEXT_SCHEMA = "task_once_action_feedback_history_v1"
+DIRECTOR_CONTEXT_SCHEMA = "task_once_action_feedback_history_v3_with_thinking"
 
-DIRECTOR_BASE_PROMPT = """You are the Graph Director. You build and revise a task-adaptive Agent
+DIRECTOR_BASE_PROMPT = r"""You are the Graph Director. You build and revise a task-adaptive Agent
 workflow for the given task. You edit the workflow graph; Workers solve the task.
 
 ## 1. Goal
@@ -66,6 +72,9 @@ Never emit more than one action or text before or after the JSON object. Canvas 
 by the controller; omit expected_version. Omit agent_id on ADD_AGENT and let Canvas allocate it.
 Never invent an Agent ID. Inside JSON strings, write every literal backslash as `\\`, including
 LaTeX commands such as `\\angle`, `\\sqrt`, and `\\frac`.
+For example, the JSON text {"scope":"Review the role of \\omega in the task"} contains two
+backslash characters before omega. Prefer plain words when mathematical notation is unnecessary.
+Keep thinking in the reasoning channel; the action channel contains only the single action object.
 
 ## 3. Authoritative Canvas Control
 
@@ -73,6 +82,21 @@ The current Canvas snapshot is authoritative. Use only actions listed in allowed
 targets, relations, layers, revision bases, and evidence Agent IDs listed in
 legal_action_parameters. If the snapshot conflicts with an earlier assumption, follow the
 snapshot.
+action_field_requirements lists the top-level fields for each currently allowed action.
+legal_action_parameters contains candidate values, not ready-to-send action objects or existing
+graph edges. Never copy its relations array into an action. CONSIDER_RELATION uses top-level
+source and target; SET_RELATION/REMOVE_RELATION use top-level source, target, and relation only
+when that action is actually allowed. SET_PROMPT revisions also need the exposed revision_basis
+and evidence_agent_ids; action_field_requirements lists the base fields, not revision evidence.
+
+graph_state.actual_relations is the authoritative list of edges that currently exist. An `off`
+relation choice means the edge is absent (or was removed); a candidate in legal_action_parameters
+does not establish it. During reachability repair, use topology_action_previews to inspect which
+nodes would remain unreachable after an output or relation choice. A legal edge can still point
+away from the selected output. Do not switch outputs repeatedly when the preview shows no new
+reachability and Canvas reports a previously visited state; continue with an available layer or
+relation edit. A first legal intermediate edit may leave reachability unchanged while preparing
+the next edit.
 
 After ADD_AGENT, configure the newly allocated Agent with SET_PROMPT, then SET_MODEL.
 A responsibility without a selected model is not executable. Select only a route ID listed in the
@@ -242,7 +266,7 @@ names or a fixed sequence. If no safe implementation can be produced, preserve t
 evidence-grounded failure instead of claiming success.""",
 }
 
-DIRECTOR_PROMPT_VARIANTS = frozenset({"v2", "v2.1"})
+DIRECTOR_PROMPT_VARIANTS = frozenset({"v2", "v2.1", "v2.2", "v3"})
 
 
 def _replace_prompt_section(source: str, current: str, legacy: str) -> str:
@@ -258,6 +282,50 @@ DIRECTOR_BASE_PROMPT_V2 = _replace_prompt_section(
     DIRECTOR_BASE_PROMPT,
     "You are the Graph Director. You build and revise a task-adaptive Agent",
     "You are the Graph Director. You build and revise a compact Agent",
+)
+
+# V2.2 keeps the V2.1 graph policy while making the existing output marker an
+# execution responsibility that can be assigned before workflow construction
+# is complete. SET_OUTPUT remains a sampled graph action.
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT,
+    """After ADD_AGENT, configure the newly allocated Agent with SET_PROMPT, then SET_MODEL.
+A responsibility without a selected model is not executable. Select only a route ID listed in the
+current Canvas. SET_PROMPT edits preserve the selected model; SET_MODEL edits change it explicitly.""",
+    """After ADD_AGENT, configure the newly allocated Agent with SET_PROMPT. Then use SET_MODEL
+when Canvas requires a Worker model. A responsibility without a selected model is not executable.
+Select only a route ID listed in the current Canvas. SET_PROMPT edits preserve the selected model;
+SET_MODEL edits change it explicitly. SET_OUTPUT may be used after SET_PROMPT and before SET_MODEL
+when Canvas exposes that action for the pending Agent.""",
+)
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2_2,
+    "If no available edit can address the remaining uncertainty,\nselect the best valid output and finish.",
+    "If no available edit can address the remaining uncertainty, keep the current output if it "
+    "is still valid and choose FINISH explicitly when it is legal. If no output is selected or "
+    "the current output is unusable, choose a legal graph action that addresses that state.",
+)
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2_2,
+    """If the snapshot exposes
+only FINISH, finish immediately. Do not repeat SET_OUTPUT for the selected output or switch outputs
+without new process evidence.""",
+    """If the snapshot exposes only FINISH, finish immediately. SET_OUTPUT marks which ordinary
+Agent's result is submitted; it does not finish the workflow. For text tasks, the selected output
+Agent completes the original public task using its assigned work and visible graph evidence. For
+environment or code tasks, the selected Agent's trusted environment result or code artifact is the
+deliverable. Canvas may rerun the affected subgraph after a real input change. Continue useful,
+legal graph edits after selecting an output; FINISH is your explicit decision to submit. Do not
+repeat SET_OUTPUT for the current output or switch it without task evidence.""",
+)
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2_2,
+    """6. When the graph is sufficient, select the Agent that owns the actual final result.
+7. When the output is valid and no useful graph edit remains, FINISH.""",
+    """6. Set or update the output Agent when the task and current evidence support that choice;
+this may happen before every useful graph edit is complete.
+7. Continue any useful, legal graph edits. FINISH when the task result is ready and no useful graph
+edit remains.""",
 )
 DIRECTOR_BASE_PROMPT_V2 = _replace_prompt_section(
     DIRECTOR_BASE_PROMPT_V2,
@@ -369,9 +437,27 @@ def director_prompt_components(variant: str) -> tuple[str, dict[str, str]]:
             f"unsupported Director prompt variant {variant!r}; "
             f"use one of {sorted(DIRECTOR_PROMPT_VARIANTS)}"
         )
+    if normalized == "v3":
+        from .unified_contract import DIRECTOR_HINTS, DIRECTOR_PROMPT
+        return DIRECTOR_PROMPT, DIRECTOR_HINTS
     if normalized == "v2":
-        return DIRECTOR_BASE_PROMPT_V2, PROBLEM_TYPE_HINTS_V2
-    return DIRECTOR_BASE_PROMPT, PROBLEM_TYPE_HINTS
+        base, hints = DIRECTOR_BASE_PROMPT_V2, PROBLEM_TYPE_HINTS_V2
+    elif normalized == "v2.2":
+        base, hints = DIRECTOR_BASE_PROMPT_V2_2, PROBLEM_TYPE_HINTS
+    else:
+        base, hints = DIRECTOR_BASE_PROMPT, PROBLEM_TYPE_HINTS
+    return base + """
+For text tasks (AIME, NQ, HotpotQA, HealthBench), SET_OUTPUT assigns the output
+responsibility; it does not submit the answer. A current output artifact remains
+a candidate until your FINISH action is accepted. FINISH submits that artifact
+after graph, execution-integrity, input-binding, and budget checks. Answer format,
+range and correctness are evaluated by the dataset verifier after submission;
+an incorrect or out-of-range answer does not itself block FINISH. If no useful
+revision remains and FINISH is legal, submit within the
+remaining budget. Canvas will not submit automatically for you. A current valid
+artifact needs no extra Worker generation merely to submit it. ALFWorld,
+WebShop and SWE retain their own environment/action commit rules.
+""", hints
 
 
 _PROBLEM_TYPE_BY_DATASET = {
@@ -499,12 +585,16 @@ class DirectorRun:
     output: str
     graph: dict[str, Any]
     turns: list[DirectorTurn] = field(default_factory=list)
+    candidate_output: str = ""
+    submission_receipt: SubmissionReceipt | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "task": self.task,
             "finished": self.finished,
             "output": self.output,
+            "candidate_output": self.candidate_output,
+            "submission_receipt": self.submission_receipt.to_dict() if self.submission_receipt else None,
             "graph": self.graph,
             "turns": [turn.to_dict() for turn in self.turns],
         }
@@ -521,41 +611,35 @@ class GraphDirector:
         role: str = "graph-director",
         solver_skill_context: str = "",
         prompt_variant: str = "v2.1",
+        enable_thinking: bool | None = None,
         tokenizer: Any | None = None,
         call_namespace: str = "",
     ) -> None:
         self.context_mode = director_context_mode()
         self.context_schema = (
-            "append_only_action_feedback_history_v1"
+            "append_only_action_feedback_history_v3_with_thinking"
             if self.context_mode in TIMELINE_CONTEXT_MODES
             else DIRECTOR_CONTEXT_SCHEMA
         )
-        if self.context_mode == DELTA_CONTEXT_MODE:
-            self.context_schema = "delta_timeline_action_feedback_history_v1"
         self.backend = backend
         self.canvas = canvas
         self.role = role
         self.solver_skill_context = solver_skill_context
-        self.prompt_variant = str(prompt_variant).strip().casefold()
+        self.prompt_variant = "v3" if canvas.unified else str(prompt_variant).strip().casefold()
+        self.enable_thinking = enable_thinking
         self.relation_token_ids = _binary_relation_token_ids(tokenizer)
         self.relation_tokenizer_attestation = _tokenizer_attestation(tokenizer)
         self.tokenizer = tokenizer
         self.call_namespace = str(call_namespace).strip() or str(self.canvas.runtime.seed)
+        if not self.canvas.run_id:
+            self.canvas.run_id = self.call_namespace
         if self.prompt_variant not in DIRECTOR_PROMPT_VARIANTS:
             raise ValueError(
                 f"unsupported Director prompt variant {prompt_variant!r}; "
                 f"use one of {sorted(DIRECTOR_PROMPT_VARIANTS)}"
             )
 
-    def _control_snapshot_text(self, snapshot):
-        if self.context_mode == DELTA_CONTEXT_MODE:
-            return self._snapshot_codec.encode(snapshot)
-        return _snapshot_text(snapshot)
-
     def run(self) -> DirectorRun:
-        from .director_snapshot_delta import SnapshotCodec
-
-        self._snapshot_codec = SnapshotCodec()
         self._completed_turns: list[DirectorTurn] = []
         try:
             return self._run()
@@ -597,7 +681,7 @@ class GraphDirector:
         system_prompt = (
             base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
         )
-        if self.canvas.runtime.native_webshop and self.canvas.dataset == "webshop":
+        if not self.canvas.unified and self.canvas.runtime.native_webshop and self.canvas.dataset == "webshop":
             from .webshop_native_protocol import DIRECTOR_ENVIRONMENT_HINT
 
             system_prompt = base_prompt.rstrip() + "\n\n" + DIRECTOR_ENVIRONMENT_HINT
@@ -607,24 +691,12 @@ class GraphDirector:
             system_prompt += (
                 "\n## Optional Orchestration Knowledge\n" + self.solver_skill_context + "\n"
             )
-        if self.canvas.structural_exploration_required:
-            system_prompt += (
-                "\n## Bounded Structural Exploration\n\n"
-                "This rollout belongs to the bounded structural-exploration stratum. "
-                "While budget permits, build a connected graph with at least two "
-                "Agents that make distinct task-relevant contributions before selecting the "
-                "output or finishing. Choose responsibilities, layers, relation type, and "
-                "output dynamically from the task; do not use placeholder roles or a fixed "
-                "dataset topology. The authoritative snapshot reports whether this condition "
-                "is satisfied or waived by token/time consolidation.\n"
-            )
-        if self.context_mode == DELTA_CONTEXT_MODE:
-            system_prompt += "\nCanvas messages use versioned JSON updates. The first full object defines the state. Each subsequent delta contains set/delete operations with key-array paths, applied in order to the preceding state. A set replaces that entire value (including arrays); delete removes the named field. base/seq are message sequence numbers, distinct from canvas_version. Unchanged fields persist. A later full object replaces the entire state. Reconstruct the latest state before choosing an action; old legal actions may no longer be valid.\n"
         system_message = {"role": "system", "content": system_prompt}
         # Keep the policy history without replaying obsolete control snapshots.
-        # Every prior sampled action and its factual environment feedback remain
+        # Every prior sampled thinking/action and its factual environment feedback remain
         # in the conversation; the immutable task and current authoritative
-        # snapshot are each supplied exactly once per policy call.
+        # snapshot are each supplied exactly once in snapshot mode. Append-only
+        # mode also retains original control messages.
         history_turns: list[tuple[str, str]] = []
         chronological_messages: list[dict[str, str]] = [dict(system_message)]
         previous_policy_ids: tuple[int, ...] = ()
@@ -668,6 +740,7 @@ class GraphDirector:
 
         responsibility_failures = 0
         responsibility_issue: dict[str, Any] = {}
+        protocol_error: dict[str, Any] = {}
         responsibility_rejections = {
             "responsibility_violation",
             "duplicate_responsibility",
@@ -675,35 +748,23 @@ class GraphDirector:
         progress_signature = self.canvas.director_progress_signature()
         observed_turns = 0
         stalled_turns = 0
+        seen_progress_states = {progress_signature}
+        submission_recoveries = len(self.canvas._unified_submission_recoveries) if self.canvas.unified else 0
         while True:
             # Count completed policy calls, including accepted semantic no-ops.
             # Feedback, inference activity and automatic recovery are not progress.
             current_signature = self.canvas.director_progress_signature()
             if len(turns) != observed_turns:
-                stalled_turns = stalled_turns + 1 if current_signature == progress_signature else 0
+                repeated = current_signature in seen_progress_states if self.canvas.unified else current_signature == progress_signature
+                if self.canvas.unified:
+                    current_recoveries = len(self.canvas._unified_submission_recoveries)
+                    if current_recoveries > submission_recoveries:
+                        repeated = False
+                    submission_recoveries = current_recoveries
+                stalled_turns = stalled_turns + 1 if repeated else 0
+                seen_progress_states.add(current_signature)
                 observed_turns = len(turns)
             progress_signature = current_signature
-            trusted_success = self.canvas.recover_trusted_alfworld_success()
-            if trusted_success:
-                feedback = trusted_success[-1].feedback
-                if self.canvas.state in {CanvasState.FINISHED, CanvasState.FAILED}:
-                    break
-                continue
-            # Safe lifecycle closure: this changes only Canvas terminal state and
-            # never selects/mutates an Agent, relation, prompt, layer, or output.
-            forced_finish = self.canvas.recover_finish_only()
-            if forced_finish is not None:
-                feedback = forced_finish.feedback
-                if self.canvas.state in {CanvasState.FINISHED, CanvasState.FAILED}:
-                    break
-                if forced_finish.accepted:
-                    continue
-                # A rejected automatic action is factual feedback for the next
-                # bounded Director turn, not permission for a zero-turn retry loop.
-            impossible_output = self.canvas.fail_if_no_usable_output_artifact()
-            if impossible_output is not None:
-                feedback = impossible_output.feedback
-                break
             if not self.canvas.active:
                 self.canvas.terminate_round_limit_without_graph_repair()
                 break
@@ -711,8 +772,18 @@ class GraphDirector:
             # there are no in-flight Workers to wait for. Pending configuration is
             # represented by legal SET_PROMPT/SET_MODEL/relation actions.
             if stalled_turns >= 4:
+                # Complete model-authored invalid objects have known protocol
+                # attribution. Missing/truncated responses retain the existing
+                # unknown path; no answer or infrastructure failure is invented.
+                protocol_exhausted = all(
+                    turn.rejection_code in POLICY_PARSE_ERROR_CODES
+                    and turn.action_diagnostics.get("json_objects_found", 0) > 0
+                    and turn.action_diagnostics.get("finish_reason") in {None, "stop", "end_turn"}
+                    for turn in turns[-4:]
+                )
                 feedback = self.canvas.terminate_director_stall(
-                    "director_no_progress_exhausted"
+                    "director_action_protocol_exhausted" if protocol_exhausted
+                    else "director_no_progress_exhausted"
                 ).feedback
                 break
             if not self.canvas.control_snapshot()["allowed_actions"]:
@@ -734,7 +805,7 @@ class GraphDirector:
                 binary_messages = prompt_messages_for(
                     current_user_prefix()
                     + "Authoritative Canvas control snapshot:\n"
-                    + self._control_snapshot_text(self.canvas.control_snapshot())
+                    + _snapshot_text(self.canvas.control_snapshot())
                     + "\n\nCanvas feedback:\n"
                     + feedback
                     + "\n\nChoose off or on for this relation."
@@ -794,6 +865,7 @@ class GraphDirector:
                             "bounded_recovery_call": stalled_turns == 3,
                             "generated_action": True,
                             "director_context_schema": self.context_schema,
+                            "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
                             "timeline_prefix_audit": timeline_audit,
                             "binary_policy_audit": audit,
                             "cleaned_action_chars": len(binary.choice),
@@ -824,7 +896,14 @@ class GraphDirector:
             if responsibility_failures == 1 and self.canvas.pending_agent_id:
                 issue_field = str(responsibility_issue.get("field") or "violating field")
                 issue_code = str(responsibility_issue.get("code") or "responsibility_violation")
-                if issue_code == "duplicate_responsibility":
+                if issue_code == "prompt_action_schema":
+                    retry_instruction = (
+                        "Repair the JSON syntax or required action fields, preserving the "
+                        "intended responsibility. Return one complete JSON object with all "
+                        "four short fields as properly quoted and escaped strings. "
+                        "A schema rejection does not by itself indicate an unsafe responsibility."
+                    )
+                elif issue_code == "duplicate_responsibility":
                     conflicting_agent = str(
                         responsibility_issue.get("details", {}).get(
                             "conflicting_agent_id", "an existing Agent"
@@ -851,17 +930,30 @@ class GraphDirector:
                     f"{issue_code} in {issue_field}. {retry_instruction}\n\n"
                     + current_user_prefix()
                     + "Authoritative Canvas control snapshot:\n"
-                    + self._control_snapshot_text(self.canvas.control_snapshot())
+                    + _snapshot_text(self.canvas.control_snapshot())
                     + "\n\nCanvas feedback:\n"
                     + feedback
                 )
             else:
                 user_content = (
                     current_user_prefix() + "Authoritative Canvas control snapshot:\n"
-                    f"{self._control_snapshot_text(self.canvas.control_snapshot())}\n\n"
+                    f"{_snapshot_text(self.canvas.control_snapshot())}\n\n"
                     f"Canvas feedback:\n{feedback}\n\n"
                     "Return the next single JSON action."
                 )
+            if protocol_error:
+                import json
+
+                user_content += (
+                    "\n\nAction encoding failure (separate from responsibility or graph legality):\n"
+                    + json.dumps(protocol_error, ensure_ascii=False, sort_keys=True)
+                    + "\nThe previous response executed no graph action. Use the current "
+                    "allowed_actions and action_field_requirements. Correct the encoding or "
+                    "field structure and return exactly one object, with no prose or examples. "
+                    "This is a normal Director turn within the existing budget."
+                )
+            if self.canvas.unified:
+                self.canvas.observe_submission_candidates(f"{self.call_namespace}:{len(turns)}:action")
             prompt_messages = prompt_messages_for(user_content)
             awaiting_prompt = self.canvas.state is CanvasState.AWAITING_PROMPT
             try:
@@ -874,7 +966,7 @@ class GraphDirector:
                             if awaiting_prompt
                             else DIRECTOR_ACTION_MAX_TOKENS
                         ),
-                        enable_thinking=None,
+                        enable_thinking=self.enable_thinking,
                     )
             except DirectorContextExhausted:
                 self.canvas.terminate_context_limit_without_graph_repair()
@@ -939,6 +1031,9 @@ class GraphDirector:
                 "raw_output_chars": len(raw_policy_text),
                 "backend_request_events": response.metadata.get("backend_request_events", []),
                 "json_objects_found": parsed.candidate_count,
+                "director_action_protocol_version": ("director_action_json_v3" if self.canvas.unified else DIRECTOR_ACTION_PROTOCOL_VERSION),
+                "parse_error_code": parsed.action.parse_error_code,
+                "parse_error_details": dict(parsed.action.parse_error_details),
                 "initial_token_out": response.token_out,
                 "finish_reason": response.metadata.get("finish_reason"),
                 "director_dynamic_budget": response.metadata.get("director_dynamic_budget"),
@@ -947,6 +1042,7 @@ class GraphDirector:
                 "behavior_logprobs_exact": exact_behavior,
                 "trajectory_training_eligible": training_eligible,
                 "director_context_schema": self.context_schema,
+                "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
                 "timeline_prefix_audit": timeline_audit,
             }
             parsed_model_action = parsed.action
@@ -955,8 +1051,16 @@ class GraphDirector:
             # Pass the already parsed typed action (valid or invalid) so Canvas
             # reports the exact parser failure instead of reparsing a synthetic
             # placeholder. The raw policy response remains separately immutable.
-            step = self.canvas.step(parsed.action, authoritative_director=True)
+            call_id = f"{self.call_namespace}:{len(turns)}:action"
+            step = self.canvas.step(
+                parsed.action, authoritative_director=True,
+                director_context=_director_call_context(self.canvas.run_id, call_id),
+            )
             feedback = step.feedback
+            protocol_error = (
+                {"code": step.rejection_code, **parsed.action.parse_error_details}
+                if step.rejection_code in POLICY_PARSE_ERROR_CODES else {}
+            )
             history_turns.append((raw_policy_text, step.feedback))
             turns.append(
                 DirectorTurn(
@@ -970,7 +1074,7 @@ class GraphDirector:
                     rejection_code=step.rejection_code,
                     action_diagnostics=diagnostics,
                     relation_decision=dict(step.relation_decision),
-                    call_id=f"{self.call_namespace}:{len(turns)}:action",
+                    call_id=call_id,
                     raw_reasoning_text=raw_reasoning,
                     raw_action_text=raw_action,
                     prompt_token_ids=tuple(response.prompt_token_ids),
@@ -996,25 +1100,33 @@ class GraphDirector:
                     # recover, and referring to it as ``None`` terminates valid graphs.
                     responsibility_failures = 0
                     responsibility_issue = {}
-            elif step.accepted:
+            elif step.accepted or step.rejection_code in POLICY_PARSE_ERROR_CODES:
                 responsibility_failures = 0
                 responsibility_issue = {}
             if step.topology_edits_frozen:
                 continue
-            # Loop once more even when this model turn exhausted max_rounds:
-            # deterministic FINISH-only or bounded round-limit recovery still
-            # has to establish the terminal postcondition.
+            # Loop once more even when this model turn exhausted max_rounds so
+            # Canvas can record budget termination without repairing the graph.
         output = ""
+        candidate_output = ""
         if self.canvas.graph.output_agent:
+            selected = self.canvas.runtime.artifacts.get(self.canvas.graph.output_agent)
+            candidate_output = selected.answer if selected else ""
+        if self.canvas.graph.output_agent and self.canvas.selected_output_is_current():
             artifact = self.canvas.runtime.artifacts.get(self.canvas.graph.output_agent)
             if artifact is not None:
                 output = artifact.answer
+        if is_text_submission_dataset(self.canvas.dataset):
+            output = (self.canvas.submission_receipt.raw_answer_snapshot
+                      if self.canvas.submission_receipt else "")
         return DirectorRun(
             task=self.canvas.task,
             finished=self.canvas.state.value == "finished",
             output=output,
             graph=self.canvas.graph.to_dict(),
             turns=turns,
+            candidate_output=candidate_output,
+            submission_receipt=self.canvas.submission_receipt,
         )
 
 

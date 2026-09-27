@@ -8,7 +8,7 @@ from selfplay_graph_flowsteer.canvas import GraphCanvas
 from selfplay_graph_flowsteer.contracts import AgentArtifact
 from selfplay_graph_flowsteer.runtime import MultiAgentRuntime, _terminal_protocol_failure
 
-from .helpers import RecordingExecutor
+from .helpers import RecordingExecutor, finish_as_director
 from .test_aime_submission_boundary import configure
 
 
@@ -206,14 +206,20 @@ def test_unresolved_failure_can_be_revised_but_snapshot_never_retries_it():
     assert "protocol_failure" not in canvas._eligible_prompt_revision_evidence("solver")["public"]
 
 
-def test_recovered_local_list_still_has_independent_final_submission_rejection():
+def test_recovered_local_list_exposes_answer_format_issue_and_can_be_submitted():
     canvas = canvas_for(ArtifactExecutor("[12,7,3]"))
     assert canvas.control_snapshot()["worker_protocol_status"]["solver"]["status"] == "recovered"
     assert "protocol_failure" not in canvas._eligible_prompt_revision_evidence("solver")["public"]
     assert canvas.step('{"action":"set_output","target":"solver"}').accepted
-    assert "protocol_failure" in canvas._eligible_prompt_revision_evidence("solver")["public"]
-    step = canvas.step('{"action":"finish"}')
-    assert not step.accepted and step.rejection_code == "output_answer_invalid"
+    evidence = canvas._eligible_prompt_revision_evidence("solver")["public"]
+    assert "protocol_failure" not in evidence
+    assert evidence["unresolved_issue"]["evidence_agent_ids"] == ["solver"]
+    # The current contract submits nonempty wrong-format answers for scoring;
+    # it neither relabels a recovered protocol error nor chooses a list item.
+    step = finish_as_director(canvas)
+    assert step.accepted
+    assert canvas.submission_receipt.raw_answer_snapshot == "[12,7,3]"
+    assert canvas.submission_receipt.submitted_answer_snapshot == "[12,7,3]"
 
 
 def test_current_snapshot_does_not_publish_diagnostic_secrets():

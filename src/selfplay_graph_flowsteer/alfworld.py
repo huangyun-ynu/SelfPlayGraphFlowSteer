@@ -252,11 +252,35 @@ class ALFWorldSessionLifecycle:
             )
             return dict(state)
 
+    def discard_pending(self, agent_id: str) -> None:
+        """Delete the node's live episode without refunding the rollout ledger."""
+        with self._lock:
+            if self._active_agent == agent_id:
+                self._close_active()
+            saved = self._sessions.pop(agent_id, None)
+            if saved is not None:
+                self.client.close_session(saved[0])
+            self._results.pop(agent_id, None)
+
     def result_for(self, agent_id: str | None) -> dict[str, Any]:
         with self._lock:
             if not agent_id:
                 return _empty_result("missing_output_agent")
             return dict(self._results.get(agent_id, _empty_result("agent_never_executed")))
+
+    def continuation_status(self, agent_id: str) -> dict[str, Any]:
+        """Current execution allowance, separate from immutable episode evidence."""
+        with self._lock:
+            result = self._results.get(agent_id, {})
+            remaining = min(
+                max(0, self.max_episode_steps - int(result.get("steps", 0))),
+                max(0, self.max_rollout_steps - self._rollout_steps),
+            )
+            return {
+                "remaining_steps": remaining,
+                "can_continue": remaining > 0 and not result.get("done", False)
+                    and result.get("termination_reason") != "environment_step_failed",
+            }
 
     def end_execution(self) -> None:
         with self._lock:

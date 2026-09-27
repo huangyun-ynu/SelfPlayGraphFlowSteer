@@ -67,6 +67,8 @@ def calculate_director_reward(
     submission_valid: bool = True,
     worker_backend_failure: bool = False,
     environment_commit_complete: bool = False,
+    submission_required: bool = False,
+    submission_receipt: dict[str, Any] | None = None,
 ) -> ProtocolReward:
     if version not in SUPPORTED_REWARD_VERSIONS:
         supported = ", ".join(sorted(SUPPORTED_REWARD_VERSIONS))
@@ -85,6 +87,8 @@ def calculate_director_reward(
         submission_valid=submission_valid,
         worker_backend_failure=worker_backend_failure,
         environment_commit_complete=environment_commit_complete,
+        submission_required=submission_required,
+        submission_receipt=submission_receipt,
     )
     if version == LEGACY_REWARD_VERSION:
         released = bool(finished and not worker_backend_failure)
@@ -123,6 +127,8 @@ def _protocol_components(
     submission_valid: bool,
     worker_backend_failure: bool,
     environment_commit_complete: bool,
+    submission_required: bool = False,
+    submission_receipt: dict[str, Any] | None = None,
 ) -> dict[str, bool | float]:
     parsed = MultiAgentGraph.from_dict(graph)
     configured = bool(parsed.nodes) and all(node.configured for node in parsed.nodes.values())
@@ -139,13 +145,24 @@ def _protocol_components(
     )
     graph_complete = not parsed.validate(final=True)
     final_events = [event for event in events if _event_value(event, "final_execution")]
+    if submission_required:
+        receipt = submission_receipt or {}
+        final_events = [
+            event for event in final_events
+            if receipt and _event_value(event, "accepted")
+            and not _event_value(event, "protocol_recovery")
+            and _event_value(event, "event_id") == receipt.get("accepted_event_id")
+            and _event_value(event, "director_call_id") == receipt.get("director_call_id")
+            and _event_value(event, "submission_receipt") == receipt
+        ]
     finish_complete = len(final_events) == 1
     final_event = final_events[0] if finish_complete else None
     execution_complete = bool(
         finished
         and finish_complete
         and _event_value(final_event, "accepted")
-        and (_event_value(final_event, "execution") is not None or environment_commit_complete)
+        and (_event_value(final_event, "execution") is not None or environment_commit_complete
+             or (submission_required and bool(submission_receipt)))
         and str(output or "").strip()
         and not _is_failure_output(output)
         and submission_valid

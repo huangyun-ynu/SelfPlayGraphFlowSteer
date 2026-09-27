@@ -1,0 +1,80 @@
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -5610,6 +5610,21 @@
+     }
+ 
+ 
++def _healthbench_answer_instruction() -> str:
++    """Keep the deliverable self-contained in the field submitted to the grader."""
++    return (
++        "For HealthBench, answer must contain the complete, self-contained result for your "
++        "assigned responsibility, including the explanation, supporting evidence, "
++        "qualifications, and uncertainty needed to understand and use that result. "
++        "The reader must not need summary or evidence to understand answer. "
++        "Use summary for a brief internal collaboration summary and evidence for internal "
++        "evidence records; information essential to the reader must also appear in answer. "
++        "An intermediate Worker should complete only its assigned sub-task. When your "
++        "responsibility is the final reply, answer must be the complete user-facing response "
++        "to the healthcare conversation. "
++    )
++
++
+ def _worker_output_instruction(
+     available_actions: object,
+     *,
+@@ -5635,11 +5650,20 @@
+             "For short-answer QA, answer must be the shortest answer span, not a sentence "
+             "or explanation. "
+         )
+-    instruction = (
++    output_instruction = (
+         "Return one final JSON object with answer, summary, confidence, evidence, "
+         "unresolved_issues, and tool_summary. Put only the direct task result in answer and put "
+         "all explanation in summary or evidence. "
+         + qa_instruction
++    )
++    if action_adapter == "healthbench_professional":
++        output_instruction = (
++            "Return one final JSON object with answer, summary, confidence, evidence, "
++            "unresolved_issues, and tool_summary. "
++            + _healthbench_answer_instruction()
++        )
++    instruction = (
++        output_instruction
+         + "The final JSON is a normal final response, "
+         "not an Action call. Never call an Action named finalize. Report failed Actions in "
+         "unresolved_issues and calibrate confidence accordingly. Never claim that a tool or "
+@@ -6112,15 +6136,29 @@
+     else:
+         # Preserve the existing recovery prompt for every other dataset.
+         qa_finalization_rule = " For short-answer QA, answer must be the shortest answer span."
++    output_instruction = (
++        "Return exactly one short JSON object with answer, summary, "
++        "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
++        "task result in answer and all explanation in summary or evidence."
++        + qa_finalization_rule
++    )
++    if action_adapter == "healthbench_professional":
++        output_instruction = (
++            "Return exactly one JSON object with answer, summary, confidence, evidence, "
++            "unresolved_issues, and tool_summary. "
++            + _healthbench_answer_instruction()
++        )
++        recovery_context["artifact_schema"]["answer"] = (
++            "the complete, self-contained result for the assigned responsibility, including "
++            "necessary explanation, supporting evidence, qualifications, and uncertainty"
++        )
+     return [
+         {
+             "role": "system",
+             "content": (
+                 "The Action phase is over. Do not call tools and do not emit tool-call XML or "
+-                "tool-call JSON. Return exactly one short JSON object with answer, summary, "
+-                "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
+-                "task result in answer and all explanation in summary or evidence."
+-                + qa_finalization_rule
++                "tool-call JSON. "
++                + output_instruction
+                 + " Use the assigned_task, "
+                 "any public_task_context, and only the visible upstream, prior, and peer packets "
+                 "provided below. Do not infer private or hidden task data. Action history is "

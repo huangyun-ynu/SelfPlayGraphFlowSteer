@@ -307,6 +307,7 @@ class ExecutionReport:
     skipped_clean_agents: list[str] = field(default_factory=list)
     invalidation_reasons: dict[str, list[str]] = field(default_factory=dict)
     execution_events: list[dict[str, Any]] = field(default_factory=list)
+    attempt_artifacts: list[AgentArtifact] = field(default_factory=list)
     initial_model_calls: int = 0
     revision_model_calls: int = 0
     cache_hits: int = 0
@@ -325,6 +326,7 @@ class ExecutionReport:
     revision_cache_hits: int = 0
     mandatory_revision_calls: int = 0
     incomplete_bidirectional_components: list[dict[str, Any]] = field(default_factory=list)
+    blocked_agents: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -339,6 +341,8 @@ class ExecutionReport:
                 key: list(value) for key, value in self.invalidation_reasons.items()
             },
             "execution_events": [dict(value) for value in self.execution_events],
+            "attempt_artifacts": [value.to_dict() for value in self.attempt_artifacts],
+            "worker_usage_schema": "worker_execution_usage_v1",
             "initial_model_calls": self.initial_model_calls,
             "revision_model_calls": self.revision_model_calls,
             "cache_hits": self.cache_hits,
@@ -359,6 +363,7 @@ class ExecutionReport:
             "incomplete_bidirectional_components": [
                 dict(value) for value in self.incomplete_bidirectional_components
             ],
+            "blocked_agents": dict(self.blocked_agents),
         }
 
 

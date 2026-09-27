@@ -343,11 +343,8 @@ def main() -> None:
             "aime-1983-2024", "aime", "math_reasoning", "numeric"
         ),
         "nq_open": nq_pool,
-        "hotpotqa": lambda: qa_protocol_pool(
-            "hotpotqa-v1.1-train-main",
-            "hotpotqa",
-            "multi_hop_qa",
-            "flowsteer_qa",
+        "hotpotqa": lambda: read_jsonl(
+            ROOT / "data/formal/sources/flowsteer/hotpotqa_train_512.tasks.jsonl"
         ),
         "webshop": webshop_pool,
         "alfworld": alfworld_pool,

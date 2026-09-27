@@ -1,0 +1,358 @@
+{
+  "source_sample_sha256": "d2c683a4c56b6304ff955c3ad0050cc43d32f6c0147cd66a37ddb57e66d9fff0",
+  "source_attempt": "one-repair-v10",
+  "task_id": "swe_bench_verified_test:django__django-11555",
+  "previous_outcome": "unsubmitted_unknown",
+  "final_graph": {
+    "version": 20,
+    "max_agents": 4,
+    "runtime_routes": [
+      "deepseek"
+    ],
+    "action_protocol": "director_action_json_v3",
+    "submission_protocol": "unified_task_result_v1",
+    "nodes": [],
+    "relations": [],
+    "output_agent": null
+  },
+  "control_snapshot": {
+    "canvas_version": 20,
+    "director_action_protocol_version": "director_action_json_v3",
+    "submission_contract_version": "unified_submission_v1",
+    "submission_protocol": "unified_task_result_v1",
+    "submission_status": "working",
+    "state": "failed",
+    "legal_agent_ids": [],
+    "pending_agent_id": null,
+    "pending_relation_decision": null,
+    "allowed_actions": [],
+    "action_field_requirements": {},
+    "legal_action_parameters": {
+      "add_agent": {
+        "system_allocated_id": true,
+        "remaining_slots": 4
+      },
+      "set_prompt": {
+        "targets": [],
+        "revision_evidence_by_target": {},
+        "revision_counts": {},
+        "result_scopes": [
+          "subtask",
+          "task_result"
+        ]
+      },
+      "set_model": {
+        "targets": [],
+        "runtime_routes": [
+          "deepseek"
+        ]
+      },
+      "set_layer": {
+        "targets": [],
+        "minimum_layer": 0,
+        "current_layers": {}
+      },
+      "consider_relation": {
+        "relations": []
+      },
+      "set_relation": {
+        "relations": []
+      },
+      "remove_relation": {
+        "relations": []
+      },
+      "delete_agent": {
+        "targets": []
+      },
+      "finish": {
+        "targets": [],
+        "ready": false
+      },
+      "run_agent": {
+        "targets": []
+      }
+    },
+    "graph_state": {
+      "nodes": [],
+      "actual_relations": [],
+      "candidate_relations_are_not_edges": true,
+      "submission_target": null,
+      "task_result_agents": [],
+      "reachability_by_target": {},
+      "weak_components": 0,
+      "weakly_disconnected": false,
+      "last_relation_decision": {}
+    },
+    "result_assessments": {},
+    "agent_budget": {
+      "used": 0,
+      "max": 4,
+      "remaining": 4
+    },
+    "progress": {
+      "no_progress_count": 0,
+      "semantic_states_seen": 18
+    },
+    "recovery_budget": {
+      "used": 2,
+      "max": 2
+    },
+    "round_budget": {
+      "used": 22,
+      "max": 24,
+      "remaining": 2
+    },
+    "token_budget": {
+      "used": 339395,
+      "max": 350000,
+      "remaining": 10605
+    },
+    "output_agent": null,
+    "environment_commit_resolution": "FINISH(target) commits only that current result, without executing Workers. RUN_AGENT continues unfinished work within the same resource limits."
+  },
+  "historical_artifacts": {
+    "artifact_1": {
+      "agent_id": "agent_1",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 20,
+        "successful_count": 13,
+        "failed_count": 7,
+        "successful_call_ids": [
+          "call_00_THuuSauuLtyPrnhOosbG7564",
+          "call_00_1bLyk48PpertmH7TzIGs9621",
+          "call_00_rtOVSuygU0J3Bw4EzqGy6425",
+          "call_00_scftHAQYFkGcQhjSSgYL1764",
+          "call_00_aod9sy5vdpPekoss8VTg5558",
+          "call_00_Uaheb7t21OYQ2a96ouDy8667",
+          "call_00_iFUC7DrWhm6byYNuJt1W3024",
+          "call_00_z8gp0iFksJS7K5JYnk2i1137",
+          "call_00_t5rzSikK77uPdU2B8FZn0681",
+          "call_00_58LBdH7NLdLEhig0TFKn2760",
+          "call_00_XOAHHFwsHj1bJz4Uakoe0539",
+          "call_00_hVpHkHTJOv11FF3hLLVH5108",
+          "call_00_YmXJd0tDk7OEn64jfY7q8957"
+        ],
+        "failed_call_ids": [
+          "call_01_gKj8Ggf5cqHc1wWjPoIt5344",
+          "call_01_RswvRN4DupRvRtPXCu343526",
+          "call_01_X7TFNIwLTqFu4BMI08nN3020",
+          "call_00_dB5Zz2swFwbYisyekYZi0892",
+          "call_01_rUTjVhaL7xroglZZ0wQA0599",
+          "call_00_doUiO9KRYcJJUGzO3zPJ1944",
+          "call_01_2Y2Bp6uttKzHtbxqxQVR3734"
+        ],
+        "failure_codes": [
+          "stateful_action_deferred",
+          "repeated_no_progress_action"
+        ],
+        "terminal_failure": true,
+        "recovered_failure": false,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_tool_failure": 0.5,
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    },
+    "artifact_2": {
+      "agent_id": "agent_2",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 27,
+        "successful_count": 15,
+        "failed_count": 12,
+        "successful_call_ids": [
+          "call_00_iL4QJNyOTDfdJ4oL4ZBq4275",
+          "call_00_iiHaxJI05HjRED8riXw91183",
+          "call_00_dreMGYfPnUctzaMP1K6n3931",
+          "call_00_iMCKuSVmuqyzc8vDUtJT9743",
+          "call_00_39VPRdcNSKq1Pib73bHl9892",
+          "call_00_r6PFLUqZ4fRWYRdC95kh7396",
+          "call_00_IQiUx5ZXXRcIUoeLWioK6254",
+          "call_00_UaPocS7215NHIFJjeevm2851",
+          "call_00_i3gbqtVmbqyVksSWVwuM9602",
+          "call_00_AfHQQLgGSgg9xpUqeB1w5709",
+          "call_00_OldRpkx9cK3aKW8Jr8jT5447",
+          "call_00_Z7zVXfUj686d22c1nTkh1748",
+          "call_00_UXma2ZQINQWNDWgD9wyY4888",
+          "call_00_fYczzLSbEizHqbHXxWFI3269",
+          "call_00_HZVjP4O4Eaf1HHXDhG7d3158"
+        ],
+        "failed_call_ids": [
+          "call_01_3xOkuOGQxcAdMN1oWvc32974",
+          "call_01_EUS0O7AJgDo6GSdFffIR7566",
+          "call_01_2a7ZqsUZqIk8seNX4jVR1410",
+          "call_01_0APAWeiQF77kXFUJFsbw7562",
+          "call_00_QaiagrlgZpjRN8V6Kjio1635",
+          "call_01_v1CIBWq8bK6sl6chHf7D5088",
+          "call_01_JEq4VBGOSkS2Gqwklxzh6974",
+          "call_00_05pYz3RvM4FLGywaJ0Ed6315",
+          "call_00_NIIFfcs5fHZy42h6ouDl4086",
+          "call_00_kLAKr5BLvz84vd2y59hy4374",
+          "call_00_uYBF92m11p8rcF7k0EMD8808",
+          "call_00_BvIiJkhbFUdUec5tqmXA2867"
+        ],
+        "failure_codes": [
+          "stateful_action_deferred",
+          "repeated_no_progress_action",
+          "swe_edit_test_reserve_required"
+        ],
+        "terminal_failure": true,
+        "recovered_failure": false,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_tool_failure": 0.5,
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    },
+    "artifact_3": {
+      "agent_id": "agent_3",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 15,
+        "successful_count": 9,
+        "failed_count": 6,
+        "successful_call_ids": [
+          "call_00_9QY2FlatLSRmw0WYu6Ew1820",
+          "call_00_5PT9Qvot45OfC2VkoMRX8043",
+          "call_00_f0PqbAm6f7J731SAuYEj7085",
+          "call_00_0ONxdSeTkO4mErjQ7Xn67968",
+          "call_00_Lp0Y3MJaExQCduxm737z5733",
+          "call_00_jgXZE3Yyc34X66dk46Fm2154",
+          "call_00_VCh7HJXQwHLEa2MFxUVy2897",
+          "call_00_IYorsCIodeEclCoxHm068561",
+          "call_01_RWxjuQJdxKGe1l0q9j7L7563"
+        ],
+        "failed_call_ids": [
+          "call_01_waZz5a6oFcQ5TJ9IetOA6538",
+          "call_01_jZc6HPTIo4N6tuCWkx8N4068",
+          "call_01_WZzTqDt6qLcoMd19XIrI0824",
+          "call_00_HGy1uYmCA4jpWLg6FQUj0868",
+          "call_00_LTX5V2vXgGQaUkAqOAVr7990",
+          "call_00_vgWVj8AErqJORMz46buz4771"
+        ],
+        "failure_codes": [
+          "stateful_action_deferred",
+          "repeated_no_progress_action"
+        ],
+        "terminal_failure": false,
+        "recovered_failure": true,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    },
+    "artifact_4": {
+      "agent_id": "agent_4",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 4,
+        "successful_count": 2,
+        "failed_count": 2,
+        "successful_call_ids": [
+          "call_00_1wiqb3Uth95Ro036AnO91816",
+          "call_00_E86Xs0itFIbpsyM5ClDl1754"
+        ],
+        "failed_call_ids": [
+          "call_01_JuQyxkZsDKF8iJsahSFs3748",
+          "call_01_xiOmFL2r0BpBNX4Lgxr07446"
+        ],
+        "failure_codes": [
+          "stateful_action_deferred"
+        ],
+        "terminal_failure": true,
+        "recovered_failure": false,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_tool_failure": 0.5,
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    },
+    "artifact_5": {
+      "agent_id": "agent_4",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 0,
+        "successful_count": 0,
+        "failed_count": 0,
+        "successful_call_ids": [],
+        "failed_call_ids": [],
+        "failure_codes": [],
+        "terminal_failure": false,
+        "recovered_failure": false,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    },
+    "artifact_6": {
+      "agent_id": "agent_4",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 0,
+        "successful_count": 0,
+        "failed_count": 0,
+        "successful_call_ids": [],
+        "failed_call_ids": [],
+        "failure_codes": [],
+        "terminal_failure": false,
+        "recovered_failure": false,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    },
+    "artifact_7": {
+      "agent_id": "agent_5",
+      "backend_failure": false,
+      "runtime_tool_evidence": {
+        "trusted": true,
+        "attempted_count": 0,
+        "successful_count": 0,
+        "failed_count": 0,
+        "successful_call_ids": [],
+        "failed_call_ids": [],
+        "failure_codes": [],
+        "terminal_failure": false,
+        "recovered_failure": false,
+        "all_actions_failed": false,
+        "unsupported_tool_verification_claim": false,
+        "claimed_confidence": 0.0,
+        "effective_confidence": 0.0,
+        "confidence_caps": {
+          "terminal_protocol_failure": 0.0
+        }
+      }
+    }
+  }
+}

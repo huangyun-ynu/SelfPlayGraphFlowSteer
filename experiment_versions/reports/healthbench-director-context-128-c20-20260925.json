@@ -1,0 +1,460 @@
+{
+  "audit": {
+    "examples": 128,
+    "unique_tasks": 128,
+    "all_criteria_scored": true,
+    "total_criteria": 258,
+    "criteria_with_matching_prediction_receipts": 258,
+    "length_adjusted_score": 0.4202547436199234,
+    "unclipped_length_adjusted_mean": 0.4202547436199234,
+    "raw_rubric_score": 0.4823698233074234,
+    "unclipped_raw_rubric_mean": 0.4823698233074234,
+    "project_threshold_pass_count": 66,
+    "initial_director_context_verified": 128,
+    "multiturn_context_verified": 31,
+    "judge_models": {
+      "gpt-5.5-2": 128
+    },
+    "qwen_thinking_evidence_count": 847,
+    "binary_relation_calls_without_thinking": 54,
+    "worker_request_counts_by_route": {
+      "gpt_eco": 91,
+      "gpt_student": 96,
+      "gpt": 93
+    },
+    "judge_request_counts_by_route": {
+      "gpt_student": 258
+    },
+    "mean_token_cost": 6713.875,
+    "mean_duration_s": 238.66148702695864,
+    "dataset_sha256": "991ed13ac248a3670e4caf7bdc83a770548c4209562c67a034631d4f0432042b",
+    "trajectory_concurrency": 20,
+    "judge_concurrency": 10,
+    "gpu": 1
+  },
+  "comparison": {
+    "protocol": "healthbench_director_public_context_v1",
+    "baseline": {
+      "n": 128,
+      "means": {
+        "score": 41.32507303555304,
+        "raw": 46.55135944180304,
+        "positive_credit": 59.06982625835422,
+        "negative_penalty": -12.518466816551182,
+        "answer_chars": 3777.6484375,
+        "summary_chars": 302.75,
+        "token_cost": 6638.4375,
+        "duration_s": 190.64913707204323,
+        "length_adjustment": -5.226286406249997
+      },
+      "counts": {
+        "positive_criteria_met": 134,
+        "negative_criteria_triggered": 19,
+        "raw_zero": 37,
+        "raw_negative": 13,
+        "answer_under_300_chars": 8,
+        "summary_longer_than_answer": 3,
+        "director_unfinished": 2,
+        "project_threshold_pass": 70,
+        "nodes": {
+          "1": 97,
+          "2": 29,
+          "3": 2
+        }
+      },
+      "groups": {
+        "difficulty": {
+          "difficult": {
+            "n": 64,
+            "score": 23.208972810350016,
+            "raw": 25.78151874785002
+          },
+          "typical": {
+            "n": 64,
+            "score": 59.44117326075606,
+            "raw": 67.32120013575606
+          }
+        },
+        "use_case": {
+          "consult": {
+            "n": 56,
+            "score": 41.702217219765096,
+            "raw": 46.3296722197651
+          },
+          "research": {
+            "n": 39,
+            "score": 48.56222631964527,
+            "raw": 55.226527858106806
+          },
+          "writing": {
+            "n": 33,
+            "score": 32.13207144781145,
+            "raw": 36.67508417508417
+          }
+        },
+        "stratum": {
+          "red_teaming_difficult": {
+            "n": 45,
+            "score": 20.786015996942247,
+            "raw": 22.778159996942247
+          },
+          "good_faith_difficult": {
+            "n": 19,
+            "score": 28.947554736842104,
+            "raw": 32.89473684210526
+          },
+          "good_faith_typical": {
+            "n": 64,
+            "score": 59.44117326075606,
+            "raw": 67.32120013575606
+          }
+        },
+        "turns": {
+          "single": {
+            "n": 97,
+            "score": 43.8320404743413,
+            "raw": 50.577673464032024
+          },
+          "multi": {
+            "n": 31,
+            "score": 33.48069104966718,
+            "raw": 33.95289298515105
+          }
+        }
+      }
+    },
+    "candidate": {
+      "n": 128,
+      "means": {
+        "score": 42.02547436199234,
+        "raw": 48.236982330742336,
+        "positive_credit": 59.70293178618241,
+        "negative_penalty": -11.465949455440072,
+        "answer_chars": 4112.7578125,
+        "summary_chars": 298.4296875,
+        "token_cost": 6713.875,
+        "duration_s": 238.66148702695864,
+        "length_adjustment": -6.2115079687499986
+      },
+      "counts": {
+        "positive_criteria_met": 137,
+        "negative_criteria_triggered": 18,
+        "raw_zero": 35,
+        "raw_negative": 12,
+        "answer_under_300_chars": 8,
+        "summary_longer_than_answer": 3,
+        "director_unfinished": 0,
+        "project_threshold_pass": 66,
+        "nodes": {
+          "1": 104,
+          "2": 23,
+          "3": 1
+        }
+      },
+      "groups": {
+        "difficulty": {
+          "difficult": {
+            "n": 64,
+            "score": 22.08966778992518,
+            "raw": 25.393446852425182
+          },
+          "typical": {
+            "n": 64,
+            "score": 61.9612809340595,
+            "raw": 71.0805178090595
+          }
+        },
+        "use_case": {
+          "consult": {
+            "n": 56,
+            "score": 35.064678727701605,
+            "raw": 39.71260872770161
+          },
+          "research": {
+            "n": 39,
+            "score": 52.79185027422668,
+            "raw": 59.71894258191899
+          },
+          "writing": {
+            "n": 33,
+            "score": 41.113834814814815,
+            "raw": 49.13299663299663
+          }
+        },
+        "stratum": {
+          "red_teaming_difficult": {
+            "n": 45,
+            "score": 24.72281321117609,
+            "raw": 27.40415854450942
+          },
+          "good_faith_difficult": {
+            "n": 19,
+            "score": 15.853270739594084,
+            "raw": 20.6312349501204
+          },
+          "good_faith_typical": {
+            "n": 64,
+            "score": 61.9612809340595,
+            "raw": 71.0805178090595
+          }
+        },
+        "turns": {
+          "single": {
+            "n": 97,
+            "score": 45.52006364508366,
+            "raw": 52.057441583227984
+          },
+          "multi": {
+            "n": 31,
+            "score": 31.090791766513057,
+            "raw": 36.2826420890937
+          }
+        }
+      }
+    },
+    "delta_points": 0.7004013264393043,
+    "paired_bootstrap_95_ci_points": [
+      -6.380850297574901,
+      8.501338838793133
+    ],
+    "raw_delta_points": 1.6856228889393023,
+    "paired_raw_bootstrap_95_ci_points": [
+      -5.4633458919667,
+      9.442859839933778
+    ],
+    "raw_improved": 14,
+    "raw_declined": 15,
+    "raw_unchanged": 99,
+    "rubric_transitions": {
+      "positive_0_to_1": 17,
+      "negative_0_to_0": 23,
+      "positive_0_to_0": 63,
+      "positive_1_to_1": 120,
+      "negative_1_to_1": 16,
+      "positive_1_to_0": 14,
+      "negative_0_to_1": 2,
+      "negative_1_to_0": 3
+    },
+    "interpretation": "Single paired rerun with the same route pool; bootstrap covers sampled-case variation, not endpoint drift or repeated-run randomness. Director public context and trajectory concurrency (10 to 20) changed together; this is not a strict single-variable experiment.",
+    "same_student_judge_subset": {
+      "n": 127,
+      "excluded_tasks": [
+        "healthbench_professional:test:21b7e2c4ac5982729923429bc25c780d:replica-00"
+      ],
+      "baseline": {
+        "n": 127,
+        "means": {
+          "score": 40.942422587014086,
+          "raw": 46.13050400433692,
+          "positive_credit": 58.74754142574283,
+          "negative_penalty": -12.617037421405916,
+          "answer_chars": 3764.6535433070867,
+          "summary_chars": 303.755905511811,
+          "token_cost": 6657.055118110236,
+          "duration_s": 190.11124093986416,
+          "length_adjustment": -5.1880814173228345
+        },
+        "counts": {
+          "positive_criteria_met": 133,
+          "negative_criteria_triggered": 19,
+          "raw_zero": 37,
+          "raw_negative": 13,
+          "answer_under_300_chars": 8,
+          "summary_longer_than_answer": 3,
+          "director_unfinished": 2,
+          "project_threshold_pass": 69,
+          "nodes": {
+            "2": 29,
+            "1": 96,
+            "3": 2
+          }
+        },
+        "groups": {
+          "difficulty": {
+            "difficult": {
+              "n": 63,
+              "score": 22.150040950196843,
+              "raw": 24.60344761686351
+            },
+            "typical": {
+              "n": 64,
+              "score": 59.44117326075606,
+              "raw": 67.32120013575606
+            }
+          },
+          "use_case": {
+            "writing": {
+              "n": 32,
+              "score": 30.326146180555554,
+              "raw": 34.69618055555556
+            },
+            "research": {
+              "n": 39,
+              "score": 48.56222631964527,
+              "raw": 55.226527858106806
+            },
+            "consult": {
+              "n": 56,
+              "score": 41.702217219765096,
+              "raw": 46.3296722197651
+            }
+          },
+          "stratum": {
+            "red_teaming_difficult": {
+              "n": 44,
+              "score": 19.214750905963662,
+              "raw": 21.023118178690932
+            },
+            "good_faith_typical": {
+              "n": 64,
+              "score": 59.44117326075606,
+              "raw": 67.32120013575606
+            },
+            "good_faith_difficult": {
+              "n": 19,
+              "score": 28.947554736842104,
+              "raw": 32.89473684210526
+            }
+          },
+          "turns": {
+            "single": {
+              "n": 96,
+              "score": 43.35194006261569,
+              "raw": 50.06285756261569
+            },
+            "multi": {
+              "n": 31,
+              "score": 33.48069104966718,
+              "raw": 33.95289298515105
+            }
+          }
+        }
+      },
+      "candidate": {
+        "n": 127,
+        "means": {
+          "score": 41.70074959318913,
+          "raw": 47.82939951444897,
+          "positive_credit": 59.385632036467314,
+          "negative_penalty": -11.55623252201834,
+          "answer_chars": 4084.5748031496064,
+          "summary_chars": 298.01574803149606,
+          "token_cost": 6656.811023622047,
+          "duration_s": 235.34635205616382,
+          "length_adjustment": -6.128649921259843
+        },
+        "counts": {
+          "positive_criteria_met": 136,
+          "negative_criteria_triggered": 18,
+          "raw_zero": 35,
+          "raw_negative": 12,
+          "answer_under_300_chars": 8,
+          "summary_longer_than_answer": 3,
+          "director_unfinished": 0,
+          "project_threshold_pass": 65,
+          "nodes": {
+            "1": 104,
+            "2": 22,
+            "3": 1
+          }
+        },
+        "groups": {
+          "difficulty": {
+            "difficult": {
+              "n": 63,
+              "score": 21.11862251674939,
+              "raw": 24.209215850082725
+            },
+            "typical": {
+              "n": 64,
+              "score": 61.9612809340595,
+              "raw": 71.0805178090595
+            }
+          },
+          "use_case": {
+            "writing": {
+              "n": 32,
+              "score": 39.79659465277778,
+              "raw": 47.54340277777778
+            },
+            "research": {
+              "n": 39,
+              "score": 52.79185027422668,
+              "raw": 59.71894258191899
+            },
+            "consult": {
+              "n": 56,
+              "score": 35.064678727701605,
+              "raw": 39.71260872770161
+            }
+          },
+          "stratum": {
+            "red_teaming_difficult": {
+              "n": 44,
+              "score": 23.392297147793727,
+              "raw": 25.754253056884636
+            },
+            "good_faith_typical": {
+              "n": 64,
+              "score": 61.9612809340595,
+              "raw": 71.0805178090595
+            },
+            "good_faith_difficult": {
+              "n": 19,
+              "score": 15.853270739594084,
+              "raw": 20.6312349501204
+            }
+          },
+          "turns": {
+            "single": {
+              "n": 96,
+              "score": 45.12688180805328,
+              "raw": 51.55803993305328
+            },
+            "multi": {
+              "n": 31,
+              "score": 31.090791766513057,
+              "raw": 36.2826420890937
+            }
+          }
+        }
+      },
+      "delta_points": 0.7583270061750458,
+      "raw_delta_points": 1.6988955101120526
+    }
+  },
+  "experiment": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-director-context-gpt-low-128-c20-20260925-155258",
+  "baseline": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-full-answer-gpt-low-128-20260924-231723",
+  "validation": {
+    "tests_passed": 150,
+    "command": ".venv/bin/python -m pytest -q tests/test_healthbench_director_context.py tests/test_healthbench_answer_protocol.py tests/test_canvas_director.py tests/test_application.py tests/test_benchmark_runtime.py",
+    "regression_checks": [
+      "public multi-turn history in actual initial Director request",
+      "single-turn rendering",
+      "non-HealthBench routing unchanged",
+      "private rubric/physician/canary fields absent from Director and Worker requests"
+    ],
+    "only_inference_change": "HealthBench Director input",
+    "trajectory_concurrency": 20,
+    "judge_global_concurrency": 10,
+    "fallback": "Previously authorized GPT alternatives used only on request failure, same answer/prompt, event logged."
+  },
+  "inference_retries": [
+    {
+      "time": 1790323639.558837,
+      "kind": "inference_retry",
+      "task_id": "healthbench_professional:test:4f118b7f2841f4816f4b8d4b989e4500:replica-00",
+      "attempt": 1,
+      "error": "Missing valid HealthBench rubric verification"
+    }
+  ],
+  "final_service_check": {
+    "checked_at": 1790325103.467961,
+    "pid": 14783,
+    "model": "Qwen3.5-9B",
+    "http_status": 200,
+    "gpu": 1,
+    "kept_running": true,
+    "port": 18604
+  }
+}

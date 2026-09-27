@@ -1,3 +1,4 @@
+# Historical M02 reference evaluation, not the formal training route policy.
 # WebShop official no-skill evaluation profile; see docs/WEBSHOP_BASELINE.zh-CN.md.
 # Canonical deployment configuration for the seven-dataset formal PATS run.
 # Credentials are loaded from the repository .env and are never stored here.
@@ -51,12 +52,12 @@ max_rounds = 24
 relay_max_chars = 1000
 
 [canvas.max_total_tokens_by_dataset]
-aime = 65536
-nq_open = 65536
-hotpotqa = 65536
+aime = 240000
+nq_open = 240000
+hotpotqa = 240000
 webshop = 350000
 alfworld = 350000
-healthbench_professional = 65536
+healthbench_professional = 240000
 swe_bench = 350000
 
 [solver_skillbank]
@@ -94,10 +95,6 @@ mode = "auto"
 
 [answer_submission]
 enabled = true
-qa_model_enabled = true
-runtime_route = "gpt"
-max_tokens = 128
-require_source_span = true
 
 # Pure-local Python execution support for AIME Workers.
 [aime_actions]
@@ -133,10 +130,17 @@ max_total_calls = 16
 staged_commit_enabled = true
 max_pending_sessions = 8
 pending_ttl_s = 900.0
-# Promoted baseline: 62/128 strict successes; see docs/WEBSHOP_BASELINE.zh-CN.md.
+# M02: merged guidance + identity fix; 62/128, mean score 73.5221.
 search_observation_mode = "legacy"
 
 # Local assets are present; the formal environment installs the alfworld extra.
+compatibility_profile = "m02_merged_identity_v1"
+worker_guidance_policy = "merged_checklist_v1"
+worker_memory_policy = "factual_memory_v1"
+worker_execution_policy = "graph_tools_v1"
+native_conversation_history = false
+env_feedback_enabled = false
+
 [alfworld]
 enabled = true
 data_root = "assets/alfworld-data/json_2.1.1"

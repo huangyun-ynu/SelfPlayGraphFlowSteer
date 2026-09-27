@@ -406,6 +406,10 @@ def collect_outcome_metrics(
                         or task_id
                     ),
                     "recorded": bool(record),
+                    "submission_status": meta.get("submission_status", "legacy"),
+                    "submission_contract_version": meta.get("submission_contract_version", "legacy"),
+                    "outcome_status": (meta.get("outcome_decision") or {}).get("status", "legacy"),
+                    "diagnostic_qa_metrics": meta.get("diagnostic_qa_metrics"),
                     "reward_known": known,
                     "task_score_raw": number(verification.get("score"))
                     if known and meta.get("reward_admission_reason") == "trusted_task_result"

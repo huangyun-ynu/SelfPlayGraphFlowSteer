@@ -1,0 +1,182 @@
+"""Bind prompt, state-machine and skill semantics across collection and learning."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+
+def _digest(value) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict | None = None) -> dict:
+    from . import runtime
+    from .actions import DIRECTOR_ACTION_PROTOCOL_VERSION
+    from .director import director_prompt_components
+    from .output_contract import OUTPUT_CONTRACT_VERSION, WORKER_OUTPUT_ROLE_VERSION
+    from .pats_semantics import SEMANTIC_REVISION, contract_hash
+    from .submission_contract import SUBMISSION_CONTRACT_VERSION
+
+    base, hints = director_prompt_components(prompt_variant)
+    rendered = {}
+    for dataset, adapter in (
+        ("hotpotqa", "hotpotqa_context"),
+        ("nq_open", "retrieval_qa"),
+        ("aime", "aime"),
+        ("healthbench_professional", "healthbench_professional"),
+        ("alfworld", "alfworld"),
+        ("webshop", "webshop"),
+        ("swe_bench", "swe_bench"),
+        ("", ""),
+    ):
+        for selected in (False, True):
+            args = dict(
+                dataset=dataset,
+                short_answer_qa=dataset in {"hotpotqa", "nq_open"},
+                is_output_agent=selected,
+            )
+            instruction = runtime._worker_output_instruction([], action_adapter=adapter, **args)
+            recovery = runtime._finalization_recovery_messages(
+                instruction=instruction,
+                react_trace=[],
+                previous_attempt_issue="invalid_json",
+                visible_context={
+                    "public_task_context": "PUBLIC TASK",
+                    "assigned_task": "DELEGATION",
+                    "action_environment": {"adapter": adapter},
+                },
+                **args,
+            )
+            responsibility = ""
+            if prompt_variant == "v3":
+                from .contracts import AgentNode
+                from .unified_contract import PROTOCOL, result_instruction
+
+                node = AgentNode(agent_id="manifest", metadata={
+                    "submission_protocol": PROTOCOL,
+                    "result_scope": "task_result" if selected else "subtask",
+                })
+                responsibility = result_instruction(node, dataset)
+            rendered[f"{dataset}:{selected}"] = _digest([instruction, responsibility, recovery])
+    # Conservative code provenance covers all branches, including tool-dependent
+    # prompts and delegation templates not represented by the renders above.
+    root = Path(__file__).parent
+    source_hashes = {
+        name: hashlib.sha256((root / (name + ".py")).read_bytes()).hexdigest()
+        for name in (
+            "execution_contract",
+            "actions",
+            "output_contract",
+            "runtime",
+            "llm",
+            "artifact_protocol",
+            "endpoint_pool",
+            "director",
+            "canvas",
+            "graph",
+            "delegation",
+            "counterfactual",
+            "adaptive",
+            "answer_submission",
+            "submission_contract",
+            "unified_contract",
+            "unified_submission",
+            "webshop_native",
+            "webshop_native_executor",
+            "alfworld",
+            "swebench",
+            "outcome_admission",
+            "swe_failure_attribution",
+            "selfplay_runtime",
+            "protocol_reward",
+            "application",
+            "evaluation",
+            "observability",
+            "benchmark",
+            "benchmark_tracking",
+            "benchmark_reporting",
+            "qa_metrics",
+            "qa_submission",
+            "aime_submission",
+            "outcome_metrics",
+            "rollouts",
+            "training",
+            "selfplay",
+            "async_cycle",
+            "config",
+            "pats_semantics",
+            "pats_refiner",
+            "pats",
+            "skill_evolution_v2",
+        )
+    }
+    return {
+        "director_action_protocol_version": "director_action_json_v3" if prompt_variant == "v3" else DIRECTOR_ACTION_PROTOCOL_VERSION,
+        "output_contract_version": OUTPUT_CONTRACT_VERSION,
+        "submission_contract_version": "unified_submission_v1" if prompt_variant == "v3" else SUBMISSION_CONTRACT_VERSION,
+        "submission_admission_config": json.loads(json.dumps(admission_config or {})),
+        "worker_output_role_version": WORKER_OUTPUT_ROLE_VERSION,
+        "director_prompt_variant": prompt_variant,
+        "director_prompt_template_sha256_by_problem_type": {
+            key: _digest(base.rstrip() + "\n\n" + hint.strip() + "\n")
+            for key, hint in sorted(hints.items())
+        },
+        "worker_and_recovery_sha256": rendered,
+        "contract_source_sha256": source_hashes,
+        "director_seed_sha256": hashlib.sha256(
+            (root / "director_seed_v2.json").read_bytes()
+        ).hexdigest(),
+        "pats_semantic_revision": SEMANTIC_REVISION,
+        "pats_runtime_contract_sha256": contract_hash(prompt_variant),
+    }
+
+
+def manifest_semantics(manifest: dict) -> dict | None:
+    return manifest.get("execution_semantics")
+
+
+def require_same_semantics(expected, actual) -> None:
+    # Transport/policy-lag overrides must never waive this equality.
+    if expected != actual:
+        raise ValueError("execution semantics changed; start a fresh collection")
+
+
+def bind_rollout_contract(batches, rollouts):
+    from dataclasses import replace
+
+    versions = {r.trajectory.metadata.get("submission_contract_version", "legacy") for r in rollouts}
+    if len(versions) > 1:
+        raise ValueError("submission contract changed within rollout group")
+
+    values = [manifest_semantics(r.trajectory.metadata.get("model_roles", {})) for r in rollouts]
+    if not values or not any(value is not None for value in values):
+        return batches  # Offline/legacy fixtures; the live learner requires a binding.
+    for value in values:
+        require_same_semantics(values[0], value)
+    return tuple(
+        replace(batch, metadata={**batch.metadata, "execution_semantics": values[0]})
+        for batch in batches
+    )
+
+
+def validate_training_contract(proposer_batch, solver_batch, *, expected=None):
+    recorded = solver_batch.metadata.get("execution_semantics")
+    require_same_semantics(recorded, proposer_batch.metadata.get("execution_semantics"))
+    if expected is not None:
+        require_same_semantics(expected, recorded)
+    if recorded is not None:
+        require_same_semantics(recorded, execution_semantics(
+            recorded["director_prompt_variant"],
+            admission_config=recorded.get("submission_admission_config"),
+        ))
+    for sample in solver_batch.samples:
+        from .submission_contract import validate_primary_training_outcome
+
+        validate_primary_training_outcome(sample.metadata)
+        observed = manifest_semantics(sample.metadata.get("model_roles", {}))
+        if recorded is not None or observed is not None:
+            require_same_semantics(recorded, observed)

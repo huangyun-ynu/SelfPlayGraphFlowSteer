@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from selfplay_graph_flowsteer.runtime import MultiAgentRuntime
 
 from .helpers import RecordingExecutor
 
-MODEL = Path("models/Qwen3.5-9B")
+MODEL = Path(os.environ.get("SPGFS_TEST_TOKENIZER_PATH", "models/Qwen3.5-9B"))
 TEMPLATE = Path(__file__).resolve().parents[1] / "configs/templates/director_append_only.jinja"
 
 
@@ -127,7 +128,7 @@ def test_collection_cannot_mix_context_modes_or_template_versions(monkeypatch, t
         persist_context_policy(tmp_path, resume=True)
 
 
-@pytest.mark.parametrize("mode", ["append_only", "delta_timeline"])
+@pytest.mark.parametrize("mode", ["append_only"])
 def test_graph_director_preserves_each_actual_request_and_audits_tokens(
     monkeypatch, tokenizer, mode
 ):
@@ -160,9 +161,11 @@ def test_graph_director_preserves_each_actual_request_and_audits_tokens(
         assert audit["timeline_merge_candidate"]
         assert (
             turn.action_diagnostics["director_context_schema"]
-            == f"{mode}_action_feedback_history_v1"
+            == f"{mode}_action_feedback_history_v3_with_thinking"
         )
         messages = backend.calls[i]["messages"]
+        assert ("still thinking" in str(messages)) is bool(i)
+        assert "still thinking" in tokenizer.decode(turn.completion_token_ids)
         assert sum("Task:\n" in m["content"] for m in messages) == 1
         assert (
             sum("Authoritative Canvas control snapshot:" in m["content"] for m in messages) == i + 1
@@ -172,7 +175,7 @@ def test_graph_director_preserves_each_actual_request_and_audits_tokens(
                 messages[: len(backend.calls[i - 1]["messages"])]
                 == backend.calls[i - 1]["messages"]
             )
-            assert audit["previous_policy_is_exact_prefix"]
+            assert audit["previous_policy_is_exact_prefix"] is True
     assert "Bounded recovery" in backend.calls[-1]["messages"][-1]["content"]
 
 
@@ -190,6 +193,28 @@ def test_opt_in_template_does_not_change_worker_or_proposer_requests(monkeypatch
     monkeypatch.setenv("SPGFS_DIRECTOR_CONTEXT_MODE", "typo")
     with pytest.raises(ValueError):
         director_context_mode()
+
+
+def test_removed_delta_mode_is_rejected_before_collection(monkeypatch, tmp_path):
+    monkeypatch.setenv("SPGFS_DIRECTOR_CONTEXT_MODE", "delta_timeline")
+    with pytest.raises(ValueError, match="use 'snapshot_dedup' or 'append_only'"):
+        persist_context_policy(tmp_path, resume=False)
+    assert not (tmp_path / "director_context_policy.json").exists()
+
+
+def test_old_delta_collection_cannot_resume_as_another_mode(monkeypatch, tmp_path):
+    import json
+
+    monkeypatch.setenv("SPGFS_DIRECTOR_CONTEXT_MODE", "append_only")
+    persist_context_policy(tmp_path, resume=False)
+    marker = tmp_path / "director_context_policy.json"
+    policy = json.loads(marker.read_text())
+    policy["mode"] = "delta_timeline"
+    old_marker = json.dumps(policy)
+    marker.write_text(old_marker)
+    with pytest.raises(ValueError, match="differs"):
+        persist_context_policy(tmp_path, resume=True)
+    assert marker.read_text() == old_marker
 
 
 def test_timeline_accepts_vllm_text_content_blocks(tokenizer):

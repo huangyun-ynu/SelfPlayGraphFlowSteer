@@ -187,19 +187,26 @@ class EndpointPoolBackend:
                 time.sleep(delay_s)
         assert last_error is not None
         kinds = {failure.kind for failure in failures}
+        attempted_members = sorted({event["endpoint_pool_member"] for event in attempts})
+        all_members_attempted = len(attempted_members) == len(self.members)
+        budget_exhausted = time.monotonic() >= end
         classification = BackendFailureClassification(
             backend_failure=True,
             origin="endpoint_pool",
             kind=next(iter(kinds)) if len(kinds) == 1 else "endpoint_pool_exhausted",
             retryable=False,
             counts_toward_route_circuit=True,
-            disable_route=True,
+            # A request deadline can prevent trying the other healthy members.
+            # Do not disable the entire logical route on that evidence alone.
+            disable_route=all_members_attempted,
             stage="endpoint_pool",
             route=self.name,
             exception_type="EndpointPoolExhausted",
             message=(
-                f"all {len(self.members)} endpoints failed across "
-                f"{max(event['pool_round'] for event in attempts)} pool rounds"
+                f"{len(attempted_members)} of {len(self.members)} endpoints attempted; "
+                f"{len(attempts)} failed attempts across "
+                f"{max(event['pool_round'] for event in attempts)} pool rounds; "
+                f"request budget exhausted={budget_exhausted}"
             ),
         )
         terminal_event = {
@@ -209,6 +216,9 @@ class EndpointPoolBackend:
             "attempt": len(attempts),
             "will_retry": False,
             "endpoint_pool_attempts": len(attempts),
+            "endpoint_pool_members_attempted": attempted_members,
+            "endpoint_pool_members_total": len(self.members),
+            "request_budget_exhausted": budget_exhausted,
         }
         error = BackendRequestError(classification, request_events=[terminal_event])
         error.endpoint_pool_attempts = list(attempts)

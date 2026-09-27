@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from selfplay_graph_flowsteer.alfworld import ALFWorldSessionLifecycle
@@ -200,6 +202,38 @@ def test_public_reset_goal_is_extracted_before_room_truncation(lifecycle, monkey
     assert initial["observation_truncated"]
     assert len(initial["initial_observation"]) == 100
     assert initial["public_task_statement"] == goal
+
+
+@pytest.mark.parametrize("done,success", [(True, True), (True, False), (False, False)])
+def test_finalization_keeps_current_episode_truth_with_no_new_actions(done, success):
+    from selfplay_graph_flowsteer.runtime import _finalization_recovery_messages
+
+    state = {
+        "public_task_statement": "put some book on sidetable.",
+        "observation": "Latest environment observation",
+        "done": done, "success": success, "score": float(success), "step": 5,
+        "goal_contract": {"private_internal_field": "must not be exposed"},
+        "admissible_actions": [{"action_id": "stale-action"}],
+    }
+    messages = _finalization_recovery_messages(
+        instruction="Summarize the episode", react_trace=[],
+        previous_attempt_issue="alfworld_environment_terminal",
+        visible_context={
+            "public_task_context": "move a magazine from the bed to the table",
+            "peer_packets": [{"summary": "The task was not completed"}],
+            "action_environment": {"adapter": "alfworld", "state": state},
+        },
+    )
+    payload = json.loads(messages[-1]["content"])
+    public = payload["alfworld_current_public_state"]
+    assert public["public_task_statement"] == state["public_task_statement"]
+    assert public["done"] is done and public["success"] is success
+    assert public["score"] == float(success)
+    assert payload["action_history"] == []
+    assert "goal_contract" not in public and "admissible_actions" not in public
+    assert "private_internal_field" not in messages[-1]["content"]
+    assert "override" in payload["alfworld_finalization_contract"]["state_authority"]
+    assert "goal_contract" in state  # The runtime-owned state is unchanged.
 
 
 def test_factual_memory_keeps_object_feedback_without_inventing_success():

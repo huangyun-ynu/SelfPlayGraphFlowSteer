@@ -39,6 +39,7 @@ MODES = {"EXPAND", "REVISE", "COMPRESS", "FORCED_PRUNE"}
 @dataclass(frozen=True)
 class PatsConfig:
     enabled: bool = False
+    director_prompt_variant: str = "v2.1"
     ema_alpha: float = 0.1
     revise_threshold: float = 0.3
     compress_threshold: float = 0.85
@@ -54,6 +55,10 @@ class PatsConfig:
     max_review_input_tokens: int = 20480
 
     def validate(self) -> None:
+        from .director import DIRECTOR_PROMPT_VARIANTS
+
+        if self.director_prompt_variant not in DIRECTOR_PROMPT_VARIANTS:
+            raise ValueError("unknown PATS Director prompt variant")
         if type(self.enabled) is not bool:
             raise ValueError("PATS enabled must be boolean")
         if not math.isfinite(self.ema_alpha) or not 0 < self.ema_alpha <= 1:
@@ -446,14 +451,14 @@ class PatsController:
             "schema": SCHEMA,
             "selection_revision": "learned_first_v1",
             "semantic_gate_revision": SEMANTIC_REVISION,
-            "semantic_contract_sha256": contract_hash(),
+            "semantic_contract_sha256": contract_hash(self.config.director_prompt_variant),
             "config": asdict(self.config),
             "step": state["step"],
             "run": state.get("run"),
             "scopes": {
                 key: {
                     **{k: value[k] for k in ("ema", "policy_snapshot", "mode")},
-                    "cards": filter_semantic_cards(self.store, key, value["cards"]),
+                    "cards": filter_semantic_cards(self.store, key, value["cards"], self.config.director_prompt_variant),
                 }
                 for key, value in sorted(state["scopes"].items())
             },
@@ -685,11 +690,11 @@ class PatsController:
                     from .pats_semantics import audit_semantic_cards, card_identity
 
                     original_identities = {
-                        card_identity(scope, card) for card in record["cards"]
+                        card_identity(scope, card, self.config.director_prompt_variant) for card in record["cards"]
                     }
                     changed_cards = [
                         card for card in revised
-                        if card_identity(scope, card) not in original_identities
+                        if card_identity(scope, card, self.config.director_prompt_variant) not in original_identities
                     ]
                     if changed_cards:
                         review_stage = "semantic_validation"
@@ -698,6 +703,7 @@ class PatsController:
                             token_counter=self.token_counter,
                             max_input_tokens=self.config.max_review_input_tokens,
                             run=run, step=step,
+                            prompt_variant=self.config.director_prompt_variant,
                         )
                         semantic_calls += semantic["checker_calls"]
                         review["semantic_check"] = semantic
@@ -732,7 +738,7 @@ class PatsController:
                 "refiner_calls": calls,
                 "semantic_checker_calls": semantic_calls,
                 "semantic_validator_revision": SEMANTIC_REVISION,
-                "semantic_contract_sha256": contract_hash(),
+                "semantic_contract_sha256": contract_hash(self.config.director_prompt_variant),
                 "reviews": reviews,
             }
             with self.store.connect() as db:

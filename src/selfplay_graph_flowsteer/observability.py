@@ -142,10 +142,9 @@ class MultiAnswerExactMatchVerifier(ExactMatchVerifier):
 class FlowSteerQAVerifier:
     """FlowSteer's ``eval_only.py`` QA metric for NQ-open and HotpotQA.
 
-    The primary score is normalized token-F1 and evaluation passes at F1 >=
-    0.5.  The reward bucket used by FlowSteer's training path is retained in
-    the detail string, so the 0.7 partial reward is observable without being
-    confused with the evaluation pass criterion.
+    The score is the bucketed QA reward; evaluation passes at token-F1 >= 0.5.
+    Both values are retained in the detail string. Official answer EM/F1 are
+    computed independently by the Solver audit and do not replace this reward.
     """
 
     name = "flowsteer_qa"
@@ -415,6 +414,9 @@ def trace_from_canvas(
                 kind="canvas_step",
                 payload={
                     "raw_action": step.action.raw_text,
+                    "event_id": step.event_id,
+                    "director_call_id": step.director_call_id,
+                    "submission_receipt": step.submission_receipt,
                     "accepted": step.accepted,
                     "feedback": step.feedback,
                     "graph_version": step.graph.get("version"),
@@ -456,6 +458,11 @@ def trace_from_canvas(
     if canvas.graph.output_agent:
         artifact = canvas.runtime.artifacts.get(canvas.graph.output_agent)
         output = artifact.answer if artifact else ""
+    from .submission_contract import is_text_submission_dataset
+
+    if is_text_submission_dataset(canvas.dataset):
+        output = (canvas.submission_receipt.submitted_answer_snapshot
+                  if canvas.submission_receipt else "")
     return ExecutionTrace(
         run_id=run_id,
         task=task,

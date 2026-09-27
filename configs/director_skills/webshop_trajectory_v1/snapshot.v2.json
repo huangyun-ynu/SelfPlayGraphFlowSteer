@@ -1,0 +1,438 @@
+{
+  "schema": "director_skill_v2",
+  "snapshot_id": "webshop-trajectory-orchestration-v1-f9565df1906fdf49",
+  "cards": [
+    {
+      "card": {
+        "name": "公开需求保真的职责委派",
+        "description": "WebShop shopping delegation that preserves product identity, mandatory constraints, numerical specifications and allowed alternatives.",
+        "trigger": "A shopping responsibility is created or rewritten, especially when the request mixes product identity, specifications and alternatives.",
+        "plan": "Keep the original public request authoritative. Give the session owner responsibility for both finding a suitable configuration and completing the environment transaction. Preserve required properties, quantities, price limits and allowed alternatives when assigning a narrower subgoal. Let a helper resolve ambiguity from public evidence without silently adding requirements or substituting a different product category. Reconcile the revised responsibility with the original request before resuming execution.",
+        "pitfall": "A concise assignment can drop an option, turn an alternative into a requirement, or redefine what is being bought.",
+        "constraint": "Unresolved ambiguity remains explicit; an evaluation outcome does not supply an additional user requirement.",
+        "kind": "decomposition",
+        "skill_id": "ws-public-constraints",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-public-constraints"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "保留单一会话所有者",
+        "description": "WebShop shopping graph ownership, stateful execution continuity and read-only helper connections.",
+        "trigger": "The graph adds a helper, changes its output, or revises an Agent after a shopping session already exists.",
+        "plan": "Identify the Agent that owns the current mutable shopping session and retain it as the execution authority. Give helpers distinct reasoning responsibilities over its visible artifacts. Connect useful helper feedback back to the owner instead of treating independent reports as shared browser state. Preserve the owner and its dependencies while useful session state exists; transfer execution only through an explicitly supported runtime handoff.",
+        "pitfall": "Replacing the owner or selecting a reviewer as the shopping output can separate conclusions from the actual session.",
+        "constraint": "Use the runtime's ownership permissions; this guidance does not require extra Agents or a particular Worker route.",
+        "kind": "orchestration",
+        "skill_id": "ws-session-owner",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-session-owner"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "区分标题默认规格与可选变体",
+        "description": "WebShop shopping candidate assessment when titles show default size, color, capacity, flavor or pack quantity but selectable variants are still unknown.",
+        "trigger": "A plausible product family appears in search, but its title's default specification differs from the requested configuration.",
+        "plan": "Frame the owner's next subgoal as establishing the candidate's available configuration, rather than rejecting it from the title alone. Keep unobserved variant availability unknown. Ask for a compact comparison of the requested size, color, capacity or pack against the options actually exposed by that product. Use the result to decide whether further catalog exploration is necessary, allowing the Worker to choose legal evidence-gathering actions.",
+        "pitfall": "Exact title matching can discard a configurable match or favor a title that sounds right but exposes no matching option.",
+        "constraint": "Do not prescribe a catalog rank, product identifier, brand or fixed exploration sequence.",
+        "kind": "decomposition",
+        "skill_id": "ws-variant-capability",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-variant-capability"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "回访后核验当前选项",
+        "description": "WebShop shopping option state after leaving, reopening or revising a product session, including cleared selections and exact variant confirmation.",
+        "trigger": "A candidate is revisited, the current product changes, or a report relies on options selected earlier.",
+        "plan": "Have the session owner reconcile the current product identity and live selected options with the requested configuration. Treat earlier selections as history until the current observation confirms them. Preserve still-valid product evidence separately from transient option state. If configuration is incomplete, assign that concrete gap to the owner and obtain a fresh selection record before the final purchase check.",
+        "pitfall": "A correct past selection or a matching title can be mistaken for the configuration currently active in the session.",
+        "constraint": "Historical packets cannot restore options or certify another product's state; only current public session feedback can.",
+        "kind": "verification",
+        "skill_id": "ws-live-options",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-live-options"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "围绕具体需求缺口核对证据",
+        "description": "WebShop shopping verification of unresolved attributes, suitability, material or compatibility using public evidence for the current product and variant.",
+        "trigger": "A proposed candidate has an unresolved factual requirement, conflicting evidence, or a full-match claim supported only by a partial checklist.",
+        "plan": "Specify the exact requirement the owner or reviewer must resolve. Require a concise supported, contradicted or unknown status tied to public evidence about the same candidate and applicable variant. Prefer verification that can change the candidate decision and still leave a feasible completion path. Once the relevant evidence is sufficient, move to configuration or comparison instead of repeating general review.",
+        "pitfall": "Listing satisfied conditions can conceal an omitted condition; reading more pages does not itself establish a match.",
+        "constraint": "Do not require every detail section or convert missing evidence into either proof or an automatic rejection.",
+        "kind": "verification",
+        "skill_id": "ws-targeted-evidence",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-targeted-evidence"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "在同一约束下比较候选",
+        "description": "WebShop shopping comparison of several observed candidates with different prices, options, evidence gaps and return costs.",
+        "trigger": "More than one candidate has useful evidence, or the latest product is about to replace an earlier feasible candidate.",
+        "plan": "Request a short comparison using the same public requirements for every candidate: stable identity, supported configuration, contradictions, unknowns, price and the work needed to return and finish. Keep the strongest currently feasible candidate visible while investigating a remaining gap. If a reviewer is useful, let it compare the owner's packets and return a specific decision gap to that same owner.",
+        "pitfall": "Recency, attractive wording or one matching attribute can displace a better supported earlier candidate.",
+        "constraint": "Compare public feasibility, not an inferred evaluator score; do not declare an unresolved candidate a full match.",
+        "kind": "orchestration",
+        "skill_id": "ws-candidate-comparison",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-candidate-comparison"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "对无进展搜索做局部修订",
+        "description": "WebShop shopping search stagnation with repeated result sets, near-duplicate queries or no progress on the unresolved requirement.",
+        "trigger": "Successive searches or revisits consume actions without adding a candidate, evidence or progress on a specific gap.",
+        "plan": "Diagnose whether the missing information is catalog coverage, an unexamined variant, a factual property or an unavailable option. Revise the owner's immediate responsibility around one distinguishable uncertainty and an observable result. Preserve the original product intent and useful candidates. Judge progress by what becomes known or feasible, rather than by changed wording alone, and reconsider the remaining completion budget after the revision.",
+        "pitfall": "Paraphrasing the same query or assigning another Agent the same vague search can consume the remaining interaction budget.",
+        "constraint": "Do not impose a fixed retry count, silently change product category, or reset a useful session to create apparent progress.",
+        "kind": "bug-repair",
+        "skill_id": "ws-search-revision",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-search-revision"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "分离访问历史与证据恢复价值",
+        "description": "WebShop shopping memory compression, visited-product flags, missing evidence packets and legitimate return-to-product work.",
+        "trigger": "A packet omits earlier evidence, memory fields disagree, or a previously visited product is dismissed as having no further value.",
+        "plan": "Distinguish whether the product was visited, whether the relevant evidence is currently visible, and whether returning is necessary to configure or complete the purchase. Request recovery or clarification only for the missing fact that affects the decision. Keep the request with the session owner and bind recovered information to the correct product. Preserve uncertainty when the available records cannot establish the historical state.",
+        "pitfall": "An absent compressed record can be read as never visited; a seen flag can be read as no possible value in returning.",
+        "constraint": "Treat auxiliary value flags as insufficient evidence, not permission to fabricate history or override current legal actions.",
+        "kind": "communication",
+        "skill_id": "ws-evidence-recovery",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-evidence-recovery"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "按完整购买路径分配动作预算",
+        "description": "WebShop shopping action-budget planning for verification, returning from details, selecting required options and completing a purchase.",
+        "trigger": "Additional exploration, detail inspection or review competes with the actions still needed to complete a candidate transaction.",
+        "plan": "Ask the owner to estimate the remaining legal work from the current page through any required return, option selection and purchase. Compare that path with the actual remaining action budget before authorizing another information-gathering subgoal. Keep a feasible completion path while resolving important gaps. If no satisfactory path remains, surface that limitation and the available public alternatives under the existing task policy.",
+        "pitfall": "Using the final actions to read a detail and return can leave a product identified but no way to buy it.",
+        "constraint": "Use current budgets and state, not a fixed action count; do not force a purchase or label a known mismatch as success.",
+        "kind": "orchestration",
+        "skill_id": "ws-completion-budget",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-completion-budget"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "区分候选、暂存购买和环境完成",
+        "description": "WebShop shopping output selection and finalization when an owner has a candidate, a staged purchase or a confirmed environment result.",
+        "trigger": "The Director is choosing the graph output or ending the task after an Agent reports shopping progress.",
+        "plan": "Check the current owner's public transaction state, rather than recommendation prose alone. Distinguish an identified candidate, an executable staged purchase and confirmed environment completion. Keep output attached to the owner holding the applicable transaction so the runtime's existing commit protocol can finalize it. If a prerequisite is missing and budget permits, revise that prerequisite; once completion is confirmed, avoid reopening the transaction for redundant review.",
+        "pitfall": "A confident report or a reviewer's agreement can be mistaken for a purchase, while premature output changes can strand staged work.",
+        "constraint": "Follow the current runtime commit protocol; no invented completion flag, extra purchase or new output schema is authorized.",
+        "kind": "verification",
+        "skill_id": "ws-transaction-closure",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-transaction-closure"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "有证据输入的轻量评审",
+        "description": "WebShop shopping orchestration of an optional independent reviewer for a concrete requirement conflict, comparison or unsupported completion claim.",
+        "trigger": "An independent assessment could resolve a consequential disagreement using already available evidence and remaining workflow budget.",
+        "plan": "Give the reviewer a narrow question, the original public requirement and the owner's relevant evidence packet. Keep it read-only unless the runtime explicitly grants execution ownership. Require a concrete contradiction, missing fact or supported resolution that the owner can use. Connect that feedback into the owner's revision. Skip the extra node when the evidence is sufficient or another review cannot improve the next decision.",
+        "pitfall": "A reviewer without candidate evidence can only repeat the task or endorse an unsupported claim while adding latency and tokens.",
+        "constraint": "An additional Agent is optional; its report is not an environment observation or a reason to change the configured Worker route.",
+        "kind": "communication",
+        "skill_id": "ws-bounded-review",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-bounded-review"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    },
+    {
+      "card": {
+        "name": "保留有效状态的定向修订",
+        "description": "WebShop shopping graph revision after new feedback, preserving useful owner artifacts, current configuration and complete acquisition responsibility.",
+        "trigger": "Feedback identifies a specific missing requirement or execution prerequisite after useful shopping work has already been performed.",
+        "plan": "Revise the smallest responsibility or dependency that addresses the new gap. Keep the owner's overall acquisition objective intact and pass the current product identity, verified evidence, live option state, remaining budget and unresolved issue into the revision. Invalidate only conclusions affected by the change. Reuse valid work and inspect the new public artifact before making another graph edit.",
+        "pitfall": "Restarting the whole search or narrowing the owner to report-only work can discard useful state and leave acquisition unfinished.",
+        "constraint": "Revisions do not replenish environment actions, transfer ownership implicitly or make stale observations current.",
+        "kind": "orchestration",
+        "skill_id": "ws-local-revision",
+        "task_types": [
+          "shopping"
+        ],
+        "evidence": [
+          "public trajectory pattern; provenance.json#/cards/ws-local-revision"
+        ],
+        "stats": {
+          "usage_count": 0,
+          "helpful_count": 0,
+          "hurt_count": 0,
+          "last_used_step": -1,
+          "creation_step": 0,
+          "is_seed": true
+        }
+      },
+      "version": 1,
+      "status": "seed",
+      "provenance": "trajectory_derived_unvalidated",
+      "parent_version": null,
+      "source_cases": [],
+      "required_tools": [
+        "webshop_search",
+        "webshop_click"
+      ],
+      "excluded_task_types": []
+    }
+  ]
+}

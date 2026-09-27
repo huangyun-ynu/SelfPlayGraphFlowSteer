@@ -1,5 +1,9 @@
 # WebShop 实验版本对照
 
+> 2026-09-25 当前正式训练已选择M02（62/128、平均分73.5221）；下文W08选择为历史记录。见[当前正式版本](WEBSHOP_BASELINE.zh-CN.md)。
+
+**2026-09-25更新入口：** [完整版本总账](/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/docs/WEBSHOP_EXPERIMENT_LEDGER_2026-09-25.zh-CN.md)已列出17组完整128题、全部有效Native 10题、提前停止和撤回记录，包含每版改动、LASER/Skill状态、EM及平均分；另有[CSV](/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/experiment_versions/reports/webshop-version-ledger-20260925.csv)。下文保留09-23六版核查原文，其中“当前正式参考”等表述仅指当时状态；用户后来已选择W08作为提示实验基线。
+
 核查日期：2026-09-23。V1–V6 是本表临时编号，不是项目 release 编号。依据为各运行的 aggregate_summary、manifest，以及全部历史轨迹中的配置、实际 Worker 模型、Qwen 思考字段和 skill 注入记录。
 
 ## 六个完整的 128 题版本

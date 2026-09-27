@@ -1,0 +1,18 @@
+--- a/src/selfplay_graph_flowsteer/adaptive.py
++++ b/src/selfplay_graph_flowsteer/adaptive.py
+@@ -441,7 +441,14 @@
+                 task,
+                 include_submission_contract=self.answer_finalizer is not None,
+             ),
+-            director_task=task.prompt,
++            # HealthBench evaluates the next reply in a public conversation;
++            # task.prompt may contain only a context-dependent follow-up.
++            director_task=(
++                solver_task_text(task)
++                if action_adapter is not None
++                and action_adapter.adapter_id == "healthbench_professional"
++                else task.prompt
++            ),
+             runtime=self.runtime,
+             config=replace(base_canvas_config, max_total_tokens=selected_token_budget),
+             runtime_routes=self.runtime_routes,

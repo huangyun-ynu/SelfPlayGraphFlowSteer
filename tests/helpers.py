@@ -55,6 +55,17 @@ class NumericRecordingExecutor(RecordingExecutor):
         return artifact
 
 
+def finish_as_director(canvas):
+    """Trusted driver context for isolated Canvas tests; no synthetic policy tokens."""
+    from selfplay_graph_flowsteer.submission_contract import _director_call_context
+
+    canvas.run_id = canvas.run_id or "canvas-unit-test"
+    return canvas.step(
+        '{"action":"finish"}',
+        director_context=_director_call_context(canvas.run_id, f"test-call:{len(canvas.history)}"),
+    )
+
+
 def install_numeric_mock_worker(monkeypatch):
     """Give AIME scheduling tests valid syntax without consulting task targets."""
     from selfplay_graph_flowsteer import application

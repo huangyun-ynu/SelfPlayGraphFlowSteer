@@ -14,7 +14,7 @@ from selfplay_graph_flowsteer.mace import MACEModelRouter
 from selfplay_graph_flowsteer.observability import NumericVerifier, TaskSpec
 from selfplay_graph_flowsteer.runtime import MultiAgentRuntime, PeerInteraction
 
-from .helpers import RecordingExecutor
+from .helpers import RecordingExecutor, finish_as_director
 
 
 @pytest.mark.parametrize(
@@ -85,16 +85,17 @@ def test_reject_without_last_number_fallback(raw):
 
 
 @pytest.mark.parametrize("enabled", [True, False])
-def test_finalizer_checks_even_when_disabled_and_never_uses_summary_or_reference(enabled):
+def test_finalizer_preserves_unparseable_answer_without_using_summary_or_reference(enabled):
     finalizer = AnswerFinalizer(AnswerSubmissionConfig(enabled=enabled))
     outputs = []
     for reference in (3, 35, 999):
         task = TaskSpec("aime", "question", reference=reference, metadata={"dataset": "aime"})
         outputs.append(finalizer.finalize(task, "[12,7,3]", raw_summary="Final answer: 35"))
     assert outputs[0] == outputs[1] == outputs[2]
-    assert not outputs[0].valid
+    assert outputs[0].valid
     assert outputs[0].raw_answer == "[12,7,3]"
-    assert outputs[0].submitted_answer == ""
+    assert outputs[0].submitted_answer == "[12,7,3]"
+    assert outputs[0].method == "aime_raw_submission_v2"
 
 
 class AnswerExecutor(RecordingExecutor):
@@ -120,29 +121,28 @@ def configure(canvas, agent="solver", role="Analyst"):
     ).accepted
 
 
-def test_finish_rejection_preserves_artifact_and_director_can_repair():
+def test_finish_submits_invalid_answer_unchanged_without_automatic_repair():
     executor = AnswerExecutor()
     canvas = GraphCanvas(task="question", dataset="aime", runtime=MultiAgentRuntime(executor))
     configure(canvas)
     assert canvas.runtime.artifacts["solver"].answer == "[12,7,3]"
     assert canvas.step('{"action":"set_output","target":"solver"}').accepted
     before = len(executor.calls)
-    rejected = canvas.step('{"action":"finish"}')
-    assert not rejected.accepted
-    assert rejected.rejection_code == "output_answer_invalid"
-    assert canvas.active
-    assert canvas.state != CanvasState.FINISHED
+    finished = finish_as_director(canvas)
+    assert finished.accepted
+    assert canvas.state == CanvasState.FINISHED
     assert len(executor.calls) == before  # No automatic format-retry model call.
     assert canvas.runtime.artifacts["solver"].answer == "[12,7,3]"
+    assert canvas.submission_receipt.submitted_answer_snapshot == "[12,7,3]"
     assert canvas.recover_finish_only() is None
-    assert any(
-        action["action"] == "set_prompt"
-        for action in rejected.rejection_details["legal_recovery_actions"]
-    )
-    assert not any(
-        action["action"] == "finish"
-        for action in rejected.rejection_details["legal_recovery_actions"]
-    )
+
+
+def test_answer_format_allows_optional_revision_as_unresolved_issue():
+    executor = AnswerExecutor()
+    canvas = GraphCanvas(task="question", dataset="aime", runtime=MultiAgentRuntime(executor))
+    configure(canvas)
+    assert canvas.step('{"action":"set_output","target":"solver"}').accepted
+    before = len(executor.calls)
     fixed = canvas.step(
         json.dumps(
             {
@@ -152,18 +152,18 @@ def test_finish_rejection_preserves_artifact_and_director_can_repair():
                 "objective": "Provide the final result.",
                 "scope": "Resolve the final submission.",
                 "expected_output": "One final integer.",
-                "revision_basis": "protocol_failure",
+                "revision_basis": "unresolved_issue",
                 "evidence_agent_ids": ["solver"],
             }
         )
     )
     assert fixed.accepted, fixed.feedback
-    assert canvas.step('{"action":"finish"}').accepted
+    assert finish_as_director(canvas).accepted
     assert canvas.state == CanvasState.FINISHED
     assert len(executor.calls) == before + 1
 
 
-def test_repeated_invalid_finish_uses_existing_round_budget():
+def test_invalid_answer_can_submit_on_last_available_director_round():
     canvas = GraphCanvas(
         task="question",
         dataset="aime",
@@ -172,9 +172,9 @@ def test_repeated_invalid_finish_uses_existing_round_budget():
     )
     configure(canvas)
     assert canvas.step('{"action":"set_output","target":"solver"}').accepted
-    assert not canvas.step('{"action":"finish"}').accepted
+    assert finish_as_director(canvas).accepted
     assert not canvas.active
-    assert canvas.state != CanvasState.FINISHED
+    assert canvas.state == CanvasState.FINISHED
 
 
 def test_wrong_but_well_formed_answer_finishes_without_correctness_feedback():
@@ -183,7 +183,7 @@ def test_wrong_but_well_formed_answer_finishes_without_correctness_feedback():
     )
     configure(canvas, role="Finalize")
     assert canvas.step('{"action":"set_output","target":"solver"}').accepted
-    assert canvas.step('{"action":"finish"}').accepted
+    assert finish_as_director(canvas).accepted
     task = TaskSpec("aime", "question", reference=36, metadata={"dataset": "aime"})
     assert not NumericVerifier().verify(task, "35").passed
 
@@ -262,12 +262,12 @@ def test_partial_upstream_artifact_remains_usable_for_collaboration():
         '{"action":"set_relation","source":"evidence","target":"output","relation":"directed"}'
     ).accepted
     assert canvas.step('{"action":"set_output","target":"output"}').accepted
-    assert canvas.step('{"action":"finish"}').accepted
+    assert finish_as_director(canvas).accepted
     assert canvas.runtime.artifacts["evidence"].answer == "[12,7,3]"
 
 
 @pytest.mark.parametrize("role,valid", [("Analyst", False), ("Finalize", True)])
-def test_counterfactual_evaluator_checks_submission_validity(role, valid):
+def test_counterfactual_evaluator_grades_preserved_invalid_answer(role, valid):
     class CountingVerifier(NumericVerifier):
         def __init__(self):
             super().__init__()
@@ -295,16 +295,11 @@ def test_counterfactual_evaluator_checks_submission_validity(role, valid):
         return_verification=True,
     )
     assert bool(result["score"]) is valid
-    assert result["prediction"] == ("35" if valid else "")
-    assert verifier.calls == (["35"] if valid else [])
+    assert result["prediction"] == ("35" if valid else "[12,7,3]")
+    assert verifier.calls == [result["prediction"]]
 
 
-def test_aime_never_calls_optional_qa_formatter():
-    backend = MockBackend([])
-    finalizer = AnswerFinalizer(
-        AnswerSubmissionConfig(enabled=True, qa_model_enabled=True, runtime_route="unused"),
-        qa_backend=backend,
-    )
+def test_aime_submission_never_replaces_answer_with_summary():
+    finalizer = AnswerFinalizer(AnswerSubmissionConfig(enabled=True))
     task = TaskSpec("aime", "question", reference=35, metadata={"dataset": "aime"})
-    assert not finalizer.finalize(task, "[12,7,3]", raw_summary="Final answer: 35").valid
-    assert backend.calls == []
+    assert finalizer.finalize(task, "[12,7,3]", raw_summary="Final answer: 35").submitted_answer == "[12,7,3]"

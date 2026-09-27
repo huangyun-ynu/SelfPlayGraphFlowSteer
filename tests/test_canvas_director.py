@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -54,11 +55,12 @@ def test_empty_canvas_recovery_progress_resets_streak_and_can_finish():
             '"objective":"Solve the task.","scope":"Reason independently.",'
             '"expected_output":"Return a finding."}',
             '{"action":"set_output","target":"solver"}',
+            '{"action":"finish"}',
         ]
     )
     run = GraphDirector(backend=backend, canvas=canvas).run()
     assert run.finished
-    assert len(backend.calls) == 6
+    assert len(backend.calls) == 7
     assert not any(s.rejection_code == "director_no_progress_exhausted" for s in canvas.history)
 
 
@@ -184,13 +186,12 @@ def test_rejected_finish_only_recovery_terminates_without_busy_loop():
     canvas = RejectingFinishCanvas(
         task="test", runtime=MultiAgentRuntime(executor=RecordingExecutor())
     )
-    result = GraphDirector(backend=MockBackend([]), canvas=canvas).run()
+    result = GraphDirector(backend=MockBackend(['{"action":"finish"}']), canvas=canvas).run()
     assert not result.finished
-    assert not result.turns  # No invented model output or automatic graph repair.
+    assert result.turns[0].model_action == '{"action":"finish"}'
     assert canvas.state is CanvasState.FAILED
     assert canvas.finish_attempts == 1
-    assert len(canvas.history) == 2
-    assert canvas.history[-1].rejection_code == "swe_output_commit_incomplete"
+    assert any(step.rejection_code == "swe_output_commit_incomplete" for step in canvas.history)
 
 
 def test_frozen_topology_keeps_other_legal_recovery_actions(monkeypatch):
@@ -458,7 +459,7 @@ def test_director_v2_control_prompt_preserves_archived_shrink_prior() -> None:
 
 def test_director_rejects_unknown_prompt_variant() -> None:
     with pytest.raises(ValueError, match="unsupported Director prompt variant"):
-        director_prompt_components("v3")
+        director_prompt_components("v99")
 
 
 def test_problem_type_owner_rules_do_not_limit_graph_size() -> None:
@@ -559,14 +560,14 @@ def test_canvas_allows_single_agent_without_fixed_role_or_topology() -> None:
     ).accepted
     checkpoint = canvas.step('{"action":"set_output","target":"solver"}')
 
-    assert checkpoint.accepted and checkpoint.execution is None
+    assert checkpoint.accepted and checkpoint.execution is not None
     assert not checkpoint.final_execution
-    assert len(executor.calls) == 1
+    assert len(executor.calls) == 2
     finished = canvas.step('{"action":"finish"}')
     assert finished.accepted
     assert finished.execution is not None
     assert finished.final_execution
-    assert len(executor.calls) == 1
+    assert len(executor.calls) == 2
     assert len(canvas.graph.nodes) == 1
     assert not canvas.graph.directed_edges
     assert not canvas.graph.bidirectional_edges
@@ -646,9 +647,11 @@ def test_canvas_allows_twenty_graph_turns_and_finish_reuses_incremental_result()
         target = "b" if index % 2 == 0 else "a"
         step = canvas.step(f'{{"action":"set_output","target":"{target}"}}')
         assert step.accepted
-        assert step.execution is None
+        assert step.execution is not None
+        assert set(step.execution.scheduled_agents) == {"a", "b"}
     assert canvas.round_index == 19
-    assert len(executor.calls) == calls_before_output_switches
+    assert len(executor.calls) > calls_before_output_switches
+    calls_before_finish = len(executor.calls)
 
     finished = canvas.step('{"action":"finish"}')
 
@@ -657,7 +660,7 @@ def test_canvas_allows_twenty_graph_turns_and_finish_reuses_incremental_result()
     assert finished.execution is not None
     assert canvas.round_index == 20
     assert not canvas.active
-    assert len(executor.calls) == calls_before_output_switches
+    assert len(executor.calls) == calls_before_finish
 
 
 def test_director_completes_mock_graph() -> None:
@@ -675,13 +678,13 @@ def test_director_completes_mock_graph() -> None:
     result = GraphDirector(backend=director_backend, canvas=canvas).run()
     assert result.finished
     assert result.output.startswith("solver:Role: Independent solver")
-    assert len(result.turns) == 3
+    assert len(result.turns) == 4
     assert all(turn.accepted for turn in result.turns)
     assert director_backend.calls[0]["max_tokens"] == 1000
     assert director_backend.calls[0]["enable_thinking"] is None
     assert director_backend.calls[1]["max_tokens"] == 1000
     assert director_backend.calls[1]["enable_thinking"] is None
-    assert [len(call["messages"]) for call in director_backend.calls] == [2, 4, 6]
+    assert [len(call["messages"]) for call in director_backend.calls] == [2, 4, 6, 8]
     assert "Process signals: solver(" in director_backend.calls[2]["messages"][-1]["content"]
     assert all(
         sum(str(message["content"]).count("Task:\ntask") for message in call["messages"]) == 1
@@ -753,8 +756,8 @@ def test_director_keeps_missing_json_as_a_rejected_policy_turn_without_hidden_re
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
     assert result.finished
-    assert len(result.turns) == 4
-    assert len(backend.calls) == 4
+    assert len(result.turns) == 5
+    assert len(backend.calls) == 5
     assert result.turns[0].model_action == '{"action":"invalid"}'
     assert result.turns[0].raw_action_text == "A long analysis with no graph action."
     assert result.turns[0].action_diagnostics["repair_attempted"] is False
@@ -855,12 +858,15 @@ def test_aime_canvas_applies_dataset_actions_before_execution() -> None:
     assert node.metadata["action_adapter"] == "aime"
     checkpoint = canvas.step('{"action":"set_output","target":"solver"}')
     assert checkpoint.accepted
-    assert checkpoint.execution is None
-    assert len(executor.calls) == 1
-    finished = canvas.step('{"action":"finish"}')
+    assert checkpoint.execution is not None
+    assert len(executor.calls) == 2
+    assert len(executor.calls) == 2
+    from .helpers import finish_as_director
+
+    finished = finish_as_director(canvas)
     assert finished.accepted
     assert finished.final_execution
-    assert len(executor.calls) == 1
+    assert len(executor.calls) == 2
 
     removed_director_action = canvas.step(
         '{"action":"set_operation_policy","target":"solver","allowed_tools":[]}'
@@ -1514,7 +1520,7 @@ def test_director_does_not_recover_a_nonpending_prompt_as_none() -> None:
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
     assert result.finished
-    assert len(result.turns) == 5
+    assert len(result.turns) == 6
     assert "currently required SET_PROMPT for None" not in str(backend.calls)
 
 
@@ -1591,7 +1597,7 @@ def test_canvas_reexecutes_only_dirty_subgraph_and_finish_uses_cache() -> None:
     assert relation.execution.reused_agents == ["a"]
     assert executor.calls[-1]["agent_id"] == "b"
     assert executor.calls[-1]["upstream"] == ["a"]
-    assert canvas.step('{"action":"set_output","target":"b"}').execution is None
+    assert canvas.step('{"action":"set_output","target":"b"}').execution.executed_agents == ["b"]
     calls_before_finish = len(executor.calls)
     finished = canvas.step('{"action":"finish"}')
     assert finished.accepted and finished.final_execution
@@ -1649,6 +1655,230 @@ def test_structural_repair_blocks_graph_growth_and_preserves_dirty_execution() -
     assert canvas.step('{"action":"add_agent","agent_id":"c"}').accepted
 
 
+def _two_isolated_agents_for_connectivity(
+    *, binary_relation_policy: bool = False, max_agents: int = 2,
+):
+    executor = RecordingExecutor()
+    canvas = GraphCanvas(
+        task="task",
+        runtime=MultiAgentRuntime(executor),
+        config=CanvasConfig(max_agents=max_agents),
+        binary_relation_policy=binary_relation_policy,
+    )
+    for agent_id in ("a",):
+        assert canvas.step('{"action":"add_agent","agent_id":"a"}').accepted
+        assert canvas.step(
+            '{"action":"set_prompt","target":"a","role":"Solver",'
+            '"objective":"Answer the task.","scope":"Solve independently.",'
+            '"expected_output":"Return the answer."}'
+        ).accepted
+        assert canvas.step('{"action":"set_output","target":"a"}').accepted
+    assert canvas.step('{"action":"add_agent","agent_id":"b"}').accepted
+    assert canvas.step(
+        '{"action":"set_prompt","target":"b","role":"Evidence analyst",'
+        '"objective":"Find a useful contribution.","scope":"Work independently.",'
+        '"expected_output":"Return a finding."}'
+    ).accepted
+    assert canvas.structural_repair_reason == "output_reachability"
+    return canvas, executor
+
+
+def test_connectivity_snapshot_separates_actual_edges_and_candidate_previews():
+    canvas, _ = _two_isolated_agents_for_connectivity(binary_relation_policy=True)
+    snapshot = canvas.control_snapshot()
+    assert snapshot["graph_state"]["actual_relations"] == []
+    assert snapshot["graph_state"]["candidate_relations_are_not_edges"] is True
+    candidate = snapshot["legal_action_parameters"]["consider_relation"]["relations"][0]
+    assert candidate["source"] == "a" and candidate["target"] == "b"
+    preview = snapshot["topology_action_previews"]["relation_choices"][0]
+    assert preview["actual_present_before"] is False
+    assert not preview["choices"]["off"]["candidate_edge_present_after"]
+    assert preview["choices"]["on"]["candidate_edge_present_after"]
+
+    proposal = canvas.step('{"action":"consider_relation","source":"a","target":"b"}')
+    assert proposal.accepted
+    assert canvas.graph.bidirectional_edges == set()
+    choice = canvas.resolve_relation_choice("off")
+    assert choice.accepted
+    assert canvas.graph.bidirectional_edges == set()
+    assert canvas.history[-1].control_snapshot["graph_state"]["actual_relations"] == []
+    assert "choice=off" in choice.feedback
+
+
+def test_connectivity_repair_blocks_output_round_trip_before_worker_execution():
+    canvas, executor = _two_isolated_agents_for_connectivity()
+    first = canvas.step('{"action":"set_output","target":"b"}')
+    assert first.accepted
+    assert set(canvas._unreachable_to_output()) == {"a"}
+    calls_after_first_switch = len(executor.calls)
+    assert "b" not in canvas.control_snapshot()["legal_action_parameters"]["set_output"]["targets"]
+
+    repeated = canvas.step('{"action":"set_output","target":"a"}')
+    assert not repeated.accepted
+    assert repeated.rejection_code == "connectivity_output_cycle"
+    assert canvas.graph.output_agent == "b"
+    assert len(executor.calls) == calls_after_first_switch
+    assert repeated.rejection_details["cycle_preview"]["returns_to_visited_state"]
+    assert not canvas.topology_edits_frozen
+    assert "set_layer" in canvas.control_snapshot()["allowed_actions"]
+
+
+def test_connectivity_cycle_tracks_three_distinct_output_candidates():
+    canvas, _ = _two_isolated_agents_for_connectivity(max_agents=3)
+    assert canvas.step(
+        '{"action":"set_relation","source":"a","target":"b",'
+        '"relation":"bidirectional"}'
+    ).accepted
+    assert canvas.step('{"action":"add_agent","agent_id":"c"}').accepted
+    assert canvas.step(
+        '{"action":"set_prompt","target":"c","role":"Reviewer",'
+        '"objective":"Check an independent derivation.",'
+        '"scope":"Review the task independently.",'
+        '"expected_output":"A concise check."}'
+    ).accepted
+
+    assert canvas.step('{"action":"set_output","target":"b"}').accepted
+    assert canvas.step('{"action":"set_output","target":"c"}').accepted
+    assert "a" not in canvas.control_snapshot()["legal_action_parameters"]["set_output"]["targets"]
+    repeated = canvas.step('{"action":"set_output","target":"a"}')
+
+    assert not repeated.accepted
+    assert repeated.rejection_code == "connectivity_output_cycle"
+    assert canvas.graph.output_agent == "c"
+
+
+def test_off_removes_an_existing_relation_and_snapshot_reports_the_result():
+    canvas, _ = _two_isolated_agents_for_connectivity(binary_relation_policy=True)
+    proposal = canvas.step('{"action":"consider_relation","source":"a","target":"b"}')
+    assert proposal.accepted
+    enabled = canvas.resolve_relation_choice("on")
+    assert enabled.accepted
+    assert canvas.graph.bidirectional_edges == {("a", "b")}
+
+    remove = canvas.step('{"action":"consider_relation","source":"a","target":"b"}')
+    assert remove.accepted
+    disabled = canvas.resolve_relation_choice("off")
+
+    assert disabled.accepted
+    assert canvas.graph.bidirectional_edges == set()
+    assert canvas.history[-1].control_snapshot["graph_state"]["actual_relations"] == []
+    assert "choice=off" in disabled.feedback
+
+
+def test_connectivity_repair_keeps_layer_relation_sequence_available():
+    canvas, _ = _two_isolated_agents_for_connectivity(binary_relation_policy=True)
+    assert canvas.step('{"action":"set_layer","target":"a","layer":1}').accepted
+    assert not canvas.topology_edits_frozen
+
+
+def test_connectivity_repair_allows_output_switch_that_completes_a_directed_chain():
+    canvas, _ = _two_isolated_agents_for_connectivity()
+    assert canvas.step('{"action":"set_layer","target":"b","layer":1}').accepted
+    assert canvas.step(
+        '{"action":"set_relation","source":"a","target":"b","relation":"directed"}'
+    ).accepted
+    assert set(canvas._unreachable_to_output()) == {"b"}
+
+    selected = canvas.step('{"action":"set_output","target":"b"}')
+
+    assert selected.accepted
+    assert not canvas._unreachable_to_output()
+    assert canvas.graph.validate(final=True) == []
+    assert selected.structural_repair["transition"] == "resolved"
+
+
+def test_connectivity_cycle_history_accepts_same_output_after_new_artifact_evidence():
+    canvas, _ = _two_isolated_agents_for_connectivity()
+    assert canvas.step('{"action":"set_output","target":"b"}').accepted
+    canvas.runtime.artifacts["a"].answer = "new grounded result"
+
+    revisited = canvas.step('{"action":"set_output","target":"a"}')
+
+    assert revisited.accepted
+    assert canvas.graph.output_agent == "a"
+
+
+def test_connectivity_cycle_signature_ignores_absolute_layer_translation():
+    canvas, _ = _two_isolated_agents_for_connectivity()
+    assert canvas.step('{"action":"set_layer","target":"b","layer":1}').accepted
+    before = canvas._connectivity_state_signature()
+    canvas.graph.nodes["a"].layer = 10
+    canvas.graph.nodes["b"].layer = 11
+
+    assert canvas._connectivity_state_signature() == before
+
+
+def test_reachability_preview_rejects_legal_edge_pointing_away_from_output():
+    canvas, _ = _two_isolated_agents_for_connectivity(binary_relation_policy=True)
+    assert canvas.step('{"action":"set_layer","target":"b","layer":1}').accepted
+    snapshot = canvas.control_snapshot()
+    candidate = next(
+        item for item in snapshot["legal_action_parameters"]["consider_relation"]["relations"]
+        if item["source"] == "a" and item["target"] == "b"
+    )
+    assert candidate["relation"] == "directed"
+    preview = next(
+        item for item in snapshot["topology_action_previews"]["relation_choices"]
+        if item["source"] == "a" and item["target"] == "b"
+    )
+    assert preview["choices"]["on"]["unreachable_to_output_after"] == ["b"]
+    assert not preview["choices"]["on"]["resolves_reachability"]
+
+
+def test_reachability_repair_unfreezes_generic_rejection_fuse():
+    canvas, _ = _two_isolated_agents_for_connectivity()
+    canvas.topology_edits_frozen = True
+    canvas._enter_structural_repair("output_reachability", agents=("b",))
+    assert not canvas.topology_edits_frozen
+    assert "set_layer" in canvas.control_snapshot()["allowed_actions"]
+
+
+def test_recorded_aime16_output_switch_trace_stops_after_first_unproductive_switch(monkeypatch):
+    trace_path = (
+        Path(__file__).resolve().parents[1]
+        / "state/audits/aime30-finish-v1-deepseek-qwen-thinking-20260926/run/trajectories"
+        / "064ef67eca667e6894335446.json"
+    )
+    trace = json.loads(trace_path.read_text(encoding="utf-8"))
+    payloads = [event["payload"] for event in trace["events"]]
+    after_off = next(item for item in payloads if item.get("director_turn_index") == 16)
+    original_switches = [
+        item["raw_action"] for item in payloads
+        if item.get("director_turn_index") is not None
+        and 17 <= item["director_turn_index"] <= 23
+        and item.get("accepted")
+        and json.loads(item["raw_action"]).get("action") == "set_output"
+    ]
+    assert len(original_switches) == 7
+
+    executor = RecordingExecutor()
+    canvas = GraphCanvas(task=trace["task"]["prompt"], runtime=MultiAgentRuntime(executor))
+    canvas.graph = type(canvas.graph).from_dict(after_off["graph"])
+    for agent_id in canvas.graph.nodes:
+        canvas.runtime.artifacts[agent_id] = AgentArtifact(
+            artifact_id=f"recorded-{agent_id}",
+            agent_id=agent_id,
+            answer=f"recorded candidate from {agent_id}",
+            summary="immutable replay fixture",
+        )
+    # Historical events record cache reuse (no Worker execution); preserve that
+    # condition while replaying their exact graph actions through current gates.
+    monkeypatch.setattr(canvas, "_execute_dirty", lambda **_kwargs: None)
+    canvas._enter_structural_repair("output_reachability", agents=("agent_1",))
+
+    replayed = [canvas.step(raw_action) for raw_action in original_switches]
+
+    assert replayed[0].accepted
+    assert all(not step.accepted for step in replayed[1:])
+    assert all(step.rejection_code == "connectivity_output_cycle" for step in replayed[1:])
+    assert canvas.graph.output_agent == "agent_1"
+    assert canvas.graph.directed_edges == set()
+    assert canvas.graph.bidirectional_edges == set()
+    assert not executor.calls
+    assert not canvas.topology_edits_frozen
+
+
+
 def test_relation_layer_failure_requires_repair_of_existing_pair() -> None:
     canvas = GraphCanvas(task="task", runtime=MultiAgentRuntime(RecordingExecutor()))
     for agent_id in ("a", "b"):
@@ -1666,8 +1896,8 @@ def test_relation_layer_failure_requires_repair_of_existing_pair() -> None:
     assert rejected.rejection_code == "relation_layer_mismatch"
     assert rejected.structural_repair["reason"] == "relation_layer_mismatch"
     assert rejected.structural_repair["relation"] == "directed"
-    assert "set b to layer 1" in rejected.structural_repair["guidance"]
-    assert "set b to layer 1" in rejected.feedback
+    assert "source layer to be lower than the target layer" in rejected.structural_repair["guidance"]
+    assert "source layer to be lower than the target layer" in rejected.feedback
     blocked = canvas.step('{"action":"add_agent","agent_id":"c"}')
     assert not blocked.accepted
     assert blocked.rejection_code == "structural_repair_required"
@@ -1680,7 +1910,7 @@ def test_relation_layer_failure_requires_repair_of_existing_pair() -> None:
     assert repaired.structural_repair["relation_layer_rejections_total"] == 1
 
 
-def test_finish_without_output_locks_growth_until_output_is_selected() -> None:
+def test_finish_without_output_allows_director_to_continue_building() -> None:
     canvas = GraphCanvas(task="task", runtime=MultiAgentRuntime(RecordingExecutor()))
     assert canvas.step('{"action":"add_agent","agent_id":"a"}').accepted
     assert canvas.step(
@@ -1691,10 +1921,10 @@ def test_finish_without_output_locks_growth_until_output_is_selected() -> None:
     rejected = canvas.step('{"action":"finish"}')
     assert not rejected.accepted
     assert rejected.rejection_code == "output_selection_required"
-    assert not canvas.step('{"action":"add_agent","agent_id":"b"}').accepted
+    assert "add_agent" in canvas.control_snapshot()["allowed_actions"]
     selected = canvas.step('{"action":"set_output","target":"a"}')
     assert selected.accepted
-    assert selected.structural_repair["transition"] == "resolved"
+    assert canvas.structural_repair_reason is None
     assert canvas.step('{"action":"finish"}').accepted
 
 
@@ -2071,7 +2301,7 @@ def test_repeated_output_recovery_deletes_unreachable_agent_before_finish() -> N
     assert canvas.state is CanvasState.FINISHED
 
 
-def test_consolidation_allows_one_director_output_choice_then_controller_closes() -> None:
+def test_consolidation_closes_with_explicit_director_finish() -> None:
     canvas = GraphCanvas(task="task", runtime=MultiAgentRuntime(RecordingExecutor()))
     for agent_id in ("a", "b"):
         assert canvas.step(json.dumps({"action": "add_agent", "agent_id": agent_id})).accepted
@@ -2092,18 +2322,18 @@ def test_consolidation_allows_one_director_output_choice_then_controller_closes(
         [
             '{"action":"set_output","target":"b"}',
             '{"action":"delete_agent","target":"a"}',
+            '{"action":"finish"}',
         ]
     )
 
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
     assert result.finished
-    assert len(backend.calls) == 2
-    assert len(result.turns) == 2
+    assert len(backend.calls) == 3
+    assert len(result.turns) == 3
     assert result.turns[0].model_action == '{"action":"set_output","target":"b"}'
-    assert [step.action.action_type for step in canvas.history if step.protocol_recovery][-1:] == [
-        ActionType.FINISH
-    ]
+    assert not any(step.protocol_recovery for step in canvas.history)
+    assert result.turns[-1].model_action == '{"action":"finish"}'
     assert canvas.graph.output_agent == "b"
 
 
@@ -2139,12 +2369,13 @@ def test_consolidation_excludes_protocol_failure_and_switches_sole_candidate() -
         [
             '{"action":"set_output","target":"usable"}',
             '{"action":"delete_agent","target":"failed"}',
+            '{"action":"finish"}',
         ]
     )
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
     assert result.finished
-    assert len(backend.calls) == 2
+    assert len(backend.calls) == 3
     assert canvas.graph.output_agent == "usable"
     assert result.output != "WORKER_PROTOCOL_FAILURE"
 
@@ -2171,7 +2402,7 @@ def test_consolidation_without_usable_artifact_fails_closed_without_model_call()
     assert not result.finished
     assert backend.calls == []
     assert canvas.state is CanvasState.FAILED
-    assert canvas.history[-1].rejection_code == "no_usable_output_artifact"
+    assert canvas.history[-1].rejection_code == "director_no_legal_continuation"
     assert canvas.history[-1].protocol_recovery
 
 
@@ -2209,7 +2440,7 @@ def test_consolidation_semantic_no_progress_history_is_bounded_and_freezes() -> 
     assert repair["recent_actions"][-1]["semantic_progress"] is False
 
 
-def test_director_forces_finish_only_without_another_model_call() -> None:
+def test_director_finish_only_requires_explicit_policy_call() -> None:
     canvas = GraphCanvas(task="task", runtime=MultiAgentRuntime(RecordingExecutor()))
     assert canvas.step('{"action":"add_agent","agent_id":"solver"}').accepted
     assert canvas.step(
@@ -2220,15 +2451,16 @@ def test_director_forces_finish_only_without_another_model_call() -> None:
     assert canvas.step('{"action":"set_output","target":"solver"}').accepted
     canvas._enter_structural_repair("token_budget_consolidation")
     assert canvas.control_snapshot()["allowed_actions"] == ["finish"]
-    backend = MockBackend([])
+    backend = MockBackend(['{"action":"finish"}'])
 
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
     assert result.finished
-    assert backend.calls == []
+    assert len(backend.calls) == 1
+    assert result.turns[-1].model_action == '{"action":"finish"}'
     assert canvas.history[-1].action.action_type is ActionType.FINISH
     assert canvas.history[-1].accepted
-    assert canvas.history[-1].protocol_recovery
+    assert not canvas.history[-1].protocol_recovery
 
 
 def test_repair_gate_fuses_different_actions_against_same_canvas_state() -> None:
@@ -2263,7 +2495,7 @@ def test_repair_gate_fuses_different_actions_against_same_canvas_state() -> None
     assert canvas.state is CanvasState.FINISHED
 
 
-def test_director_round_limit_deterministically_finishes_existing_graph() -> None:
+def test_director_round_limit_preserves_graph_without_fabricating_finish() -> None:
     canvas = GraphCanvas(
         task="task",
         runtime=MultiAgentRuntime(RecordingExecutor()),
@@ -2281,9 +2513,9 @@ def test_director_round_limit_deterministically_finishes_existing_graph() -> Non
 
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
-    assert result.finished
+    assert not result.finished
     assert backend.calls == []
-    assert canvas.state is CanvasState.FINISHED
+    assert canvas.state is CanvasState.FAILED
     assert canvas.history[-1].protocol_recovery
 
 
@@ -2336,8 +2568,10 @@ def test_selected_output_recovery_reruns_only_target_in_bidirectional_component(
     assert canvas.step('{"action":"set_output","target":"a"}').accepted
     executor.calls.clear()
 
+    history_length, round_index, graph_version = len(canvas.history), canvas.round_index, canvas.graph.version
     recovered = canvas.recover_selected_output_agent(reason_code="aime_terminal_tool_failure")
 
+    assert (len(canvas.history), canvas.round_index, canvas.graph.version) == (history_length, round_index, graph_version)
     assert recovered.accepted and recovered.protocol_recovery
     assert recovered.execution is not None
     assert recovered.execution.executed_agents == ["a"]
@@ -2490,14 +2724,15 @@ def test_alfworld_finish_only_frozen_state_still_closes():
     assert canvas.state is CanvasState.FINISHED
 
 
-def test_alfworld_trusted_success_still_automatically_finishes():
+def test_alfworld_trusted_success_waits_for_director_finish():
     canvas = _alfworld_selected_output_canvas()
     canvas.runtime.artifacts["solver"].environment_result = {
         "environment_completed": True, "done": True, "won": True,
     }
-    run = GraphDirector(backend=MockBackend([]), canvas=canvas).run()
-    assert run.finished and not run.turns
-    assert canvas.history[-1].accepted and canvas.history[-1].protocol_recovery
+    run = GraphDirector(backend=MockBackend(['{"action":"finish"}']), canvas=canvas).run()
+    assert run.finished and len(run.turns) == 1
+    assert not canvas.history[-1].protocol_recovery
+    assert canvas.history[-1].accepted
 
 
 def test_alfworld_official_success_is_locked_and_disconnected_failure_is_pruned() -> None:
@@ -2658,7 +2893,7 @@ def test_token_admission_covers_delete_dirty_closure_before_commit() -> None:
     assert blocked.rejection_code == "token_budget_admission_required"
     assert blocked.token_admission["estimated_worker_tokens"] == 5
     assert blocked.token_admission["required_tokens"] == 10
-    assert blocked.token_admission["remaining_worker_tokens"] == 9
+    assert blocked.token_admission["remaining_worker_tokens"] == 4
     assert set(canvas.graph.nodes) == {"a", "b"}
     assert len(executor.calls) == calls_before
 
@@ -2763,6 +2998,7 @@ def test_director_binds_current_version_instead_of_trusting_model_metadata() -> 
             '"objective":"Solve the task.","scope":"Reason independently.",'
             '"expected_output":"Return a finding.","expected_version":999}',
             '{"action":"set_output","target":"solver","expected_version":999}',
+            '{"action":"finish","expected_version":999}',
         ]
     )
     canvas = GraphCanvas(task="task", runtime=MultiAgentRuntime(RecordingExecutor()))
@@ -2770,11 +3006,12 @@ def test_director_binds_current_version_instead_of_trusting_model_metadata() -> 
     result = GraphDirector(backend=backend, canvas=canvas).run()
 
     assert result.finished
-    assert len(backend.calls) == 3
+    assert len(backend.calls) == 4
     assert not any(turn.rejection_code == "stale_canvas_version" for turn in result.turns)
     model_steps = [step for step in canvas.history if not step.protocol_recovery]
-    assert [step.action.expected_version for step in model_steps] == [0, 1, 2]
+    assert [step.action.expected_version for step in model_steps] == [0, 1, 2, 3]
     assert [turn.action_diagnostics["model_expected_version"] for turn in result.turns] == [
+        999,
         999,
         999,
         999,

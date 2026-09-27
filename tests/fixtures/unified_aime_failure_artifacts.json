@@ -1,0 +1,627 @@
+{
+  "kind": "captured_worker_outputs_for_adapted_protocol_regression",
+  "cases": {
+    "15": {
+      "task_id": "aime-2026/2026/15",
+      "source_sha256": "e4a6d2b940bda4b789321a817a240608f3da80c018af59e9999d5915659f179e",
+      "evidence_sha256": "bf5fe5d79eb2492d59ba4d5fba0eb67041864fc46d36ccdc6681b1c123927682",
+      "rounds": {
+        "5": {
+          "artifact_id": "artifact_3",
+          "answer": "0",
+          "summary": "The area of an a×b cell loop is 2a+2b−4; five loops must total 100 cells, so the five perimeters satisfy sum(a_i+b_i)=60. The failed third action (ImportError) prevented exhaustive enumeration, so no valid partition count was verified.",
+          "integrity_risks": [
+            "terminal_tool_failure"
+          ],
+          "runtime_tool_evidence": {
+            "trusted": true,
+            "attempted_count": 3,
+            "successful_count": 2,
+            "failed_count": 1,
+            "successful_call_ids": [
+              "call_00_mCHTpvJHInRGacLQROWp9145",
+              "call_00_DpZVEIrfZx3PupA660aX3249"
+            ],
+            "failed_call_ids": [
+              "call_00_Ug6AyCcdsql4EADHIkGp1777"
+            ],
+            "failure_codes": [
+              "ImportError"
+            ],
+            "terminal_failure": true,
+            "recovered_failure": false,
+            "all_actions_failed": false,
+            "unsupported_tool_verification_claim": false,
+            "claimed_confidence": 0.2,
+            "effective_confidence": 0.2,
+            "confidence_caps": {
+              "terminal_tool_failure": 0.5
+            }
+          },
+          "react_trace": [
+            {
+              "round_index": 0,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_mCHTpvJHInRGacLQROWp9145",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\n# Find all (a,b) with 2<=a,b<=20, area 2a+2b-4, and 5 loops summing to 100\nsols = []\nfor a in range(2, 21):\n    for b in range(2, 21):\n        area = 2*a + 2*b - 4\n        sols.append((a, b, area))\n# We need 5 loops summing to 100\n# Each loop area = 2a+2b-4. Sum over 5 loops = 2*sum(a_i+b_i) - 20 = 100\n# => sum(a_i+b_i) = 60\nprint(\"sum(a+b) must be 60\")\n# possible areas\nareas = sorted(set(2*a+2*b-4 for a in range(2,21) for b in range(2,21)))\nprint(\"possible areas:\", areas)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "ok",
+                  "purpose": "compute",
+                  "stdout": "sum(a+b) must be 60\npossible areas: [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76]\n",
+                  "stderr": "",
+                  "elapsed_ms": 87,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 2,
+                "total": 3
+              }
+            },
+            {
+              "round_index": 1,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_DpZVEIrfZx3PupA660aX3249",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\n# Analyze the 6x6 example: 4 loops\n# P: outer ring? Let's read the diagram\n# Row0: P P P P P P  (P at cols 0-5)\n# Row1: P R R R R P\n# Row2: P R R R R P\n# Row3: P R R R R P\n# Row4: P R R R R P\n# Row5: P P P P P P\n# Wait let me re-read the diagram carefully\ndiagram = [\n\"P   P P   P Y   Y\",\n\"P | R R | P Y | Y\",\n\"P | R R | P Y | Y\",\n\"P   P P   P Y | Y\",\n\"G   G G   G Y | Y\",\n\"G   G G   G Y   Y\",\n]\nfor r in diagram:\n    print(repr(r))\n",
+                  "purpose": "explore"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "ok",
+                  "purpose": "explore",
+                  "stdout": "'P   P P   P Y   Y'\n'P | R R | P Y | Y'\n'P | R R | P Y | Y'\n'P   P P   P Y | Y'\n'G   G G   G Y | Y'\n'G   G G   G Y   Y'\n",
+                  "stderr": "",
+                  "elapsed_ms": 74,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 1,
+                "total": 2
+              }
+            },
+            {
+              "round_index": 2,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_Ug6AyCcdsql4EADHIkGp1777",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nimport sys\nsys.setrecursionlimit(10000)\n\nN = 10\ngrid = [[0]*N for _ in range(N)]\n\ndef first_uncovered():\n    for r in range(N):\n        for c in range(N):\n            if grid[r][c]==0:\n                return r,c\n    return None\n\ncount = 0\nsolutions = []\n\ndef ring_cells(r,c,a,b):\n    cells=[]\n    for j in range(c,c+b):\n        cells.append((r,j))\n        cells.append((r+a-1,j))\n    for i in range(r+1,r+a-1):\n        cells.append((i,c))\n        cells.append((i,c+b-1))\n    return cells\n\ndef solve(rings_left):\n    global count\n    fu = first_uncovered()\n    if fu is None:\n        if rings_left==0:\n            count+=1\n        return\n    if rings_left==0:\n        return\n    r,c = fu\n    # try all rings with top-left at (r,c)\n    for a in range(2, N-r+1):\n        for b in range(2, N-c+1):\n            cells = ring_cells(r,c,a,b)\n            ok = all(grid[i][j]==0 for i,j in cells)\n            if not ok:\n                continue\n            for i,j in cells:\n                grid[i][j]=1\n            solve(rings_left-1)\n            for i,j in cells:\n                grid[i][j]=0\n\nsolve(5)\nprint(\"count =\", count)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "error",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "ImportError: module 'sys' is not allowed",
+                  "elapsed_ms": 0,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 0,
+                "total": 1
+              }
+            }
+          ]
+        },
+        "7": {
+          "artifact_id": "artifact_4",
+          "answer": "0",
+          "summary": "The prior artifact's conclusion of 0 is preserved, but its enumeration action failed with ImportError, so the count was not verified; the timeout in the current action history also prevents a completed exhaustive search.",
+          "integrity_risks": [
+            "terminal_tool_failure"
+          ],
+          "runtime_tool_evidence": {
+            "trusted": true,
+            "attempted_count": 10,
+            "successful_count": 6,
+            "failed_count": 4,
+            "successful_call_ids": [
+              "artifact_1:call_00_WkjM6HBsw4AGJhTeegrs5906",
+              "artifact_1:call_00_bpdUaIwRtyfnYanfWZU37336",
+              "artifact_2:call_00_TVOHNmSdC5aya6pIH85Z6499",
+              "artifact_2:call_00_6WAaA3kjIeOgtZvvcBd13427",
+              "artifact_3:call_00_mCHTpvJHInRGacLQROWp9145",
+              "artifact_3:call_00_DpZVEIrfZx3PupA660aX3249"
+            ],
+            "failed_call_ids": [
+              "artifact_1:call_00_hlYMk8Ddj9PlsmKVNIBc9553",
+              "artifact_2:call_00_hvGAHLKfnR77L4syJjgm4912",
+              "artifact_3:call_00_Ug6AyCcdsql4EADHIkGp1777",
+              "artifact_4:call_00_NHz7Q9lQlSY5IIKkSiqw4149"
+            ],
+            "failure_codes": [
+              "execution exceeded 5 seconds",
+              "ImportError"
+            ],
+            "terminal_failure": true,
+            "recovered_failure": false,
+            "all_actions_failed": false,
+            "unsupported_tool_verification_claim": false,
+            "claimed_confidence": 0.2,
+            "effective_confidence": 0.2,
+            "confidence_caps": {
+              "terminal_tool_failure": 0.5
+            },
+            "current_artifact_evidence": {
+              "trusted": true,
+              "attempted_count": 1,
+              "successful_count": 0,
+              "failed_count": 1,
+              "successful_call_ids": [],
+              "failed_call_ids": [
+                "call_00_NHz7Q9lQlSY5IIKkSiqw4149"
+              ],
+              "failure_codes": [
+                "execution exceeded 5 seconds"
+              ],
+              "terminal_failure": true,
+              "recovered_failure": false,
+              "all_actions_failed": true,
+              "unsupported_tool_verification_claim": false,
+              "claimed_confidence": 0.2,
+              "effective_confidence": 0.2,
+              "confidence_caps": {
+                "all_tool_actions_failed": 0.35,
+                "terminal_tool_failure": 0.5
+              }
+            },
+            "output_agent_execution_history": {
+              "artifact_count": 4,
+              "current_artifact_attempted_count": 1,
+              "current_artifact_successful_count": 0,
+              "current_artifact_failed_count": 1
+            }
+          },
+          "react_trace": [
+            {
+              "round_index": 0,
+              "phase": "revision",
+              "action": {
+                "call_id": "call_00_NHz7Q9lQlSY5IIKkSiqw4149",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\n# A cell loop is the border of an a x b rectangle, area 2a+2b-4.\n# We need 5 loops tiling the 10x10 grid (100 cells).\n# Sum of areas = 100 => sum(2a_i+2b_i-4) = 100 => 2*sum(a_i+b_i) - 20 = 100 => sum(a_i+b_i)=60.\n\n# Key structural insight: In a tiling of a rectangle by rectangular rings,\n# consider the corners. Each ring occupies the 4 corners of its bounding box.\n# The outer boundary of the whole 10x10 grid must be covered by rings.\n# Let's think about the \"corner\" cells of the 10x10 grid: (0,0),(0,9),(9,0),(9,9).\n# Each must belong to some ring. A ring containing a grid corner must have that corner as one of its own corners.\n\n# Let's just brute force with a smarter approach: enumerate tilings by rings.\n# Represent grid, always fill the topmost-leftmost uncovered cell.\n# That cell must be the top-left corner of some ring (since it's the first uncovered in row-major order,\n# any ring covering it must have its top-left corner there... actually need care).\n\n# Claim: the first uncovered cell in row-major order must be the top-left corner of the ring covering it.\n# Because if a ring covers it and the ring's top-left corner is elsewhere, then either above or to the left\n# there'd be a cell of the ring that is uncovered and earlier in row-major order. Contradiction.\n# So yes: first uncovered cell = top-left corner of its ring.\n\nN = 10\ngrid = [[0]*N for _ in range(N)]\n\ndef ring_cells(r,c,a,b):\n    cells=[]\n    for j in range(c,c+b):\n        cells.append((r,j))\n        cells.append((r+a-1,j))\n    for i in range(r+1,r+a-1):\n        cells.append((i,c))\n        cells.append((i,c+b-1))\n    return cells\n\ncount = 0\n\ndef first_uncovered():\n    for r in range(N):\n        for c in range(N):\n            if grid[r][c]==0:\n                return r,c\n    return None\n\ndef solve(rings_left):\n    global count\n    fu = first_uncovered()\n    if fu is None:\n        if rings_left==0:\n            count+=1\n        return\n    if rings_left==0:\n        return\n    r,c = fu\n    for a in range(2, N-r+1):\n        for b in range(2, N-c+1):\n            cells = ring_cells(r,c,a,b)\n            if all(grid[i][j]==0 for i,j in cells):\n                for i,j in cells:\n                    grid[i][j]=1\n                solve(rings_left-1)\n                for i,j in cells:\n                    grid[i][j]=0\n\nsolve(5)\nprint(\"count =\", count)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "timeout",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "execution exceeded 5 seconds",
+                  "elapsed_ms": 5065,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 0,
+                "total": 3
+              }
+            }
+          ]
+        }
+      }
+    },
+    "22": {
+      "task_id": "aime-2026/2026/22",
+      "source_sha256": "18d82edc4a3a3614c4f2b73e2aa91d2176d3770173c8e45d93df773cd99513e3",
+      "evidence_sha256": "4b8394ea90bfc8a37e67ff63134cfff57cbfe124b3c9197ca7fbf19f069cfa9d",
+      "rounds": {
+        "3": {
+          "artifact_id": "artifact_1",
+          "answer": "754",
+          "summary": "The valid sequences are those in which, before any Carol roll (5 or 6), Alice has at least 2 rolls from {1,2} and Bob has at least 2 rolls from {3,4}; equivalently, among the first rolls until the first Carol, the A/B subsequence must contain at least two A's and at least two B's. Summing the resulting geometric-series probabilities gives 7/54, so m=7, n=54, and 100m+n=754.",
+          "integrity_risks": [
+            "high_confidence_with_unresolved_issues"
+          ],
+          "runtime_tool_evidence": {
+            "trusted": true,
+            "attempted_count": 3,
+            "successful_count": 2,
+            "failed_count": 1,
+            "successful_call_ids": [
+              "call_01_4r5iMlPNTh3VPd4jsJvA7464",
+              "call_00_h2buS2P5iA92w8gx9L7Y9049"
+            ],
+            "failed_call_ids": [
+              "call_00_rk9wrfMxyk8hFpxl5H1t5185"
+            ],
+            "failure_codes": [
+              "Traceback (most recent call last)"
+            ],
+            "terminal_failure": false,
+            "recovered_failure": true,
+            "all_actions_failed": false,
+            "unsupported_tool_verification_claim": false,
+            "claimed_confidence": 0.95,
+            "effective_confidence": 0.7,
+            "confidence_caps": {
+              "high_confidence_with_unresolved_issues": 0.7
+            }
+          },
+          "react_trace": [
+            {
+              "round_index": 0,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_rk9wrfMxyk8hFpxl5H1t5185",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\nfrom itertools import product\n\n# State: (a, b) coins so far, no Carol yet. We need a>=2 and b>=2 before any Carol.\n# Each roll: A (1/3), B (1/3), C (1/3). Carol ends failure.\n# We want probability that we reach a>=2 and b>=2 without ever hitting C.\n\n# Recursive DP over states (a,b) with a,b in 0..2 (cap at 2)\nfrom functools import lru_cache\n\n@lru_cache(None)\ndef f(a, b):\n    # probability of success from state (a,b), no Carol yet\n    if a >= 2 and b >= 2:\n        return Fraction(1)\n    # roll\n    p = Fraction(0)\n    # Alice\n    p += Fraction(1,3) * f(min(a+1,2), b)\n    # Bob\n    p += Fraction(1,3) * f(a, min(b+1,2))\n    # Carol -> failure (0)\n    return p\n\nres = f(0,0)\nprint(\"exact:\", res, \"=\", float(res))\nm, n = res.numerator, res.denominator\nprint(\"m,n:\", m, n, \"100m+n =\", 100*m+n)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "error",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 26, in <module>\n  File \"<string>\", line 20, in f\n  File \"<string>\", line 20, in f\n  File \"<string>\", line 20, in f\n  [Previous line repeated 495 more times]\n  File \"<string>\", line 18, in f\nRecursionError: maximum recursion depth exceeded\n",
+                  "elapsed_ms": 90,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 2,
+                "total": 3
+              },
+              "batch_index": 0,
+              "batch_size": 2
+            },
+            {
+              "round_index": 0,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_01_4r5iMlPNTh3VPd4jsJvA7464",
+                "name": "symbolic_compute",
+                "arguments": {
+                  "operation": "evaluate",
+                  "expressions": [
+                    "(1/3)**4 * (1 + 4*(1/3) + 10*(1/3)**2)"
+                  ]
+                }
+              },
+              "observation": {
+                "name": "symbolic_compute",
+                "status": "ok",
+                "output": {
+                  "status": "ok",
+                  "operation": "evaluate",
+                  "result": [
+                    "31/729"
+                  ],
+                  "elapsed_ms": 433,
+                  "truncated": false
+                }
+              },
+              "remaining_budget": {
+                "phase": 1,
+                "total": 2
+              },
+              "batch_index": 1,
+              "batch_size": 2
+            },
+            {
+              "round_index": 1,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_h2buS2P5iA92w8gx9L7Y9049",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\n\n# States (a,b) with a,b in 0..2, no Carol yet. Success when a>=2 and b>=2.\n# From (a,b): A->(min(a+1,2),b), B->(a,min(b+1,2)), C->fail.\n# Note (2,1): A->(2,1) self-loop, B->(2,2) success, C->fail.\n# Solve linear system exactly.\n\nimport itertools\nstates = [(a,b) for a in range(3) for b in range(3)]\nidx = {s:i for i,s in enumerate(states)}\nN = len(states)\n\n# Build equations: f(s) = 1/3 f(A) + 1/3 f(B) + 1/3*0\n# For success state f=1.\n# Solve via Gaussian elimination with Fractions.\nA = [[Fraction(0)]*N for _ in range(N)]\nbvec = [Fraction(0)]*N\nfor s in states:\n    i = idx[s]\n    if s == (2,2):\n        A[i][i] = Fraction(1); bvec[i] = Fraction(1)\n        continue\n    a,b = s\n    A[i][i] += Fraction(1)\n    A[i][idx[(min(a+1,2),b)]] -= Fraction(1,3)\n    A[i][idx[(a,min(b+1,2))]] -= Fraction(1,3)\n\n# Gaussian elimination\nn = N\nfor col in range(n):\n    piv = next(r for r in range(col,n) if A[r][col]!=0)\n    A[col],A[piv]=A[piv],A[col]\n    bvec[col],bvec[piv]=bvec[piv],bvec[col]\n    pv=A[col][col]\n    A[col]=[x/pv for x in A[col]]; bvec[col]/=pv\n    for r in range(n):\n        if r!=col and A[r][col]!=0:\n            fac=A[r][col]\n            A[r]=[A[r][c]-fac*A[col][c] for c in range(n)]\n            bvec[r]-=fac*bvec[col]\n\nsol = {states[i]:bvec[i] for i in range(n)}\nres = sol[(0,0)]\nprint(\"exact:\", res, \"=\", float(res))\nm,nn = res.numerator, res.denominator\nprint(\"m,n:\", m, nn, \"100m+n =\", 100*m+nn)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "ok",
+                  "purpose": "compute",
+                  "stdout": "exact: 7/54 = 0.12962962962962962\nm,n: 7 54 100m+n = 754\n",
+                  "stderr": "",
+                  "elapsed_ms": 86,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 0,
+                "total": 1
+              }
+            }
+          ]
+        },
+        "10": {
+          "artifact_id": "artifact_3",
+          "answer": "125",
+          "summary": "Each roll is equally likely to favor Alice, Bob, or Carol. The condition requires that before the first Carol roll, the sequence of Alice/Bob rolls contains at least two A's and at least two B's.",
+          "integrity_risks": [
+            "all_tool_actions_failed",
+            "terminal_tool_failure",
+            "unsupported_tool_verification_claim"
+          ],
+          "runtime_tool_evidence": {
+            "trusted": true,
+            "attempted_count": 3,
+            "successful_count": 0,
+            "failed_count": 3,
+            "successful_call_ids": [],
+            "failed_call_ids": [
+              "call_00_gWnCUP0wzlRxT3xSv7r88637",
+              "call_00_VQslGJGA0iiDEIEp9O526554",
+              "call_00_DkEhA8IU0lk7WAKCjGyz0015"
+            ],
+            "failure_codes": [
+              "ImportError",
+              "Traceback (most recent call last)"
+            ],
+            "terminal_failure": true,
+            "recovered_failure": false,
+            "all_actions_failed": true,
+            "unsupported_tool_verification_claim": true,
+            "claimed_confidence": 0.5,
+            "effective_confidence": 0.25,
+            "confidence_caps": {
+              "all_tool_actions_failed": 0.35,
+              "terminal_tool_failure": 0.5,
+              "unsupported_tool_verification_claim": 0.25
+            }
+          },
+          "react_trace": [
+            {
+              "round_index": 0,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_gWnCUP0wzlRxT3xSv7r88637",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\nfrom itertools import product\n\n# States: (a, b) counts so far, Carol not yet appeared.\n# We need a>=2 and b>=2 before first Carol.\n# Each roll: A (1/3), B (1/3), C (1/3).\n# Valid sequences: strings over {A,B} (no C) that reach a>=2 and b>=2,\n# then a C terminates. Actually condition: before Carol receives ANY coins,\n# Alice and Bob each have >=2. So the sequence of non-C rolls must reach a>=2,b>=2,\n# and the first C occurs after that point.\n\n# Probability = sum over sequences of A/B of length L that first reach (a>=2,b>=2)\n# at the last step, times (1/3)^L * (1/3) [the terminating C].\n# Equivalently: probability that in the A/B/C process, we hit state a>=2,b>=2 before C.\n\n# Let's compute via recursion / direct enumeration.\n# P = sum over paths of A/B reaching (2,2) region, weighted.\n\n# Define f(a,b) = prob of eventually reaching a>=2,b>=2 before C, starting from (a,b), C not yet.\n# f(a,b) = 1 if a>=2 and b>=2\n# else f = (1/3)f(a+1,b) + (1/3)f(a,b+1) + (1/3)*0\n# So f(a,b) = (1/3)(f(a+1,b)+f(a,b+1)) for a<2 or b<2.\n\n# Solve. States a in 0..2, b in 0..2 (cap at 2).\nimport sys\nsys.setrecursionlimit(10000)\nfrom functools import lru_cache\n\n@lru_cache(None)\ndef f(a,b):\n    if a>=2 and b>=2:\n        return Fraction(1)\n    return Fraction(1,3)*(f(a+1,b)+f(a,b+1))\n\nprint(\"P =\", f(0,0), \"=\", float(f(0,0)))\nm = f(0,0).numerator\nn = f(0,0).denominator\nprint(\"m,n =\", m, n)\nprint(\"100m+n =\", 100*m+n)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "error",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "ImportError: module 'sys' is not allowed",
+                  "elapsed_ms": 0,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 2,
+                "total": 3
+              }
+            },
+            {
+              "round_index": 1,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_VQslGJGA0iiDEIEp9O526554",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\nfrom functools import lru_cache\n\n@lru_cache(None)\ndef f(a,b):\n    if a>=2 and b>=2:\n        return Fraction(1)\n    return Fraction(1,3)*(f(a+1,b)+f(a,b+1))\n\nP = f(0,0)\nprint(\"P =\", P, \"=\", float(P))\nm = P.numerator\nn = P.denominator\nprint(\"m,n =\", m, n)\nprint(\"100m+n =\", 100*m+n)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "error",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 11, in <module>\n  File \"<string>\", line 9, in f\n  File \"<string>\", line 9, in f\n  File \"<string>\", line 9, in f\n  [Previous line repeated 496 more times]\nRecursionError: maximum recursion depth exceeded\n",
+                  "elapsed_ms": 107,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 1,
+                "total": 2
+              }
+            },
+            {
+              "round_index": 2,
+              "phase": "initial",
+              "action": {
+                "call_id": "call_00_DkEhA8IU0lk7WAKCjGyz0015",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\nfrom functools import lru_cache\n\n@lru_cache(None)\ndef f(a,b):\n    if a>=2 and b>=2:\n        return Fraction(1)\n    na = min(a+1,2)\n    nb = min(b+1,2)\n    return Fraction(1,3)*(f(na,b)+f(a,nb))\n\nP = f(0,0)\nprint(\"P =\", P, \"=\", float(P))\nm = P.numerator\nn = P.denominator\nprint(\"m,n =\", m, n)\nprint(\"100m+n =\", 100*m+n)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "error",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 13, in <module>\n  File \"<string>\", line 11, in f\n  File \"<string>\", line 11, in f\n  File \"<string>\", line 11, in f\n  [Previous line repeated 495 more times]\n  File \"<string>\", line 9, in f\nRecursionError: maximum recursion depth exceeded in comparison\n",
+                  "elapsed_ms": 106,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 0,
+                "total": 1
+              }
+            }
+          ]
+        },
+        "11": {
+          "artifact_id": "artifact_4",
+          "answer": "109",
+          "summary": "The valid sequences are those in which, before the first Carol roll, the non-Carol rolls contain at least two Alice rolls and at least two Bob rolls. Summing over the first Carol roll occurring after k non-Carol rolls gives probability 1/9, so m=1, n=9 and 100m+n=109.",
+          "integrity_risks": [
+            "terminal_tool_failure"
+          ],
+          "runtime_tool_evidence": {
+            "trusted": true,
+            "attempted_count": 8,
+            "successful_count": 2,
+            "failed_count": 6,
+            "successful_call_ids": [
+              "artifact_1:call_01_4r5iMlPNTh3VPd4jsJvA7464",
+              "artifact_1:call_00_h2buS2P5iA92w8gx9L7Y9049"
+            ],
+            "failed_call_ids": [
+              "artifact_1:call_00_rk9wrfMxyk8hFpxl5H1t5185",
+              "artifact_3:call_00_gWnCUP0wzlRxT3xSv7r88637",
+              "artifact_3:call_00_VQslGJGA0iiDEIEp9O526554",
+              "artifact_3:call_00_DkEhA8IU0lk7WAKCjGyz0015",
+              "artifact_4:call_00_SAsR42GsTyJMoPYNRyE29932",
+              "artifact_4:call_01_ggKcTFXhwdPr2GjYuV424869"
+            ],
+            "failure_codes": [
+              "Traceback (most recent call last)",
+              "ImportError",
+              "revision_action_budget_exhausted"
+            ],
+            "terminal_failure": true,
+            "recovered_failure": false,
+            "all_actions_failed": false,
+            "unsupported_tool_verification_claim": true,
+            "claimed_confidence": 0.25,
+            "effective_confidence": 0.25,
+            "confidence_caps": {
+              "terminal_tool_failure": 0.5
+            },
+            "current_artifact_evidence": {
+              "trusted": true,
+              "attempted_count": 2,
+              "successful_count": 0,
+              "failed_count": 2,
+              "successful_call_ids": [],
+              "failed_call_ids": [
+                "call_00_SAsR42GsTyJMoPYNRyE29932",
+                "call_01_ggKcTFXhwdPr2GjYuV424869"
+              ],
+              "failure_codes": [
+                "Traceback (most recent call last)",
+                "revision_action_budget_exhausted"
+              ],
+              "terminal_failure": true,
+              "recovered_failure": false,
+              "all_actions_failed": true,
+              "unsupported_tool_verification_claim": true,
+              "claimed_confidence": 0.25,
+              "effective_confidence": 0.25,
+              "confidence_caps": {
+                "all_tool_actions_failed": 0.35,
+                "terminal_tool_failure": 0.5,
+                "unsupported_tool_verification_claim": 0.25
+              }
+            },
+            "output_agent_execution_history": {
+              "artifact_count": 3,
+              "current_artifact_attempted_count": 2,
+              "current_artifact_successful_count": 0,
+              "current_artifact_failed_count": 2
+            }
+          },
+          "react_trace": [
+            {
+              "round_index": 0,
+              "phase": "revision",
+              "action": {
+                "call_id": "call_00_SAsR42GsTyJMoPYNRyE29932",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\nfrom functools import lru_cache\n\n@lru_cache(None)\ndef f(a, b):\n    if a >= 2 and b >= 2:\n        return Fraction(1)\n    return Fraction(1, 3) * (f(a + 1, b) + f(a, b + 1))\n\nP = f(0, 0)\nprint(\"P =\", P, \"=\", float(P))\nm, n = P.numerator, P.denominator\nprint(\"m,n =\", m, n)\nprint(\"100m+n =\", 100 * m + n)\n",
+                  "purpose": "compute"
+                }
+              },
+              "observation": {
+                "name": "python_exec",
+                "status": "ok",
+                "output": {
+                  "status": "error",
+                  "purpose": "compute",
+                  "stdout": "",
+                  "stderr": "Traceback (most recent call last):\n  File \"<string>\", line 11, in <module>\n  File \"<string>\", line 9, in f\n  File \"<string>\", line 9, in f\n  File \"<string>\", line 9, in f\n  [Previous line repeated 496 more times]\nRecursionError: maximum recursion depth exceeded\n",
+                  "elapsed_ms": 112,
+                  "truncated": false,
+                  "input_normalizations": []
+                }
+              },
+              "remaining_budget": {
+                "phase": 0,
+                "total": 3
+              },
+              "batch_index": 0,
+              "batch_size": 2
+            },
+            {
+              "round_index": 0,
+              "phase": "revision",
+              "action": {
+                "call_id": "call_01_ggKcTFXhwdPr2GjYuV424869",
+                "name": "python_exec",
+                "arguments": {
+                  "code": "\nfrom fractions import Fraction\nfrom itertools import product\n\n# Direct enumeration: sequences over {A,B} of length L that first reach a>=2,b>=2\n# at the final step, then a C terminates. Weight (1/3)^L * (1/3).\ntotal = Fraction(0)\nfor L in range(4, 30):\n    for seq in product('AB', repeat=L):\n        a = seq.count('A'); b = seq.count('B')\n        if a >= 2 and b >= 2:\n            # check it first reaches the region exactly at the last step\n            pa = seq[:-1].count('A'); pb = seq[:-1].count('B')\n            if not (pa >= 2 and pb >= 2):\n                total += Fraction(1, 3) ** L * Fraction(1, 3)\nprint(\"Direct enumeration P =\", total, \"=\", float(total))\nprint(\"100m+n =\", 100 * total.numerator + total.denominator)\n",
+                  "purpose": "verify"
+                }
+              },
+              "observation": {
+                "status": "error",
+                "error": {
+                  "code": "revision_action_budget_exhausted",
+                  "message": "The Worker Action budget is exhausted."
+                },
+                "name": "python_exec"
+              },
+              "remaining_budget": {
+                "phase": 0,
+                "total": 3
+              },
+              "batch_index": 1,
+              "batch_size": 2
+            }
+          ]
+        }
+      }
+    }
+  }
+}

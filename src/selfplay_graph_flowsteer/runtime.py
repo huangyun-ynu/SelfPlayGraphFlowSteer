@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .unified_contract import is_unified_node, is_task_result, result_instruction, trusted_resource_result, PROTOCOL, SUBMISSION_VERSION
+
 import copy
 import hashlib
 import json
@@ -22,6 +24,7 @@ from .contracts import AgentArtifact, AgentNode, CodeArtifactRef, ExecutionRepor
 from .dataset_actions import DatasetActionRegistry
 from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
 from .graph import MultiAgentGraph
+from .healthbench_protocol import healthbench_answer_instruction
 from .latency import (
     RouteLatencyEstimate,
     RouteLatencyTracker,
@@ -34,20 +37,29 @@ from .llm import (
     request_token_credit,
     worker_finalization_request,
 )
+from .output_contract import (
+    OUTPUT_CONTRACT_VERSION,
+    WORKER_OUTPUT_ROLE_VERSION,
+    recovery_answer_description,
+    selected_output_instruction,
+    worker_output_role_changes_input,
+)
 from .qa_submission import is_short_qa_dataset
+from .submission_contract import SUBMISSION_CONTRACT_VERSION
+from .swe_paths import normalize_swe_directory_path
 from .webshop_budget import execution_accounting, request_budget_quote
-from .webshop_guidance import webshop_worker_guidance
-from .webshop_history import (
-    HISTORY_INSTRUCTION,
-    WEBSHOP_WORKER_MEMORY_POLICIES,
-    append_webshop_history,
-    project_webshop_history_environment,
+from .webshop_guidance import (
+    MERGED_CHECKLIST_POLICY,
+    MERGED_PAGE_CHECKLIST,
+    webshop_worker_guidance,
 )
 from .webshop_identity import visible_product_asin
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
+from .webshop_profiles import section_memory_limit
 
 WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
 WORKER_PROTOCOL_FAILURE_SENTINEL = "WORKER_PROTOCOL_FAILURE"
+SWE_SHARED_TOKEN_BUDGET = "swe_shared_request_credit_v1"
 _SWE_MEMORY_MAX_ENTRIES = 8
 _SWE_MEMORY_MAX_CHARS = 18000
 _SWE_MEMORY_ENTRY_MAX_CHARS = 6000
@@ -226,6 +238,10 @@ class AgentActionUsage:
 class ActionBudgetLedger:
     usage: dict[str, AgentActionUsage] = field(default_factory=dict)
 
+    @staticmethod
+    def shared_total(node: AgentNode) -> bool:
+        return node.metadata.get("dataset_capability_policy", {}).get("action_budget_policy") == "shared_total_v1"
+
     def reset(self) -> None:
         self.usage.clear()
 
@@ -252,6 +268,9 @@ class ActionBudgetLedger:
         current.closure_revision_transferred = max(
             0, node.revision_tool_budget - current.revision_used
         )
+        if self.shared_total(node):
+            current.closure_initial_transferred = max(0, node.total_tool_budget - current.total_used)
+            current.closure_revision_transferred = 0
         current.closure_environment_remaining = max(0, official_remaining_steps)
         current.closure_limit = min(
             current.closure_initial_transferred + current.closure_revision_transferred,
@@ -289,6 +308,7 @@ class ActionBudgetLedger:
     def webshop_audit(self, node: AgentNode, *, scope: str | None = None) -> dict[str, Any]:
         current = self.usage.get(scope or node.agent_id, AgentActionUsage())
         return {
+            "policy": "shared_total_v1" if self.shared_total(node) else "phase_split_v1",
             "initial_used": current.initial_used,
             "revision_used": current.revision_used,
             "closure_used": current.closure_used,
@@ -337,7 +357,8 @@ class ActionBudgetLedger:
                 "environment": current.closure_environment_remaining,
             }
         return {
-            "phase": max(0, phase_limit - phase_used),
+            "phase": (max(0, node.total_tool_budget - current.total_used)
+                      if self.shared_total(node) else max(0, phase_limit - phase_used)),
             "total": max(0, node.total_tool_budget - current.total_used),
         }
 
@@ -363,11 +384,11 @@ class ActionBudgetLedger:
             current.closure_used += 1
             current.closure_environment_remaining -= 1
         elif revision:
-            if current.revision_used >= node.revision_tool_budget:
+            if not self.shared_total(node) and current.revision_used >= node.revision_tool_budget:
                 return False, "revision_action_budget_exhausted"
             current.revision_used += 1
         else:
-            if current.initial_used >= node.initial_tool_budget:
+            if not self.shared_total(node) and current.initial_used >= node.initial_tool_budget:
                 return False, "initial_action_budget_exhausted"
             current.initial_used += 1
         current.total_used += 1
@@ -377,6 +398,8 @@ class ActionBudgetLedger:
 @dataclass
 class ModelAgentExecutor:
     """Generic worker executor: task specialization comes entirely from node.prompt."""
+
+    _swe_request_usage: list[int] | None = field(default=None, init=False, repr=False)
 
     backend: ChatBackend
     role: str = "worker"
@@ -392,11 +415,14 @@ class ModelAgentExecutor:
     webshop_worker_guidance_policy: str = "baseline"
     webshop_worker_memory_policy: str = "factual_memory_v1"
     webshop_worker_execution_policy: str = "graph_tools_v1"
+    webshop_native_conversation_history: bool = False
+    webshop_compatibility_profile: str = "current"
 
     def __post_init__(self) -> None:
+        section_memory_limit(self.webshop_compatibility_profile)
         if self.webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
             raise ValueError("unknown webshop.worker_execution_policy")
-        if self.webshop_worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
+        if self.webshop_worker_memory_policy != "factual_memory_v1":
             raise ValueError("unknown webshop.worker_memory_policy")
 
     def reset(self) -> None:
@@ -444,6 +470,9 @@ class ModelAgentExecutor:
     ) -> AgentArtifact:
         self._check_deadline()
         self._validate_dataset_actions(node)
+        self._swe_request_usage = (
+            [0, 0] if node.metadata.get("action_adapter") == "swe_bench" else None
+        )
         if (
             node.metadata.get("action_adapter") == "webshop"
             and self.webshop_worker_execution_policy == NATIVE_POLICY
@@ -590,20 +619,6 @@ class ModelAgentExecutor:
             raw_webshop_journal = initial_environment_state.pop(
                 "_runtime_transaction_journal", None
             )
-            if (
-                action_adapter == "webshop"
-                and self.webshop_worker_memory_policy == "skillflow_history_v1"
-                and raw_webshop_journal is None
-                and not stateless_environment_owner
-            ):
-                # A zero-Action final report must see the same history without
-                # beginning/replacing a live or already-staged environment session.
-                for lifecycle in lifecycle_targets.values():
-                    journal_for = getattr(lifecycle, "runtime_transaction_journal_for", None)
-                    if callable(journal_for):
-                        raw_webshop_journal = journal_for(node.agent_id)
-                        if isinstance(raw_webshop_journal, dict):
-                            break
             if action_adapter == "webshop" and isinstance(raw_webshop_journal, dict):
                 # This is a runtime-only reference owned by the task-bound
                 # WebShop lifecycle.  It survives same-owner revisions but is
@@ -693,16 +708,6 @@ class ModelAgentExecutor:
             else {}
         )
         webshop_journal_restored = bool(webshop_journal.get("schema_version"))
-        webshop_history_enabled = (
-            action_adapter == "webshop"
-            and not stateless_environment_owner
-            and self.webshop_worker_memory_policy == "skillflow_history_v1"
-        )
-        webshop_react_history = (
-            copy.deepcopy(webshop_journal.get("react_history", []))
-            if webshop_history_enabled
-            else []
-        )
         webshop_product_inspections = _webshop_restore_keyed_records(
             webshop_journal.get("product_inspections"), key="asin"
         )
@@ -742,8 +747,8 @@ class ModelAgentExecutor:
             )
         swe_commit_required = bool(
             action_adapter == "swe_bench"
-            and "code_commit"
-            in {str(value) for value in node.metadata.get("exclusive_capabilities", [])}
+            and is_task_result(node, legacy_selected="code_commit"
+                in {str(value) for value in node.metadata.get("exclusive_capabilities", [])})
         )
         webshop_output_closure = bool(
             action_adapter == "webshop"
@@ -764,6 +769,8 @@ class ModelAgentExecutor:
             "available_actions": [spec.to_context_dict() for spec in action_specs],
             "action_environment": {
                 "adapter": node.metadata.get("action_adapter"),
+                "budget_policy": "shared_total_v1" if self.budget_ledger.shared_total(node) else "phase_split_v1",
+                "budget_scope": "per_question" if self.budget_ledger.shared_total(node) else "execution",
                 "configured": node.operation_policy_configured,
                 "visible_actions": list(allowed_tools),
                 "phase": "closure"
@@ -816,6 +823,7 @@ class ModelAgentExecutor:
                 ),
                 "webshop_progress": (
                     _webshop_progress_prompt(
+                        section_max_chars=section_memory_limit(self.webshop_compatibility_profile),
                         queries=webshop_queries,
                         visited_products=webshop_visited_products,
                         product_inspections=webshop_product_inspections,
@@ -861,9 +869,6 @@ class ModelAgentExecutor:
                 ),
             },
         }
-        if webshop_history_enabled:
-            context["action_environment"]["worker_memory_policy"] = "skillflow_history_v1"
-            context["action_environment"]["react_history"] = webshop_react_history
         system_managed_contract = node.metadata.get("system_managed_contract")
         contract_dataset = (
             str(system_managed_contract.get("dataset", ""))
@@ -871,10 +876,13 @@ class ModelAgentExecutor:
             else ""
         )
         short_answer_qa = is_short_qa_dataset(contract_dataset)
-        selected_output_agent = short_answer_qa and bool(
-            node.metadata.get("_runtime_is_output_agent", False)
+        selected_output_agent = is_task_result(node, legacy_selected=worker_output_role_changes_input(
+            dataset=contract_dataset,
+            action_adapter=action_adapter,
+        ) and bool(node.metadata.get("_runtime_is_output_agent", False)))
+        public_task_visible = (
+            bool(action_adapter) or short_answer_qa or selected_output_agent
         )
-        public_task_visible = bool(action_adapter) or is_short_qa_dataset(contract_dataset)
         if public_task_visible:
             # Dataset adapters and short QA follow the guide's (q, p_v, visible
             # messages, T) contract. The public task q is distinct from the
@@ -889,15 +897,24 @@ class ModelAgentExecutor:
             else "Produce an independent result using only the visible upstream packets. "
         )
         if action_adapter == "swe_bench":
+            context["recoverable_code_artifacts"] = initial_environment_state.get(
+                "recoverable_code_artifacts", []
+            )
             instruction += (
                 "The assigned_task field defines your delegated responsibility. The "
                 "public_task_context field is the trusted public SWE-bench issue shared with "
                 "Workers; use both, plus visible upstream, prior, peer, and Action evidence. "
                 "Never infer hidden tests, a gold patch, or private verifier metadata. "
+                "recoverable_code_artifacts lists patches exported earlier in this task, "
+                "including candidates whose later revision failed or whose node was deleted. "
+                "Inspect their changed_files and choose a relevant candidate with swe_apply_artifact "
+                "instead of losing prior work. Applying a candidate consumes an Action. "
+                "An archived patch is not a current result: validate it against the current "
+                "delegation, upstream and peer evidence, and run swe_test after restoration. "
             )
             if swe_commit_required:
                 instruction += (
-                    "You own the runtime-selected final code_commit. Advance beyond diagnosis: "
+                    "Your execution responsibility requires a complete code result. Advance beyond diagnosis: "
                     "produce a grounded workspace change and run a configured test after the "
                     "latest edit. If no safe change can be made, return a structured "
                     "swe_completion blocker; prose-only analysis is not a completed final fix. "
@@ -970,12 +987,16 @@ class ModelAgentExecutor:
                 "task. Use only the assigned_task plus visible upstream, prior, peer, and "
                 "Action evidence. "
             )
+        if is_unified_node(node):
+            instruction += result_instruction(node, contract_dataset or action_adapter)
         instruction += _worker_output_instruction(
             context["available_actions"],
+            dataset=contract_dataset,
             action_adapter=action_adapter,
             short_answer_qa=short_answer_qa,
             is_output_agent=selected_output_agent,
-            webshop_history_enabled=webshop_history_enabled,
+            webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
+            local_environment_result=is_unified_node(node) and not is_task_result(node),
         )
         # Keep guidance out of environment observations and the Director prompt.
         # The same conditional checklist survives state updates and owner revisions.
@@ -994,9 +1015,12 @@ class ModelAgentExecutor:
         response = None
         token_in = token_out = 0
         qa_credit = node.metadata.get("_runtime_budget_kind") == "short_qa_request_credit_v1"
-        swe_credit = node.metadata.get("_runtime_budget_kind") == "swe_primary_request_credit_v1"
-        submission_credit = qa_credit or swe_credit
-        credit_label = "swe" if swe_credit else "qa"
+        swe_credit = node.metadata.get("_runtime_budget_kind") in {
+            SWE_SHARED_TOKEN_BUDGET, "swe_primary_request_credit_v1",
+        }
+        unified_credit = node.metadata.get("_runtime_budget_kind") == "unified_request_credit_v1"
+        submission_credit = qa_credit or swe_credit or unified_credit
+        credit_label = "worker" if unified_credit else "swe" if swe_credit else "qa"
         full_graph_credit = (
             node.metadata.get("_runtime_budget_kind") == "full_graph_request_credit_v1"
         )
@@ -1035,11 +1059,16 @@ class ModelAgentExecutor:
             if node.operation_policy_configured
             else self.max_tool_rounds + 2
         )
+        if node.operation_policy_configured and self.budget_ledger.shared_total(node):
+            max_interaction_rounds = self.budget_ledger.remaining(
+                node, revision=revision, scope=self.budget_scope
+            )["phase"] + 2
         if closure_session is not None:
             # Keep the existing report/repair margin, but do not retain the old
             # revision-sized loop cap after transferring unused Action capacity.
             max_interaction_rounds = context["action_environment"]["remaining"]["phase"] + 2
         legacy_tool_calls = 0
+        alfworld_final_rejection_count = 0
         webshop_protocol_recoveries = 0
         if action_adapter == "webshop":
             max_interaction_rounds += 1  # One protocol repair, not an extra environment Action.
@@ -1057,6 +1086,8 @@ class ModelAgentExecutor:
         swe_edit_successful_count = 0
         swe_test_attempted_count = 0
         swe_test_after_latest_edit = False
+        swe_test_recovery_count = 0
+        swe_latest_workspace_version = initial_environment_state.get("workspace_version")
         swe_last_successful_edit_round: int | None = None
         swe_repeat_rejection_streak = 0
         alfworld_previous_state_signature = (
@@ -1127,7 +1158,7 @@ class ModelAgentExecutor:
             if isinstance(raw_guidance_deliveries, list)
             else []
         )
-        if action_adapter == "webshop" and not webshop_history_enabled:
+        if action_adapter == "webshop":
             _record_webshop_state_guidance_delivery(
                 webshop_state_guidance_deliveries,
                 context["action_environment"].get("webshop_progress"),
@@ -1159,7 +1190,6 @@ class ModelAgentExecutor:
                 stall_first_round=webshop_stall_first_round,
                 max_reward=webshop_max_reward,
                 purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
-                react_history=webshop_react_history if webshop_history_enabled else None,
             )
 
         force_finalize = False
@@ -1180,8 +1210,41 @@ class ModelAgentExecutor:
             # Request its final Artifact without exposing more environment Actions.
             force_finalize = True
             finalization_reason = f"{action_adapter}_environment_terminal"
-        for interaction_round in range(max_interaction_rounds):
+        # Up to two test-only requests and one report may follow a SWE loop
+        # boundary. They use the same token/Action ledger, with no new credit.
+        swe_recovery_margin = 3 if action_adapter == "swe_bench" else 0
+        for interaction_round in range(max_interaction_rounds + swe_recovery_margin):
             self._check_deadline()
+            if interaction_round >= max_interaction_rounds and not force_finalize:
+                force_finalize = True
+                finalization_reason = "interaction_round_limit"
+            test_recovery_active = False
+            request_action_specs = action_specs
+            if (force_finalize and swe_commit_required and swe_workspace_changed
+                    and not swe_test_after_latest_edit and "swe_test" in allowed_tools
+                    and swe_test_recovery_count < 2
+                    and (execution_credit is None or token_in + token_out < execution_credit)):
+                remaining = (self.budget_ledger.remaining(
+                    node, revision=revision, scope=self.budget_scope, closure_session=closure_session,
+                ) if node.operation_policy_configured else
+                    {"phase": self.max_tool_rounds - legacy_tool_calls,
+                     "total": self.max_tool_rounds - legacy_tool_calls})
+                if min(remaining["phase"], remaining["total"]) > 0:
+                    swe_test_recovery_count += 1
+                    test_recovery_active = True
+                    force_finalize = False
+                    request_action_specs = tuple(s for s in action_specs if s.name == "swe_test")
+                    messages = _swe_test_recovery_messages(
+                        context, react_trace, workspace_version=swe_latest_workspace_version,
+                        specs=request_action_specs, remaining=remaining,
+                    )
+                    protocol_diagnostics.append({
+                        "stage": "swe_post_edit_test_recovery", "attempt": swe_test_recovery_count,
+                        "trigger": finalization_reason, "workspace_version": swe_latest_workspace_version,
+                        "remaining_actions": min(remaining["phase"], remaining["total"]),
+                        "remaining_tokens": (execution_credit - token_in - token_out
+                                             if execution_credit is not None else None),
+                    })
             if force_finalize:
                 response, recovery_token_in, recovery_token_out, recovery_diagnostics = (
                     self._request_final_artifact(
@@ -1207,6 +1270,7 @@ class ModelAgentExecutor:
                         pre_reserved_closure_tokens=closure_reserve(),
                         short_answer_qa=short_answer_qa,
                         is_output_agent=selected_output_agent,
+                        dataset=contract_dataset,
                     )
                 )
                 token_in += recovery_token_in
@@ -1219,7 +1283,7 @@ class ModelAgentExecutor:
                     if execution_credit is not None
                     else None
                 )
-                if submission_credit and request_credit is not None:
+                if (qa_credit or unified_credit) and request_credit is not None:
                     # This is the cost of a serialized compact submission, not
                     # just its output tokens. The account is released to the
                     # same Worker on finalization; no Canvas output is chosen.
@@ -1234,6 +1298,7 @@ class ModelAgentExecutor:
                         ),
                         short_answer_qa=short_answer_qa,
                         is_output_agent=selected_output_agent,
+                        dataset=contract_dataset,
                     )
                     reserve_quote = request_budget_quote(
                         {
@@ -1260,12 +1325,15 @@ class ModelAgentExecutor:
                         }
                     )
                     request_credit -= reserve
-                with request_token_credit(
-                    request_credit,
+                response = self._generate_with_credit(
+                    messages,
+                    credit_limit=request_credit,
                     pre_reserved_closure_tokens=closure_reserve(),
                     cap_output=submission_credit or full_graph_credit,
-                ):
-                    response = self.backend.generate(messages, role=self.role, actions=action_specs)
+                    role=self.role,
+                    actions=request_action_specs,
+                    **({"max_tokens": 2048, "enable_thinking": False} if test_recovery_active else {}),
+                )
             except RequestTokenCreditExceeded as exc:
                 if full_graph_credit:
                     # No completed final outcome: cancel this probe, never
@@ -1275,6 +1343,10 @@ class ModelAgentExecutor:
                 token_out += exc.credit.token_out
                 backend_request_events.extend(exc.request_events)
                 if submission_credit:
+                    if test_recovery_active:
+                        # The compact request itself cannot fit; retrying it
+                        # without new evidence or credit cannot help.
+                        swe_test_recovery_count = 2
                     # No answer is selected from history. Let the same Worker
                     # attempt the existing bounded compact finalization path,
                     # subject to exactly the same remaining token credit.
@@ -1316,8 +1388,29 @@ class ModelAgentExecutor:
             token_out += response.token_out
             native_calling = bool(response.action_calls)
             calls = response.action_calls or _text_action_calls(response.text)
+            if not native_calling and calls and _recover_text_action_envelope(response.text):
+                protocol_diagnostics.append({
+                    "stage": "text_action_envelope_recovered",
+                    "accepted": True,
+                    "raw_response": response.text,
+                    "nonexecuted_suffix_discarded": True,
+                    "action_count": len(calls),
+                })
             if not calls:
-                if action_adapter == "alfworld" and not environment_terminal:
+                if test_recovery_active:
+                    protocol_diagnostics.append(_protocol_response_diagnostic(
+                        response, stage="swe_test_recovery_action_required",
+                        rejection_reason="swe_post_edit_test_required",
+                    ))
+                    force_finalize = True
+                    finalization_reason = "swe_test_recovery_action_required"
+                    continue
+                if (action_adapter == "alfworld" and not environment_terminal
+                        and (not is_unified_node(node) or is_task_result(node))):
+                    # A local result may finish before the episode does. A full
+                    # responsibility gets one action-format repair, not dozens
+                    # of identical prompts that consume the whole task budget.
+                    alfworld_final_rejection_count += 1
                     protocol_diagnostics.append(
                         _protocol_response_diagnostic(
                             response,
@@ -1325,6 +1418,10 @@ class ModelAgentExecutor:
                             rejection_reason="alfworld_step_required_before_final",
                         )
                     )
+                    if alfworld_final_rejection_count >= 2:
+                        force_finalize = True
+                        finalization_reason = "alfworld_action_protocol_recovery_exhausted"
+                        continue
                     messages.extend(
                         [
                             {"role": "assistant", "content": response.text},
@@ -1461,42 +1558,30 @@ class ModelAgentExecutor:
                     force_finalize = True
                     if qa_credit:
                         qa_previous_response = response.text
-                    finalization_reason = rejection_reason
+                    finalization_reason = ("protocol_recovery_exhausted"
+                        if action_adapter == "webshop" and webshop_protocol_recoveries
+                        else rejection_reason)
                     continue
                 break
-            prepared = [_prepare_action_call(call, allowed_tools, action_specs) for call in calls]
+            alfworld_final_rejection_count = 0
+            request_tools = ({"swe_test": allowed_tools["swe_test"]}
+                             if test_recovery_active else allowed_tools)
+            prepared = [_prepare_action_call(call, request_tools, request_action_specs) for call in calls]
             stateful_batch = len(calls) > 1 and any(
                 bool(getattr(allowed_tools.get(str(call.name).strip()), "stateful", False))
                 for call in calls
             )
             selected_index = None
-            if stateful_batch:
-                selected_index = next(
-                    (
-                        index
-                        for index, (_call, arguments, error, _reason) in enumerate(prepared)
-                        if arguments is not None and error is None
-                    ),
-                    None,
-                )
 
             call_observations: list[tuple[ActionCall, dict[str, Any]]] = []
             for batch_index, (call, arguments, error, failure_reason) in enumerate(prepared):
-                history_before = (
-                    {
-                        "page_text": str(webshop_state.get("page_text", "")),
-                        "page_type": str(webshop_state.get("page_type", "")),
-                    }
-                    if webshop_history_enabled
-                    else {}
-                )
                 summary = None
                 if error is not None:
                     observation = error
                     if len(calls) == 1 and failure_reason is not None:
                         force_finalize = True
                         finalization_reason = failure_reason
-                elif stateful_batch and batch_index != selected_index:
+                elif stateful_batch and (selected_index is not None or force_finalize):
                     observation = _action_error(
                         str(call.name).strip(),
                         "stateful_action_deferred",
@@ -1687,9 +1772,13 @@ class ModelAgentExecutor:
                                         swe_edit_attempted_count += 1
                                     elif action_name == "swe_test":
                                         swe_test_attempted_count += 1
-                                        if swe_workspace_changed:
-                                            swe_test_after_latest_edit = True
                                 try:
+                                    # A preflight/stage/duplicate rejection made no environment
+                                    # call. Let the next legal call use the unchanged observation.
+                                    # Reserve the slot BEFORE execute: even a raised exception
+                                    # can follow a remote mutation and must defer later calls.
+                                    if stateful_batch:
+                                        selected_index = batch_index
                                     output = allowed_tools[action_name].execute(arguments)
                                     observation = {
                                         "name": action_name,
@@ -1720,6 +1809,7 @@ class ModelAgentExecutor:
                                             in webshop_seen_evidence_signatures
                                         )
                                         _update_webshop_product_inspections(
+                                            section_max_chars=section_memory_limit(self.webshop_compatibility_profile),
                                             action_name=action_name,
                                             arguments=arguments,
                                             output=webshop_state,
@@ -1906,6 +1996,11 @@ class ModelAgentExecutor:
                                     if action_adapter == "swe_bench" and isinstance(
                                         observation["output"], dict
                                     ):
+                                        if action_name == "swe_test" and swe_workspace_changed:
+                                            if _swe_test_was_executed(
+                                                observation, workspace_version=swe_latest_workspace_version,
+                                            ):
+                                                swe_test_after_latest_edit = True
                                         changed_files = observation["output"].get("changed_files")
                                         if isinstance(changed_files, list):
                                             changed_now = bool(changed_files)
@@ -1913,6 +2008,7 @@ class ModelAgentExecutor:
                                                 swe_edit_successful_count += 1
                                                 swe_last_successful_edit_round = interaction_round
                                                 swe_test_after_latest_edit = False
+                                                swe_latest_workspace_version = observation["output"].get("workspace_version")
                                             swe_workspace_changed = changed_now
                                         if action_name in _SWE_READ_ONLY_ACTIONS:
                                             swe_successful_inspection_count += 1
@@ -2012,19 +2108,6 @@ class ModelAgentExecutor:
                     trace_entry["batch_index"] = batch_index
                     trace_entry["batch_size"] = len(calls)
                 react_trace.append(trace_entry)
-                if webshop_history_enabled and (
-                    not stateful_batch or batch_index == selected_index
-                ):
-                    append_webshop_history(
-                        webshop_react_history,
-                        before=history_before,
-                        action={
-                            "name": call.name,
-                            "arguments": arguments if arguments is not None else call.arguments,
-                        },
-                        result=observation,
-                    )
-                    sync_webshop_journal()
                 call_observations.append((call, observation))
             message_call_observations = call_observations
             if (
@@ -2076,6 +2159,7 @@ class ModelAgentExecutor:
                     )
                 elif action_adapter == "webshop":
                     context["action_environment"]["webshop_progress"] = _webshop_progress_prompt(
+                        section_max_chars=section_memory_limit(self.webshop_compatibility_profile),
                         queries=webshop_queries,
                         visited_products=webshop_visited_products,
                         product_inspections=webshop_product_inspections,
@@ -2093,12 +2177,11 @@ class ModelAgentExecutor:
                         current_state=webshop_state,
                         purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
                     )
-                    if not webshop_history_enabled:
-                        _record_webshop_state_guidance_delivery(
-                            webshop_state_guidance_deliveries,
-                            context["action_environment"].get("webshop_progress"),
-                            interaction_round=interaction_round,
-                        )
+                    _record_webshop_state_guidance_delivery(
+                        webshop_state_guidance_deliveries,
+                        context["action_environment"].get("webshop_progress"),
+                        interaction_round=interaction_round,
+                    )
                 latest_context_for_prompt = _action_context_for_prompt(
                     context,
                     action_adapter=action_adapter,
@@ -2171,6 +2254,10 @@ class ModelAgentExecutor:
             elif legacy_tool_calls >= self.max_tool_rounds:
                 force_finalize = True
                 finalization_reason = "action_budget_exhausted"
+            if test_recovery_active:
+                force_finalize = True
+                finalization_reason = ("swe_post_edit_test_recovered" if swe_test_after_latest_edit
+                                       else "swe_post_edit_test_recovery_incomplete")
         else:
             response, recovery_token_in, recovery_token_out, recovery_diagnostics = (
                 self._request_final_artifact(
@@ -2195,6 +2282,7 @@ class ModelAgentExecutor:
                     pre_reserved_closure_tokens=closure_reserve(),
                     short_answer_qa=short_answer_qa,
                     is_output_agent=selected_output_agent,
+                    dataset=contract_dataset,
                 )
             )
             token_in += recovery_token_in
@@ -2299,8 +2387,11 @@ class ModelAgentExecutor:
                     if stalled
                     else "purchase_staged"
                     if commit_ready
-                    else "completed"
+                    else "completed" if environment_terminal
+                    else "needs_recovery" if finalization_reason == "protocol_recovery_exhausted"
+                    else "active"
                 ),
+                "stop_reason": finalization_reason,
                 "environment_owner": stateless_environment_owner or node.agent_id,
                 "environment_access": (
                     "stateless_planner" if stateless_environment_owner else "mutable_owner"
@@ -2347,20 +2438,19 @@ class ModelAgentExecutor:
                 "policy_failure": policy_failure,
                 "prompt_projection": _webshop_prompt_projection_summary(prompt_projection_stats),
             }
+            if artifact.webshop_progress["state"] == "needs_recovery":
+                budget = self.budget_ledger.webshop_audit(node, scope=self.budget_scope)
+                artifact.webshop_progress["model_stop_report"] = artifact.summary
+                artifact.summary = (
+                    "Runtime: action format recovery exhausted; shopping is not complete. "
+                    f"Tool actions used {budget['total_used']}/{budget['total_limit']}; "
+                    f"remaining {budget['total_remaining']}. No valid purchase is staged. "
+                    "A bounded RUN_AGENT recovery may continue in the current session."
+                )
             if self.webshop_worker_guidance_policy != "baseline":
                 artifact.webshop_progress["worker_guidance"] = {
                     "policy": self.webshop_worker_guidance_policy,
                     "applied": not bool(stateless_environment_owner),
-                }
-            if self.webshop_worker_memory_policy != "factual_memory_v1":
-                artifact.webshop_progress["worker_memory"] = {
-                    "policy": self.webshop_worker_memory_policy,
-                    "applied": webshop_history_enabled,
-                    "history_entries": len(webshop_react_history),
-                    "history_observation_chars": sum(
-                        len(item["observation"]) for item in webshop_react_history
-                    ),
-                    "continuity_scope": "webshop_rollout_owner",
                 }
             if commit_ready:
                 purchase_status = staged_output.get("purchase_evidence_status", {})
@@ -2447,7 +2537,8 @@ class ModelAgentExecutor:
             )
             artifact.alfworld_progress = {
                 "trusted": True,
-                "state": "typed_policy_failure" if stalled else "completed",
+                "state": ("typed_policy_failure" if stalled else "completed"
+                          if environment_terminal else "incomplete"),
                 "semantic_no_progress_count": alfworld_semantic_no_progress_count,
                 "semantic_no_progress_streak": alfworld_semantic_no_progress_streak,
                 "fuse_threshold": _ALFWORLD_SEMANTIC_STALL_FUSE_THRESHOLD,
@@ -2507,6 +2598,43 @@ class ModelAgentExecutor:
             }
         return artifact
 
+    def _generate_with_credit(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        credit_limit: int | None,
+        pre_reserved_closure_tokens: int | None,
+        cap_output: bool,
+        **kwargs: Any,
+    ) -> LLMResponse:
+        with request_token_credit(
+            credit_limit,
+            pre_reserved_closure_tokens=pre_reserved_closure_tokens,
+            cap_output=cap_output,
+        ) as credit:
+            try:
+                response = self.backend.generate(messages, **kwargs)
+            except Exception as exc:
+                if self._swe_request_usage is not None:
+                    # A failed repair/failover can follow billed completions.
+                    # Preserve this execution's known usage even if no response
+                    # or final Artifact could be produced by the backend.
+                    if credit is not None:
+                        self._swe_request_usage[0] += credit.token_in
+                        self._swe_request_usage[1] += credit.token_out
+                    exc.worker_token_usage = tuple(self._swe_request_usage)
+                raise
+            if self._swe_request_usage is not None:
+                if credit is not None:
+                    # The request account spans pool members and length repairs;
+                    # the returned response may describe only the final member.
+                    # Use the complete known totals without double charging them.
+                    response.token_in = max(response.token_in, credit.token_in)
+                    response.token_out = max(response.token_out, credit.token_out)
+                self._swe_request_usage[0] += response.token_in
+                self._swe_request_usage[1] += response.token_out
+            return response
+
     def _request_final_artifact(
         self,
         *,
@@ -2523,6 +2651,7 @@ class ModelAgentExecutor:
         prior_response: str = "",
         short_answer_qa: bool = False,
         is_output_agent: bool = False,
+        dataset: str = "",
     ) -> tuple[Any, int, int, list[dict[str, Any]]]:
         token_in = token_out = 0
         diagnostics: list[dict[str, Any]] = []
@@ -2552,19 +2681,18 @@ class ModelAgentExecutor:
                 previous_error=previous_error,
                 short_answer_qa=short_answer_qa,
                 is_output_agent=is_output_agent,
+                dataset=dataset,
             )
             started = time.monotonic()
             try:
-                with (
-                    worker_finalization_request(),
-                    request_token_credit(
-                        token_credit - token_in - token_out if token_credit is not None else None,
+                with worker_finalization_request():
+                    response = self._generate_with_credit(
+                        messages,
+                        credit_limit=(
+                            token_credit - token_in - token_out if token_credit is not None else None
+                        ),
                         pre_reserved_closure_tokens=pre_reserved_closure_tokens,
                         cap_output=cap_output,
-                    ),
-                ):
-                    response = self.backend.generate(
-                        messages,
                         role=self.role,
                         actions=(),
                         max_tokens=max_tokens,
@@ -2693,6 +2821,8 @@ class RoutedModelAgentExecutor:
         webshop_worker_guidance_policy: str = "baseline",
         webshop_worker_memory_policy: str = "factual_memory_v1",
         webshop_worker_execution_policy: str = "graph_tools_v1",
+        webshop_native_conversation_history: bool = False,
+        webshop_compatibility_profile: str = "current",
         dataset_route_overrides: dict[str, dict[str, str]] | None = None,
     ) -> None:
         if not backends:
@@ -2709,12 +2839,15 @@ class RoutedModelAgentExecutor:
         self.max_tool_rounds = int(max_tool_rounds)
         self.alfworld_worker_guidance_policy = str(alfworld_worker_guidance_policy)
         self.webshop_worker_guidance_policy = str(webshop_worker_guidance_policy)
-        if webshop_worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
+        if webshop_worker_memory_policy != "factual_memory_v1":
             raise ValueError("unknown webshop.worker_memory_policy")
         self.webshop_worker_memory_policy = str(webshop_worker_memory_policy)
         if webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
             raise ValueError("unknown webshop.worker_execution_policy")
         self.webshop_worker_execution_policy = webshop_worker_execution_policy
+        self.webshop_native_conversation_history = webshop_native_conversation_history
+        section_memory_limit(webshop_compatibility_profile)
+        self.webshop_compatibility_profile = webshop_compatibility_profile
         self.dataset_route_overrides = {
             canonical_dataset_name(dataset): {
                 str(selected): str(target) for selected, target in overrides.items()
@@ -2799,6 +2932,8 @@ class RoutedModelAgentExecutor:
                 webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
                 webshop_worker_memory_policy=self.webshop_worker_memory_policy,
                 webshop_worker_execution_policy=self.webshop_worker_execution_policy,
+                webshop_native_conversation_history=self.webshop_native_conversation_history,
+                webshop_compatibility_profile=self.webshop_compatibility_profile,
                 budget_ledger=self.budget_ledger,
                 deadline_monotonic=self.deadline_monotonic,
                 rollout_deadline=self.rollout_deadline,
@@ -2824,6 +2959,8 @@ class RoutedModelAgentExecutor:
                 artifact_id="pending",
                 agent_id=node.agent_id,
                 answer=WORKER_BACKEND_FAILURE_SENTINEL,
+                token_in=getattr(exc, "worker_token_usage", (0, 0))[0],
+                token_out=getattr(exc, "worker_token_usage", (0, 0))[1],
                 summary="Worker backend remained unavailable after bounded retries.",
                 confidence=0.0,
                 unresolved_issues=[
@@ -2894,6 +3031,9 @@ class MultiAgentRuntime:
         self._execution_seq = 0
         self.environment_fingerprint = ""
         self._last_input_payloads: dict[tuple[str, bool], dict[str, Any]] = {}
+        self._artifact_input_bindings: dict[str, dict[str, Any]] = {}
+        self._stale_artifacts: set[str] = set()
+        self._execution_token_remaining: int | None = None
 
     def reset(self) -> None:
         self.artifacts.clear()
@@ -2905,6 +3045,8 @@ class MultiAgentRuntime:
         self._execution_seq = 0
         self.environment_fingerprint = ""
         self._last_input_payloads.clear()
+        self._artifact_input_bindings.clear()
+        self._stale_artifacts.clear()
         reset_executor = getattr(self.executor, "reset", None)
         if callable(reset_executor):
             reset_executor()
@@ -2922,6 +3064,56 @@ class MultiAgentRuntime:
             if callable(getter):
                 ready.update(str(value) for value in getter())
         return tuple(sorted(ready))
+
+    def environment_result_for(self, agent_id: str) -> dict[str, Any]:
+        results = []
+        for lifecycle in self._environment_lifecycles():
+            getter = getattr(lifecycle, "result_for", None)
+            result = getter(agent_id) if callable(getter) else None
+            if isinstance(result, dict) and result and result.get("termination_reason") not in {"agent_never_executed", "missing_output_agent"}:
+                results.append(result)
+        if len(results) > 1:
+            raise ValueError("ambiguous environment result owner")
+        return copy.deepcopy(results[0]) if results else {}
+
+    def environment_continuation_status(self, agent_id: str) -> dict[str, Any]:
+        statuses = []
+        for lifecycle in self._environment_lifecycles():
+            getter = getattr(lifecycle, "continuation_status", None)
+            if callable(getter):
+                statuses.append(getter(agent_id))
+        return {"can_continue": all(s.get("can_continue", True) for s in statuses)} if statuses else {}
+
+    def shared_tool_budget_status(self, total_limit: int) -> dict[str, Any]:
+        ledger = getattr(self.executor, "budget_ledger", None)
+        scope = "tool-rollout:whole-graph"
+        usage = ledger.usage.get(scope, AgentActionUsage()) if ledger is not None else AgentActionUsage()
+        return {"policy": "shared_total_v1", "scope": "per_question",
+                "used": usage.total_used, "max": total_limit,
+                "remaining": max(0, total_limit - usage.total_used),
+                "initial_used": usage.initial_used, "revision_used": usage.revision_used,
+                "closure_used": usage.closure_used,
+                "reset_on_node_edit": False}
+
+    def swe_execution_blocker(self, node: AgentNode) -> str | None:
+        """A fresh SWE workspace needs tools; in-flight finalization is separate."""
+        if (node.metadata.get("action_adapter") == "swe_bench"
+                and node.operation_policy_configured and node.allowed_tools
+                and ActionBudgetLedger.shared_total(node)
+                and self.shared_tool_budget_status(node.total_tool_budget)["remaining"] <= 0):
+            return "swe_tool_budget_exhausted"
+        return None
+
+    def resource_signature(self, agent_id: str) -> str:
+        results = []
+        for lifecycle in self._environment_lifecycles():
+            getter = getattr(lifecycle, "result_for", None)
+            result = getter(agent_id) if callable(getter) else None
+            if not result or result.get("termination_reason") in {"agent_never_executed", "missing_output_agent"}:
+                continue
+            signature = getattr(lifecycle, "cache_signature", None)
+            results.append(signature(agent_id) if callable(signature) else result)
+        return self._cache_key({"resources": results})
 
     def environment_owner_agents(self) -> tuple[str, ...]:
         """Return the sole mutable-state owner exposed by environment lifecycles."""
@@ -2985,6 +3177,15 @@ class MultiAgentRuntime:
                 lifecycles[id(lifecycle)] = lifecycle
         return tuple(lifecycles.values())
 
+    def recoverable_swe_candidates(self) -> list[dict[str, Any]]:
+        candidates = {}
+        for lifecycle in self._environment_lifecycles():
+            getter = getattr(lifecycle, "recoverable_code_artifacts", None)
+            if callable(getter):
+                for candidate in getter():
+                    candidates[candidate["code_artifact_ref"]["artifact_sha256"]] = candidate
+        return list(candidates.values())
+
     def execute(
         self,
         *,
@@ -2992,10 +3193,82 @@ class MultiAgentRuntime:
         graph: MultiAgentGraph,
         dirty_agents: set[str] | None = None,
         invalidation_reasons: dict[str, set[str]] | None = None,
+        token_credit: int | None = None,
     ) -> ExecutionReport:
         graph.assert_valid(final=False)
+        self._execution_token_remaining = token_credit
+        if graph.submission_protocol == PROTOCOL:
+            for lifecycle in self._environment_lifecycles():
+                setter = getattr(lifecycle, "set_submission_protocol", None)
+                if callable(setter):
+                    setter(PROTOCOL)
+        # Set runtime-owned output identity before the component cleanliness
+        # check below. Otherwise a clean component can skip the very execution
+        # that should observe its new output contract.
+        output_contract_dirty: set[str] = set()
+        role_sensitive_agents: set[str] = set()
+        for agent_id, node in graph.nodes.items():
+            contract = node.metadata.get("system_managed_contract")
+            contract_dataset = (
+                str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
+            )
+            adapter = str(node.metadata.get("action_adapter", ""))
+            role_sensitive = is_unified_node(node) or worker_output_role_changes_input(
+                dataset=contract_dataset,
+                action_adapter=adapter,
+            )
+            if role_sensitive:
+                role_sensitive_agents.add(agent_id)
+                is_output_agent = is_task_result(node, legacy_selected=agent_id == graph.output_agent)
+                node.metadata["_runtime_is_output_agent"] = is_output_agent
+                if agent_id in self.artifacts and not self.artifact_matches_current_input_signature(
+                    agent_id, task=task, graph=graph, allow_failed=is_unified_node(node)
+                ):
+                    output_contract_dirty.add(agent_id)
+                previous_payload = self._last_input_payloads.get((agent_id, False))
+                if previous_payload is None:
+                    if agent_id in self.artifacts and not self._artifact_input_bindings.get(agent_id):
+                        output_contract_dirty.add(agent_id)
+                    continue
+                if is_unified_node(node):
+                    if previous_payload.get("submission_protocol") != PROTOCOL or previous_payload.get("result_scope") != node.metadata.get("result_scope"):
+                        output_contract_dirty.add(agent_id)
+                    continue
+                if (
+                    previous_payload.get("output_contract_version") != OUTPUT_CONTRACT_VERSION
+                    or previous_payload.get("submission_contract_version") != SUBMISSION_CONTRACT_VERSION
+                    or previous_payload.get("worker_output_role_version")
+                    != WORKER_OUTPUT_ROLE_VERSION
+                    or previous_payload.get("is_output_agent") != is_output_agent
+                ):
+                    output_contract_dirty.add(agent_id)
+            else:
+                node.metadata.pop("_runtime_is_output_agent", None)
+        self._unified_incumbents = {
+            key: (copy.deepcopy(value), copy.deepcopy(self._artifact_input_bindings[key]),
+                  copy.deepcopy(self._last_input_payloads.get((key, self._artifact_input_bindings[key]["revision"]))))
+            for key, value in self.artifacts.items()
+            if key in graph.nodes and is_unified_node(graph.nodes[key])
+            and not artifact_integrity_failure_risks(value)
+            and self.artifact_matches_current_input_signature(key, task=task, graph=graph)
+        }
         self._execution_seq += 1
-        dirty = set(graph.nodes) if dirty_agents is None else graph.dirty_closure(dirty_agents)
+        requested_dirty = set(graph.nodes) if dirty_agents is None else set(dirty_agents)
+        requested_dirty.update(output_contract_dirty)
+        previously_stale = self._stale_artifacts.copy()
+        requested_dirty.update(self._stale_artifacts & role_sensitive_agents)
+        dirty = graph.dirty_closure(requested_dirty)
+        # Invalidate the complete dependency closure before any request. An
+        # upstream exception must not leave an old downstream answer submittable.
+        self._stale_artifacts.intersection_update(graph.nodes)
+        self._stale_artifacts.update(dirty)
+        effective_invalidation_reasons = {
+            agent_id: set(reasons) for agent_id, reasons in (invalidation_reasons or {}).items()
+        }
+        for agent_id in output_contract_dirty:
+            effective_invalidation_reasons.setdefault(agent_id, set()).add(
+                "output_contract_changed"
+            )
         self.artifacts = {
             key: artifact for key, artifact in self.artifacts.items() if key in graph.nodes
         }
@@ -3004,10 +3277,15 @@ class MultiAgentRuntime:
             for key, payload in self._last_input_payloads.items()
             if key[0] in graph.nodes
         }
+        self._artifact_input_bindings = {
+            agent_id: binding
+            for agent_id, binding in self._artifact_input_bindings.items()
+            if agent_id in graph.nodes
+        }
         report = ExecutionReport(
             invalidation_reasons={
                 agent_id: sorted(set(reasons))
-                for agent_id, reasons in (invalidation_reasons or {}).items()
+                for agent_id, reasons in effective_invalidation_reasons.items()
                 if agent_id in graph.nodes and reasons
             }
         )
@@ -3034,9 +3312,16 @@ class MultiAgentRuntime:
                         "swe_output_commit_required",
                         "webshop_output_closure_required",
                         "selected_output_recovery_required",
+                        "explicit_continuation",
                     }
                     & set(report.invalidation_reasons.get(agent_id, []))
                 ]
+                if selected_recovery_agents and any(
+                    agent_id not in selected_recovery_agents
+                    and agent_id in (requested_dirty | previously_stale)
+                    for agent_id in configured
+                ):
+                    selected_recovery_agents = []
                 if selected_recovery_agents:
                     if len(selected_recovery_agents) != 1:
                         raise ValueError("selected-output recovery requires exactly one Agent")
@@ -3066,6 +3351,9 @@ class MultiAgentRuntime:
                     for peer_id in configured:
                         if peer_id == recovery_agent:
                             continue
+                        # This bounded retry consumes the existing peer snapshot;
+                        # it does not open another synchronous peer generation.
+                        self._stale_artifacts.discard(peer_id)
                         self._append_unique(report.reused_agents, peer_id)
                         self._append_unique(report.skipped_clean_agents, peer_id)
                     artifact, reused, token_in, token_out = self._run_agent(
@@ -3079,6 +3367,8 @@ class MultiAgentRuntime:
                         report=report,
                         reason_codes=report.invalidation_reasons.get(recovery_agent, []),
                     )
+                    if artifact is None:
+                        continue
                     self.artifacts[recovery_agent] = artifact
                     if not reused:
                         report.token_in += token_in
@@ -3097,8 +3387,8 @@ class MultiAgentRuntime:
                             phase="swe_final_fix_prior",
                         )
                         if prior_artifact is not None
-                        and "swe_output_commit_required"
-                        in report.invalidation_reasons.get(agent_id, [])
+                        and (is_unified_node(graph.nodes[agent_id]) or "swe_output_commit_required"
+                        in report.invalidation_reasons.get(agent_id, []))
                         else None
                     )
                     artifact, reused, token_in, token_out = self._run_agent(
@@ -3112,6 +3402,8 @@ class MultiAgentRuntime:
                         report=report,
                         reason_codes=report.invalidation_reasons.get(agent_id, []),
                     )
+                    if artifact is None:
+                        continue
                     self.artifacts[agent_id] = artifact
                     report.token_in += token_in
                     report.token_out += token_out
@@ -3129,11 +3421,14 @@ class MultiAgentRuntime:
                         report=report,
                         reason_codes=report.invalidation_reasons.get(agent_id, []),
                     )
+                    if artifact is None:
+                        continue
                     first_pass[agent_id] = artifact
                     if not reused:
                         report.token_in += token_in
                         report.token_out += token_out
 
+                blocked_ids = set(configured) - first_pass.keys()
                 failed_ids = {
                     agent_id
                     for agent_id, artifact in first_pass.items()
@@ -3143,18 +3438,25 @@ class MultiAgentRuntime:
                         WORKER_PROTOCOL_FAILURE_SENTINEL,
                     }
                 }
-                healthy_ids = [agent_id for agent_id in configured if agent_id not in failed_ids]
+                healthy_ids = [
+                    agent_id for agent_id in configured
+                    if agent_id in first_pass and agent_id not in failed_ids
+                ]
                 if (
-                    WORKER_BACKEND_FAILURE_SENTINEL
+                    blocked_ids or WORKER_BACKEND_FAILURE_SENTINEL
                     in {artifact.answer for artifact in first_pass.values()}
                     or len(healthy_ids) < 2
                 ):
-                    reason = (
-                        "backend_failure_in_component"
-                        if WORKER_BACKEND_FAILURE_SENTINEL
-                        in {artifact.answer for artifact in first_pass.values()}
-                        else "insufficient_healthy_peers"
-                    )
+                    if blocked_ids:
+                        reason = "execution_admission_blocked"
+                        for agent_id in configured:
+                            report.blocked_agents.setdefault(agent_id, "dependency_execution_blocked")
+                    elif WORKER_BACKEND_FAILURE_SENTINEL in {
+                        artifact.answer for artifact in first_pass.values()
+                    }:
+                        reason = "backend_failure_in_component"
+                    else:
+                        reason = "insufficient_healthy_peers"
                     report.revision_decisions.append(
                         self._revision_decision_payload(
                             configured=configured,
@@ -3229,27 +3531,59 @@ class MultiAgentRuntime:
                             *revision_reasons,
                         ],
                     )
+                    if artifact is None:
+                        # Keep the first-pass evidence, but it is not a completed
+                        # synchronous revision and cannot become a fresh result.
+                        revised_pass[agent_id] = first_pass[agent_id]
+                        self._append_unique(report.revision_skipped_agents, agent_id)
+                        continue
                     revised_pass[agent_id] = artifact
                     report.token_in += token_in
                     report.token_out += token_out
-                report.revision_wave_count += 1
+                blocked_revision = set(healthy_ids) & report.blocked_agents.keys()
+                if blocked_revision:
+                    for agent_id in configured:
+                        report.blocked_agents.setdefault(agent_id, "dependency_execution_blocked")
+                    report.incomplete_bidirectional_components.append({
+                        "component_agents": list(configured),
+                        "healthy_agents": sorted(set(healthy_ids) - blocked_revision),
+                        "reason": "execution_admission_blocked",
+                    })
+                revision_waves_used = int(len(blocked_revision) < len(healthy_ids))
+                report.revision_wave_count += revision_waves_used
                 report.revision_decisions.append(
                     self._revision_decision_payload(
                         configured=configured,
                         healthy_ids=healthy_ids,
                         first_pass=first_pass,
                         revision_required=True,
-                        reason_codes=revision_reasons,
-                        revision_waves_used=1,
+                        reason_codes=[*revision_reasons, *(["execution_admission_blocked"]
+                                                        if blocked_revision else [])],
+                        revision_waves_used=revision_waves_used,
                     )
                 )
                 self._mace_round_index += 1
                 self.artifacts.update(revised_pass)
 
+        # Missing execution keeps the affected component and dependants dirty;
+        # preserved evidence must not be relabelled as a current-input result.
+        blocked_closure = graph.dirty_closure(set(report.blocked_agents))
+        for agent_id in blocked_closure:
+            report.blocked_agents.setdefault(agent_id, "dependency_execution_blocked")
+        self._stale_artifacts.update(blocked_closure)
         report.artifacts = dict(self.artifacts)
         report.packets = self._final_packets(graph)
         if graph.output_agent and graph.output_agent in self.artifacts:
-            report.output = self.artifacts[graph.output_agent].answer
+            node = graph.nodes[graph.output_agent]
+            contract = node.metadata.get("system_managed_contract", {})
+            role_sensitive = worker_output_role_changes_input(
+                dataset=str(contract.get("dataset", "")),
+                action_adapter=str(node.metadata.get("action_adapter", "")),
+            )
+            if not role_sensitive or self.artifact_matches_current_input_signature(
+                graph.output_agent, task=task, graph=graph
+            ):
+                report.output = self.artifacts[graph.output_agent].answer
         return report
 
     def complete_full_graph_webshop_output(
@@ -3309,6 +3643,8 @@ class MultiAgentRuntime:
             report=report,
             reason_codes=["webshop_output_closure_required"],
         )
+        if artifact is None:
+            return
         if reused:
             raise RuntimeError("full graph output closure reused cache")
         self.artifacts[agent_id] = artifact
@@ -3387,16 +3723,12 @@ class MultiAgentRuntime:
         prior: RelayPacket | None = None,
         report: ExecutionReport,
         reason_codes: list[str],
-    ) -> tuple[AgentArtifact, bool, int, int]:
+    ) -> tuple[AgentArtifact | None, bool, int, int]:
         node = graph.nodes[agent_id]
-        # The generic AgentExecutor API intentionally stays dataset-agnostic;
-        # pass the graph role through runtime-owned metadata instead.
-        contract = node.metadata.get("system_managed_contract")
-        contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
-        if is_short_qa_dataset(contract_dataset):
-            node.metadata["_runtime_is_output_agent"] = agent_id == graph.output_agent
-        else:
-            node.metadata.pop("_runtime_is_output_agent", None)
+        if graph.directed_predecessors(agent_id) & report.blocked_agents.keys():
+            report.blocked_agents[agent_id] = "dependency_execution_blocked"
+            self._stale_artifacts.add(agent_id)
+            return None, False, 0, 0
         payload = self._cache_payload(
             task=task,
             node=node,
@@ -3406,14 +3738,14 @@ class MultiAgentRuntime:
             prior=prior,
         )
         cache_key = self._cache_key(payload)
+        self._stale_artifacts.add(agent_id)
         input_reasons = self._input_change_reasons(
             self._last_input_payloads.get((agent_id, revision)),
             payload,
             revision=revision,
         )
         reasons = sorted(set(reason_codes) | input_reasons)
-        self._last_input_payloads[(agent_id, revision)] = copy.deepcopy(payload)
-        cached = None if self.full_graph_replay else self.cache.get(cache_key)
+        cached = None if self.full_graph_replay or node.metadata.get("_runtime_explicit_recovery") else self.cache.get(cache_key)
         cacheable = cached is not None and cached.answer not in {
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
@@ -3432,6 +3764,7 @@ class MultiAgentRuntime:
                 self._artifact_seq += 1
                 artifact.artifact_id = f"artifact_{self._artifact_seq}"
                 artifact.agent_id = agent_id
+            self._bind_artifact_input(artifact, payload, graph, upstream, peers, prior)
             self._record_attempt(
                 report,
                 agent_id=agent_id,
@@ -3440,8 +3773,13 @@ class MultiAgentRuntime:
                 reasons=reasons,
                 input_hash=cache_key,
                 peer_packet_count=len(peers),
+                artifact_id=artifact.artifact_id,
             )
             return artifact, True, 0, 0
+        blocker = self.swe_execution_blocker(node)
+        if blocker is not None:
+            report.blocked_agents[agent_id] = blocker
+            return None, False, 0, 0
         if not reasons:
             # A same-input cache miss can only come from cache lifecycle or an
             # executor/environment boundary outside graph semantics.
@@ -3450,18 +3788,42 @@ class MultiAgentRuntime:
         set_budget_scope = getattr(self.executor, "set_budget_scope", None)
         if callable(set_budget_scope):
             action_adapter = str(node.metadata.get("action_adapter", ""))
-            if action_adapter == "webshop":
+            if ActionBudgetLedger.shared_total(node):
+                # One task account survives revisions, route changes and node
+                # deletion/recreation. Runtime.reset() alone starts a new task.
+                set_budget_scope("tool-rollout:whole-graph")
+            elif action_adapter == "webshop":
                 owners = self.environment_owner_agents()
                 owner = owners[0] if len(owners) == 1 else agent_id
-                if self.native_webshop:
+                if self.native_webshop or is_unified_node(node):
                     owner = "whole-graph"
                 # One official WebShop episode has one cumulative Action
                 # budget, even when the owner is revised or receives the
                 # bounded output-closure pass.
                 set_budget_scope(f"webshop-rollout:{self.environment_fingerprint}:{owner}")
             else:
-                set_budget_scope(f"execution-{self._execution_seq}:{agent_id}")
+                scope = f"execution-{self._execution_seq}:{agent_id}"
+                if is_unified_node(node):
+                    if node.metadata.get("_runtime_explicit_recovery"):
+                        scope = node.metadata.get("_runtime_tool_scope", scope)
+                    node.metadata["_runtime_tool_scope"] = scope
+                set_budget_scope(scope)
         started = time.monotonic()
+        if self._execution_token_remaining is not None and "_runtime_token_credit" in node.metadata:
+            # The scheduler may discover additional stale nodes after estimating
+            # the dirty closure. All actual executions share one remaining account.
+            remaining = max(0, self._execution_token_remaining)
+            if node.metadata.get("_runtime_budget_kind") in {
+                SWE_SHARED_TOKEN_BUDGET, "swe_primary_request_credit_v1",
+            }:
+                # Executions are sequential. Cache hits above spend nothing;
+                # each real SWE execution/revision receives the live balance,
+                # never the stale per-node allocation from an earlier wave.
+                node.metadata["_runtime_token_credit"] = remaining
+            else:
+                node.metadata["_runtime_token_credit"] = min(
+                    int(node.metadata["_runtime_token_credit"]), remaining,
+                )
         artifact = self.executor.execute(
             task=task,
             node=node,
@@ -3471,6 +3833,8 @@ class MultiAgentRuntime:
             seed=self.seed,
             prior=prior,
         )
+        if self._execution_token_remaining is not None:
+            self._execution_token_remaining -= artifact.token_in + artifact.token_out
         _enforce_artifact_integrity(artifact)
         duration_s = time.monotonic() - started
         if artifact.answer not in {
@@ -3486,11 +3850,11 @@ class MultiAgentRuntime:
         self._artifact_seq += 1
         artifact.artifact_id = f"artifact_{self._artifact_seq}"
         artifact.agent_id = agent_id
-        if artifact.answer not in {
+        if (artifact.answer not in {
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
-        }:
-            if self.native_webshop and node.metadata.get("action_adapter") == "webshop":
+        } or (is_unified_node(node) and trusted_resource_result(artifact))):
+            if (self.native_webshop or is_unified_node(node)) and node.metadata.get("action_adapter") == "webshop":
                 # Side effects have advanced this private session. Store only at
                 # the resulting state, never reuse a stale candidate from an old page.
                 post_payload = self._cache_payload(
@@ -3502,9 +3866,15 @@ class MultiAgentRuntime:
                     prior=prior,
                 )
                 self.cache[self._cache_key(post_payload)] = artifact
-                self._last_input_payloads[(agent_id, revision)] = copy.deepcopy(post_payload)
+                payload = post_payload
             else:
                 self.cache[cache_key] = artifact
+            self._bind_artifact_input(artifact, payload, graph, upstream, peers, prior)
+        elif is_unified_node(node):
+            # A failed attempt still consumed these inputs. Record freshness to
+            # avoid implicit retries on unrelated edits; submission continues to
+            # reject failed artifacts, and explicit recovery bypasses the cache.
+            self._bind_artifact_input(artifact, payload, graph, upstream, peers, prior)
         self._record_attempt(
             report,
             agent_id=agent_id,
@@ -3513,7 +3883,30 @@ class MultiAgentRuntime:
             reasons=reasons,
             input_hash=cache_key,
             peer_packet_count=len(peers),
+            artifact_id=artifact.artifact_id,
+            token_in=artifact.token_in,
+            token_out=artifact.token_out,
         )
+        if is_unified_node(node):
+            report.attempt_artifacts.append(copy.deepcopy(artifact))
+            incumbent = self._unified_incumbents.get(agent_id)
+            if (incumbent and "explicit_continuation" in reason_codes
+                    and (artifact_integrity_failure_risks(artifact) or artifact.answer in {
+                        WORKER_BACKEND_FAILURE_SENTINEL, WORKER_PROTOCOL_FAILURE_SENTINEL})):
+                previous, binding, previous_payload = incumbent
+                unchanged = (
+                    binding["node_signature"] == self._node_input_signature(node, is_output=False)
+                    and binding.get("resource_signature") == self.resource_signature(agent_id)
+                    and binding["upstream_artifact_ids"] == {p.sender: p.artifact_id for p in upstream}
+                    and binding["peer_artifact_ids"] == {p.sender: p.artifact_id for p in peers}
+                    and not any(source in self._stale_artifacts for source in binding["upstream_artifact_ids"])
+                )
+                if unchanged:
+                    self._artifact_input_bindings[agent_id] = binding
+                    self._last_input_payloads[(agent_id, binding["revision"])] = previous_payload
+                    self._stale_artifacts.discard(agent_id)
+                    report.execution_events[-1]["preserved_candidate_id"] = previous.artifact_id
+                    return previous, False, artifact.token_in, artifact.token_out
         return artifact, False, artifact.token_in, artifact.token_out
 
     def estimate_new_agent_s(
@@ -3829,6 +4222,9 @@ class MultiAgentRuntime:
                 ),
             }
 
+        runtime_metadata = {
+            key: value for key, value in node.metadata.items() if (not key.startswith("_runtime_") if is_unified_node(node) else key != "_runtime_is_output_agent")
+        }
         payload = {
             "task": task,
             "agent_prompt": node.prompt,
@@ -3841,7 +4237,7 @@ class MultiAgentRuntime:
                 "total_tool_budget": node.total_tool_budget,
                 "fingerprint": self.environment_fingerprint,
             },
-            "metadata": node.metadata,
+            "metadata": runtime_metadata,
             "upstream": [packet_signature(packet) for packet in upstream],
             "prior": packet_signature(prior) if prior is not None else None,
             "peers": [packet_signature(packet) for packet in peers],
@@ -3853,28 +4249,134 @@ class MultiAgentRuntime:
                 "bidirectional_always_one_wave_v1" if revision else "initial_pass_v1"
             ),
         }
-        if self.native_webshop and node.metadata.get("action_adapter") == "webshop":
+        if (self.native_webshop or is_unified_node(node)) and node.metadata.get("action_adapter") == "webshop":
             payload["native_sessions"] = [
                 lifecycle.cache_signature(node.agent_id)
                 for lifecycle in self._environment_lifecycles()
                 if callable(getattr(lifecycle, "cache_signature", None))
             ]
             payload["webshop_execution_policy"] = NATIVE_POLICY
+            payload["action_environment"]["native_conversation_history"] = bool(
+                getattr(self.executor, "webshop_native_conversation_history", False)
+            )
         contract = node.metadata.get("system_managed_contract")
         contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
-        if is_short_qa_dataset(contract_dataset):
+        if worker_output_role_changes_input(
+            dataset=contract_dataset,
+            action_adapter=str(node.metadata.get("action_adapter", "")),
+        ):
             payload.update(
                 {
-                    "worker_prompt_version": "qa_role_conditioned_v2",
+                    "output_contract_version": OUTPUT_CONTRACT_VERSION,
+                    "submission_contract_version": SUBMISSION_CONTRACT_VERSION,
+                    "worker_output_role_version": WORKER_OUTPUT_ROLE_VERSION,
                     "is_output_agent": bool(node.metadata.get("_runtime_is_output_agent", False)),
                 }
             )
+        if is_unified_node(node):
+            payload.update(submission_protocol=PROTOCOL, result_scope=node.metadata.get("result_scope"), output_contract_version=OUTPUT_CONTRACT_VERSION, submission_contract_version=SUBMISSION_VERSION, worker_output_role_version=WORKER_OUTPUT_ROLE_VERSION)
         return payload
 
     @staticmethod
     def _cache_key(payload: dict[str, Any]) -> str:
         encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode()
         return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _node_input_signature(node: AgentNode, *, is_output: bool) -> dict[str, Any]:
+        # Runtime credit allocations are request admission state, not changes
+        # to a completed answer. They must not invalidate unrelated clean nodes.
+        return {
+            "prompt": node.prompt,
+            "layer": node.layer,
+            "allowed_tools": node.allowed_tools,
+            "operation_policy_configured": node.operation_policy_configured,
+            "tool_budgets": [node.initial_tool_budget, node.revision_tool_budget, node.total_tool_budget],
+            "metadata": {k: v for k, v in node.metadata.items() if not k.startswith("_runtime_")},
+            "is_output": is_task_result(node, legacy_selected=is_output),
+        }
+
+    def _bind_artifact_input(self, artifact, payload, graph, upstream, peers, prior) -> None:
+        """Bind an execution's inputs; freshness alone never grants eligibility."""
+        agent_id = artifact.agent_id
+        self._last_input_payloads[(agent_id, bool(payload["revision"]))] = copy.deepcopy(payload)
+        self._artifact_input_bindings[agent_id] = copy.deepcopy({
+            "artifact_id": artifact.artifact_id,
+            "input_hash": self._cache_key(payload),
+            "generation": self._execution_seq,
+            "revision": bool(payload["revision"]),
+            "task": payload["task"],
+            "node_signature": self._node_input_signature(
+                graph.nodes[agent_id], is_output=agent_id == graph.output_agent
+            ),
+            "upstream_artifact_ids": {p.sender: p.artifact_id for p in upstream},
+            "peer_artifact_ids": {p.sender: p.artifact_id for p in peers},
+            "peer_neighbors": sorted(graph.bidirectional_neighbors(agent_id)),
+            "prior_artifact_id": prior.artifact_id if prior else None,
+            "resource_signature": self.resource_signature(agent_id) if is_unified_node(graph.nodes[agent_id]) else None,
+        })
+        self._stale_artifacts.discard(agent_id)
+
+    def artifact_input_binding(self, agent_id: str) -> dict[str, Any]:
+        binding = copy.deepcopy(self._artifact_input_bindings.get(agent_id, {}))
+        # The full task and node signature stay internal; export provenance only.
+        binding.pop("task", None)
+        binding.pop("node_signature", None)
+        return binding
+
+    def artifact_matches_current_input_signature(
+        self, agent_id: str, *, task: str | None = None, graph: MultiAgentGraph | None = None,
+        allow_failed: bool = False,
+    ) -> bool:
+        """Validate the stored Artifact against its successful execution generation.
+
+        Peer/prior IDs describe the snapshot actually consumed; never replace
+        them with the component's second-wave results when checking freshness.
+        """
+        if agent_id not in self.artifacts or agent_id in self._stale_artifacts:
+            return False
+        artifact = self.artifacts[agent_id]
+        if not allow_failed and artifact.answer in {
+            WORKER_BACKEND_FAILURE_SENTINEL,
+            WORKER_PROTOCOL_FAILURE_SENTINEL,
+        } and not (graph is not None and agent_id in graph.nodes
+                   and is_unified_node(graph.nodes[agent_id]) and trusted_resource_result(artifact)):
+            return False
+        binding = self._artifact_input_bindings.get(agent_id)
+        if not binding or binding["artifact_id"] != artifact.artifact_id:
+            return False
+        payload = self._last_input_payloads.get((agent_id, binding["revision"]))
+        if payload is None or binding["input_hash"] != self._cache_key(payload):
+            return False
+        if task is not None and task != binding["task"]:
+            return False
+        if (
+            payload.get("executor_version") != self.executor.version
+            or payload.get("seed") != self.seed
+            or payload.get("action_environment", {}).get("fingerprint") != self.environment_fingerprint
+            or payload.get("output_contract_version") != OUTPUT_CONTRACT_VERSION
+            or payload.get("submission_contract_version") != (SUBMISSION_VERSION if payload.get("submission_protocol") == PROTOCOL else SUBMISSION_CONTRACT_VERSION)
+            or payload.get("worker_output_role_version") != WORKER_OUTPUT_ROLE_VERSION
+        ):
+            return False
+        if graph is not None:
+            if (agent_id in graph.nodes and is_unified_node(graph.nodes[agent_id])
+                    and binding.get("resource_signature") != self.resource_signature(agent_id)):
+                return False
+            if agent_id not in graph.nodes or binding["node_signature"] != self._node_input_signature(
+                graph.nodes[agent_id], is_output=agent_id == graph.output_agent
+            ):
+                return False
+            if binding["peer_neighbors"] != sorted(graph.bidirectional_neighbors(agent_id)):
+                return False
+            upstream_ids = {
+                source: self.artifacts[source].artifact_id
+                for source in graph.directed_predecessors(agent_id)
+                if source in self.artifacts
+            }
+            if upstream_ids != binding["upstream_artifact_ids"]:
+                return False
+        return True
 
     @staticmethod
     def _input_change_reasons(
@@ -3924,6 +4426,9 @@ class MultiAgentRuntime:
         reasons: list[str],
         input_hash: str,
         peer_packet_count: int,
+        artifact_id: str,
+        token_in: int = 0,
+        token_out: int = 0,
     ) -> None:
         phase = "revision" if revision else "initial"
         report.execution_events.append(
@@ -3935,6 +4440,10 @@ class MultiAgentRuntime:
                 "input_hash": input_hash,
                 "peer_packet_count": int(peer_packet_count),
                 "revision_wave": 1 if revision else 0,
+                "usage_schema": "worker_execution_usage_v1",
+                "artifact_id": artifact_id,
+                "token_in": int(token_in),
+                "token_out": int(token_out),
             }
         )
         if cache_hit:
@@ -4031,6 +4540,11 @@ def _tool_failure_code(turn: dict[str, Any]) -> str:
         isinstance(output, dict)
         and str(output.get("status", "")).strip().casefold() in _FAILURE_STATUSES
     ):
+        # Workspace adapters return structured failures inside the tool output.
+        # Preserve the adapter code; collapsing it loses policy/infra attribution.
+        nested_error = output.get("error")
+        if isinstance(nested_error, dict) and str(nested_error.get("code", "")).strip():
+            return str(nested_error["code"]).strip()
         stderr = str(output.get("stderr", "")).strip()
         if stderr:
             return stderr.partition(":")[0].strip() or "tool_reported_error"
@@ -4105,8 +4619,12 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
     swe_post_commit_no_progress = bool(
         terminal_tool_failure_observed
         and terminal_tool_failure_code == "repeated_no_progress_action"
+        and isinstance(turns[-1].get("action"), dict)
+        and turns[-1].get("action", {}).get("name") in _SWE_READ_ONLY_ACTIONS
         and artifact.swe_progress.get("trusted") is True
-        and artifact.swe_progress.get("selected_as_output") is True
+        and (artifact.swe_progress.get("result_scope") == "task_result"
+             or (artifact.swe_progress.get("result_scope") is None
+                 and artifact.swe_progress.get("selected_as_output") is True))
         and artifact.swe_progress.get("commit_ready") is True
         and artifact.swe_progress.get("workspace_changed") is True
         and artifact.swe_progress.get("test_after_latest_edit") is True
@@ -4400,6 +4918,53 @@ def _swe_final_response_rejection_reason(
     return None if grounded else "swe_grounded_failure_evidence_required"
 
 
+def _swe_test_recovery_messages(context, react_trace, *, workspace_version, specs, remaining):
+    """A bounded tool-capable request before SWE switches to a text-only report."""
+    changed_files = set()
+    observed_test_paths = set()
+    for turn in react_trace:
+        action = turn.get("action") or {}
+        output = (turn.get("observation") or {}).get("output") or {}
+        if not isinstance(output, dict):
+            continue
+        changed_files.update(output.get("changed_files", ()))
+        arguments = action.get("arguments") or {}
+        paths = [output.get("path", ""), arguments.get("target", "") if isinstance(arguments, dict) else ""]
+        paths += [m.get("path", "") for m in output.get("matches", ()) if isinstance(m, dict)]
+        # Reading a Python source file does not make it a functional test target.
+        # In particular, django/test contains framework code, not its test suite.
+        observed_test_paths.update(
+            p for p in paths if isinstance(p, str) and p
+            and ("tests" in p.split("/") or "testing" in p.split("/")
+                 or p.rsplit("/", 1)[-1].startswith("test_")
+                 or p.split("::", 1)[0].endswith("_test.py"))
+        )
+    payload = {
+        "workspace_version": workspace_version,
+        "changed_files": sorted(changed_files),
+        "observed_test_paths": sorted(observed_test_paths)[:20],
+        "public_task_context": str(context.get("public_task_context", ""))[:4000],
+        "assigned_task": str(context.get("assigned_task", ""))[:2000],
+        "available_actions": [s.to_context_dict() for s in specs],
+        "remaining_actions": min(remaining["phase"], remaining["total"]),
+        "recent_observations": [_compact_recovery_entry(t, action_adapter="swe_bench")
+                                for t in react_trace[-2:]],
+    }
+    return [
+        {"role": "system", "content": (
+            "The current SWE workspace has a patch but no executed test after the latest edit. "
+            "Before final reporting, issue exactly one swe_test Action for the current workspace_version. "
+            "Choose a configured profile and a relevant test target from the visible evidence. "
+            "changed_files are source changes, not suggested public test targets. "
+            "Prefer targeted public_tests; use public_smoke if no justified target is available, "
+            "or a configured syntax profile when public profiles are unavailable. "
+            "Only swe_test is allowed in this bounded recovery. Do not edit, inspect, or return final prose. "
+            "Correct a previously rejected test request using its error; never invent test evidence."
+        )},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+
+
 def _swe_finalization_gate_message(reason: str) -> str:
     if reason == "swe_post_edit_test_required":
         return (
@@ -4502,6 +5067,34 @@ def _swe_action_was_attempted(observation: object) -> bool:
     return isinstance(error, dict) and error.get("code") == "action_execution_failed"
 
 
+def _swe_test_was_executed(observation: object, *, workspace_version: object = None) -> bool:
+    if not isinstance(observation, dict) or observation.get("status") != "ok":
+        return False
+    output = observation.get("output")
+    if not isinstance(output, dict) or output.get("status") != "ok":
+        return False
+    # Legacy successful process observations had no explicit execution marker.
+    # A missing return code, nested rejection, or a failed setup is never evidence.
+    if (("test_executed" in output and output["test_executed"] is not True)
+            or type(output.get("returncode")) is not int or output.get("error")):
+        return False
+    if output.get("test_kind") == "syntax" or output.get("profile") == "python_syntax":
+        checked = output.get("files_checked")
+        if (output.get("execution_evidence") != "syntax_probe_v1"
+                or output.get("test_executed") is not True or output.get("timed_out")
+                or output.get("complete") is not True
+                or not isinstance(checked, list) or not checked
+                or not all(isinstance(path, str) and path for path in checked)
+                or checked != output.get("targets")):
+            return False
+    if output.get("test_kind") == "public_tests" and not (
+        output.get("test_executed") is True
+        and type(output.get("tests_run")) is int and output["tests_run"] > 0
+    ):
+        return False
+    return workspace_version is None or output.get("workspace_version") == workspace_version
+
+
 def _swe_typed_policy_failure(
     artifact: AgentArtifact,
     *,
@@ -4579,6 +5172,7 @@ def _finalize_swe_progress(artifact: AgentArtifact, *, node: AgentNode) -> None:
     first_edit_index: int | None = None
     first_successful_edit_index: int | None = None
     test_after_latest_edit = False
+    latest_workspace_version = None
     for index, entry in enumerate(artifact.react_trace):
         action = entry.get("action")
         observation = entry.get("observation")
@@ -4601,11 +5195,13 @@ def _finalize_swe_progress(artifact: AgentArtifact, *, node: AgentNode) -> None:
                 if first_successful_edit_index is None:
                     first_successful_edit_index = index
                 last_edit_index = index
+                latest_workspace_version = output.get("workspace_version")
                 test_after_latest_edit = False
         elif name == "swe_test":
             if _swe_action_was_attempted(observation):
                 test_attempted += 1
-                if last_edit_index is not None and index > last_edit_index:
+                if (last_edit_index is not None and index > last_edit_index
+                        and _swe_test_was_executed(observation, workspace_version=latest_workspace_version)):
                     test_after_latest_edit = True
                     test_output = (
                         observation.get("output") if isinstance(observation, dict) else None
@@ -4632,9 +5228,9 @@ def _finalize_swe_progress(artifact: AgentArtifact, *, node: AgentNode) -> None:
             else:
                 evidence_signatures.add(signature)
 
-    commit_required = "code_commit" in {
+    commit_required = is_task_result(node, legacy_selected="code_commit" in {
         str(value) for value in node.metadata.get("exclusive_capabilities", [])
-    }
+    })
     has_patch = artifact.code_artifact_ref is not None
     grounded_failure = (
         dict(prevalidated_grounded_failure)
@@ -4704,8 +5300,9 @@ def _finalize_swe_progress(artifact: AgentArtifact, *, node: AgentNode) -> None:
         "test_attempted_count": test_attempted,
         "test_failure_count": test_failure_count,
         "test_after_latest_edit": test_after_latest_edit,
-        "final_fix_pass_count": int(commit_required),
-        "selected_as_output": commit_required,
+        "final_fix_pass_count": 0 if is_unified_node(node) else int(commit_required),
+        "selected_as_output": False if is_unified_node(node) else commit_required,
+        "result_scope": node.metadata.get("result_scope"),
         "output_commit_ready": commit_ready,
         "empty_patch_reason": failure_code if not has_patch else None,
         # Keep the historical key as an exact alias so old audit readers do not
@@ -4724,6 +5321,8 @@ def _swe_read_only_signature(
 ) -> str | None:
     if action_adapter != "swe_bench" or name not in _SWE_READ_ONLY_ACTIONS:
         return None
+    if name in {"swe_list", "swe_search"} and "path" in arguments:
+        arguments = {**arguments, "path": normalize_swe_directory_path(arguments["path"])}
     return json.dumps(
         {"name": name, "arguments": arguments},
         ensure_ascii=False,
@@ -4830,6 +5429,7 @@ def _update_webshop_product_inspections(
     arguments: dict[str, Any],
     output: object,
     product_inspections: dict[str, dict[str, Any]],
+    section_max_chars: int = 0,
 ) -> None:
     payload = output if isinstance(output, dict) else {}
     if str(payload.get("page_type", "")) not in {"product", "product_section"}:
@@ -4886,13 +5486,14 @@ def _update_webshop_product_inspections(
         if section and section not in sections:
             sections.append(section)
         record["sections_viewed"] = sections[-3:]
-        section_text = _webshop_section_evidence(payload.get("page_text", ""))
+        section_text = _webshop_section_evidence(payload.get("page_text", ""), max_chars=section_max_chars)
         if section and section_text:
             evidence = record.get("section_evidence", {})
             evidence = dict(evidence) if isinstance(evidence, dict) else {}
             evidence[section] = section_text
             record["section_evidence"] = {
-                str(name)[:40]: str(value) for name, value in list(evidence.items())[-2:]
+                str(name)[:40]: str(value)[:section_max_chars or None]
+                for name, value in list(evidence.items())[-2:]
             }
     if asin in product_inspections:
         del product_inspections[asin]
@@ -4970,13 +5571,19 @@ def _annotate_webshop_search_state(
     }
 
 
+def _webshop_evidence_target_id(target_id: object) -> str:
+    """Remove only known navigation version suffixes, never executable IDs."""
+    value = str(target_id).strip()
+    return re.sub(r"^(back_to_search|previous_page|next_page):[0-9]+$", r"\1", value)
+
+
 def _webshop_state_signature(state: object) -> str:
     """Fingerprint the current shopping page without volatile step counters."""
 
     payload = state if isinstance(state, dict) else {}
     targets = payload.get("valid_subactions", ())
     target_ids = sorted(
-        str(item.get("target_id", ""))
+        _webshop_evidence_target_id(item.get("target_id", ""))
         for item in targets
         if isinstance(item, dict) and str(item.get("target_id", "")).strip()
     )
@@ -5051,7 +5658,7 @@ def _webshop_search_evidence(targets: list[dict[str, Any]]) -> dict[str, Any]:
             key = json.dumps(preview, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             products[key] = preview
         elif target_id:
-            other_target_ids.add(target_id)
+            other_target_ids.add(_webshop_evidence_target_id(target_id))
     return {
         "products": [products[key] for key in sorted(products)],
         "other_target_ids": sorted(other_target_ids),
@@ -5070,7 +5677,7 @@ def _webshop_evidence_signature(state: object) -> str:
     page_type = str(payload.get("page_type", "")).strip().casefold()
     targets = payload.get("valid_subactions", ())
     target_ids = sorted(
-        str(item.get("target_id", "")).strip()
+        _webshop_evidence_target_id(item.get("target_id", ""))
         for item in targets
         if isinstance(item, dict) and str(item.get("target_id", "")).strip()
     )
@@ -5176,6 +5783,7 @@ def _webshop_progress_prompt(
     strategy_checkpoint_purchase_deferrals: int = 0,
     current_state: dict[str, Any] | None = None,
     purchase_evidence_checkpoint: dict[str, Any] | None = None,
+    section_max_chars: int = 0,
 ) -> dict[str, Any]:
     """Return a bounded WebShop transaction journal, never the full ReAct history."""
 
@@ -5197,7 +5805,7 @@ def _webshop_progress_prompt(
     retained_evidence = current_inspection.get("section_evidence", {})
     retained_evidence = (
         {
-            str(name)[:40]: str(value)
+            str(name)[:40]: str(value)[:section_max_chars or None]
             for name, value in retained_evidence.items()
             if str(name).strip() and str(value).strip()
         }
@@ -5601,32 +6209,44 @@ def _bounded_swe_code_memory(react_trace: list[dict[str, Any]]) -> dict[str, Any
 def _worker_output_instruction(
     available_actions: object,
     *,
+    dataset: str = "",
     action_adapter: str = "",
     short_answer_qa: bool = False,
     is_output_agent: bool = False,
-    webshop_history_enabled: bool = False,
+    webshop_worker_guidance_policy: str = "baseline",
+    local_environment_result: bool = False,
 ) -> str:
     actions = available_actions if isinstance(available_actions, list) else []
     if short_answer_qa:
         qa_instruction = (
-            "For short-answer QA, put only a short phrase, entity, date, number, or compact "
-            "relation in answer. If you are the selected output Agent, answer the whole "
-            "question with its shortest direct answer. If you are an intermediate Worker, "
-            "answer only your assigned local sub-question; you do not need to solve the whole "
-            "question. Put all reasoning, evidence, qualifications, and uncertainty in "
-            "summary or evidence, never in answer. "
+            "For short-answer QA, put only the shortest direct answer in answer and place "
+            "reasoning, evidence, qualifications, and uncertainty in summary or evidence. "
         )
     else:
-        # Preserve the existing guidance for every non-short-QA dataset.
-        qa_instruction = (
-            "For short-answer QA, answer must be the shortest answer span, not a sentence "
-            "or explanation. "
-        )
-    instruction = (
+        qa_instruction = ""
+    output_instruction = (
         "Return one final JSON object with answer, summary, confidence, evidence, "
         "unresolved_issues, and tool_summary. Put only the direct task result in answer and put "
         "all explanation in summary or evidence. "
         + qa_instruction
+    )
+    if action_adapter == "healthbench_professional":
+        output_instruction = (
+            "Return one final JSON object with answer, summary, confidence, evidence, "
+            "unresolved_issues, and tool_summary. "
+            + healthbench_answer_instruction()
+        )
+        if is_output_agent:
+            output_instruction += " Answer the complete public conversation, not only your local analysis."
+    role_instruction = selected_output_instruction(
+        dataset=dataset,
+        action_adapter=action_adapter,
+        short_answer_qa=short_answer_qa,
+        is_output_agent=is_output_agent,
+    )
+    instruction = (
+        output_instruction
+        + (" " + role_instruction if role_instruction else "")
         + "The final JSON is a normal final response, "
         "not an Action call. Never call an Action named finalize. Report failed Actions in "
         "unresolved_issues and calibrate confidence accordingly. Never claim that a tool or "
@@ -5652,56 +6272,64 @@ def _worker_output_instruction(
     )
     if action_adapter == "alfworld":
         action_requirement = (
+            "For ALFWorld, perform real environment Actions through alfworld_step. "
+            "When your delegated local responsibility is complete, return its final JSON "
+            "and report any unresolved work. The full episode may still be active; a local "
+            "report does not establish task completion or permit submission. "
+            if local_environment_result else
             "For ALFWorld, Action use is mandatory while the environment is active: call "
             "alfworld_step instead of merely returning a command, and return the final JSON "
             "only after the latest observation reports success or termination. "
         )
     elif action_adapter == "webshop":
         memory_instruction = (
-            HISTORY_INSTRUCTION
-            if webshop_history_enabled
-            else (
-                "The webshop_progress.state_guidance block reports public page facts, not a "
-                "recommended next Action, candidate ranking, or evidence of task correctness. "
+            "The webshop_progress.state_guidance block reports public page facts, not a "
+            "recommended next Action, candidate ranking, or evidence of task correctness. "
+        )
+        if webshop_worker_guidance_policy == MERGED_CHECKLIST_POLICY:
+            action_requirement = (
+                "For WebShop, Actions use target IDs from the latest observation. "
+                + memory_instruction
+                + MERGED_PAGE_CHECKLIST
             )
-        )
-        action_requirement = (
-            "For WebShop, Actions use target IDs from the latest observation. "
-            + memory_instruction
-            + "Search-result option values describe only a default display variant: a missing or "
-            "conflicting title-level option is unknown, neither satisfied nor evidence that the "
-            "product lacks that option. Product-page option Actions are authoritative. On product "
-            "pages, selected_options and sparse selected=true "
-            "Action fields are the authoritative current selections even when legacy page_text "
-            "does not visually mark an option containing quote characters. "
-            "Your objective is to complete a purchase that best satisfies the user's request "
-            "within the available action budget. Purchase early only when public evidence supports "
-            "the requested product type, attributes, price and requested options, with those options "
-            "selected. If an important requirement is contradicted or unverified and enough budget "
-            "remains for a useful search, comparison or inspection plus completing a purchase, "
-            "continue investigating instead of buying a partial match. Prioritize resolving known "
-            "mismatches; do not repeat uninformative actions or explore merely to use all steps. "
-            "Manage the remaining budget so you can select "
-            "the requested options and execute Buy Now. Include navigation back to the product "
-            "page when needed. When the remaining budget is only enough to finish purchasing "
-            "the best candidate you have observed, stop further exploration. Use public "
-            "evidence to compare candidates, select the closest available requested options, "
-            "and execute Buy Now. Accept a partial match as a fallback only when further useful "
-            "investigation would leave insufficient budget to complete the best observed purchase. "
-            "Record unsupported or conflicting requirements honestly in "
-            "purchase_evidence.unresolved_constraints. Do not claim they are verified. "
-            "Return without staging a purchase only when no executable purchase path remains "
-            "or no observed product is relevant to the request. "
-            "A public price range is not a confirmed transaction price. If price_min is below "
-            "the budget but price_max exceeds it, record price as unresolved, not verified. "
-            "When budget permits, compare alternatives with a confirmed affordable price. "
-            "A Buy Now call must include purchase_evidence with concise verified_requirements "
-            "grounded in public observations and an honest unresolved_constraints list, which "
-            "may be nonempty. Do not invent evidence to justify purchasing. "
-            "That call stages the purchase without executing it; the runtime commits exactly "
-            "one staged candidate only after Canvas selects the output Agent. A recommendation "
-            "or product page that does not stage Buy Now is not commit-ready. "
-        )
+        else:
+            action_requirement = (
+                "For WebShop, Actions use target IDs from the latest observation. "
+                + memory_instruction
+                + "Search-result option values describe only a default display variant: a missing or "
+                "conflicting title-level option is unknown, neither satisfied nor evidence that the "
+                "product lacks that option. Product-page option Actions are authoritative. On product "
+                "pages, selected_options and sparse selected=true "
+                "Action fields are the authoritative current selections even when legacy page_text "
+                "does not visually mark an option containing quote characters. "
+                "Your objective is to complete a purchase that best satisfies the user's request "
+                "within the available action budget. Purchase early only when public evidence supports "
+                "the requested product type, attributes, price and requested options, with those options "
+                "selected. If an important requirement is contradicted or unverified and enough budget "
+                "remains for a useful search, comparison or inspection plus completing a purchase, "
+                "continue investigating instead of buying a partial match. Prioritize resolving known "
+                "mismatches; do not repeat uninformative actions or explore merely to use all steps. "
+                "Manage the remaining budget so you can select "
+                "the requested options and execute Buy Now. Include navigation back to the product "
+                "page when needed. When the remaining budget is only enough to finish purchasing "
+                "the best candidate you have observed, stop further exploration. Use public "
+                "evidence to compare candidates, select the closest available requested options, "
+                "and execute Buy Now. Accept a partial match as a fallback only when further useful "
+                "investigation would leave insufficient budget to complete the best observed purchase. "
+                "Record unsupported or conflicting requirements honestly in "
+                "purchase_evidence.unresolved_constraints. Do not claim they are verified. "
+                "Return without staging a purchase only when no executable purchase path remains "
+                "or no observed product is relevant to the request. "
+                "A public price range is not a confirmed transaction price. If price_min is below "
+                "the budget but price_max exceeds it, record price as unresolved, not verified. "
+                "When budget permits, compare alternatives with a confirmed affordable price. "
+                "A Buy Now call must include purchase_evidence with concise verified_requirements "
+                "grounded in public observations and an honest unresolved_constraints list, which "
+                "may be nonempty. Do not invent evidence to justify purchasing. "
+                "That call stages the purchase without executing it; the runtime commits exactly "
+                "one staged candidate only after Canvas selects the output Agent. A recommendation "
+                "or product page that does not stage Buy Now is not commit-ready. "
+            )
     elif action_adapter == "swe_bench":
         action_requirement = (
             "For SWE-bench, this is an executable repository task. Use the visible SWE "
@@ -5884,6 +6512,9 @@ def _append_action_observations(
     native_calling: bool,
 ) -> None:
     if not native_calling:
+        # Never replay an unexecuted answer from a concatenated action response.
+        recovered = _recover_text_action_envelope(response.text)
+        assistant_text = json.dumps(recovered, ensure_ascii=False) if recovered else response.text
         observations = [
             {"action": call.to_dict(), "observation": observation}
             for call, observation in call_observations
@@ -5895,7 +6526,7 @@ def _append_action_observations(
         )
         messages.extend(
             [
-                {"role": "assistant", "content": response.text},
+                {"role": "assistant", "content": assistant_text},
                 {
                     "role": "user",
                     "content": json.dumps(payload, ensure_ascii=False),
@@ -5944,9 +6575,68 @@ def _is_final_artifact(text: str) -> bool:
     return _final_artifact_rejection_reason(text) is None
 
 
+def _recover_text_action_envelope(text: str) -> dict[str, Any] | None:
+    """Recover identical action envelopes, optionally followed by one answer.
+
+    No prose extraction, conflicting calls, observations or trailing junk are
+    accepted. The artifact is discarded; tools still undergo normal validation
+    and budget admission, and only real observations enter the conversation.
+    """
+    remaining = text.strip()
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate key in action response")
+            result[key] = value
+        return result
+
+    decoder = json.JSONDecoder(object_pairs_hook=unique_object)
+    objects = []
+    try:
+        while remaining and len(objects) < 16:
+            value, end = decoder.raw_decode(remaining)
+            objects.append(value)
+            remaining = remaining[end:].lstrip()
+    except (ValueError, RecursionError):
+        return None
+    if remaining or len(objects) < 2 or not all(isinstance(x, dict) for x in objects):
+        return None
+    envelope = objects[0]
+    if set(envelope) != {"action_calls"}:
+        return None
+    calls = envelope["action_calls"]
+    if not isinstance(calls, list) or len(calls) != 1:
+        return None
+    call = calls[0]
+    if (
+        not isinstance(call, dict)
+        or set(call) != {"name", "arguments"}
+        or not isinstance(call["name"], str)
+        or not call["name"].strip()
+        or not isinstance(call["arguments"], dict)
+    ):
+        return None
+    if any(value != envelope for value in objects[:-1]):
+        return None
+    if objects[-1] == envelope:
+        return envelope  # Identical repeated requests still execute only once.
+    if set(objects[-1]) - {
+        "answer", "summary", "confidence", "evidence", "unresolved_issues", "tool_summary"
+    }:
+        return None
+    # The suffix is never submitted as an answer or replayed to the Worker.
+    # Null/empty answers commonly mean "waiting for a tool observation";
+    # validating their answer quality must not suppress a valid action request.
+    if "answer" not in objects[-1]:
+        return None
+    return envelope
+
+
 def _text_action_calls(text: str) -> list[ActionCall]:
     stripped = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
-    candidates = [stripped]
+    recovered = _recover_text_action_envelope(text)
+    candidates = [json.dumps(recovered)] if recovered else [stripped]
     first, last = stripped.find("{"), stripped.rfind("}")
     if first >= 0 and last > first:
         candidates.append(stripped[first : last + 1])
@@ -5989,6 +6679,7 @@ def _finalization_recovery_messages(
     previous_error: dict[str, Any] | None = None,
     short_answer_qa: bool = False,
     is_output_agent: bool = False,
+    dataset: str = "",
 ) -> list[dict[str, str]]:
     action_environment = visible_context.get("action_environment", {})
     action_adapter = (
@@ -6018,7 +6709,10 @@ def _finalization_recovery_messages(
         "previous_response_excerpted": len(previous_response) > 8000,
         "previous_error": dict(previous_error or {}),
         "artifact_schema": {
-            "answer": "the assigned local result (string, number, array or object; not boolean/null)",
+            "answer": recovery_answer_description(
+                is_output_agent=is_output_agent,
+                action_adapter=action_adapter,
+            ),
             "summary": "string",
             "confidence": "finite number from 0 to 1",
             "evidence": "array of evidence entries; use [] if none",
@@ -6028,21 +6722,35 @@ def _finalization_recovery_messages(
     }
     if "public_task_context" in visible_context:
         recovery_context["public_task_context"] = visible_context["public_task_context"]
+    if action_adapter == "alfworld":
+        # A persistent episode can already be terminal when this execution starts,
+        # leaving no new Actions. Preserve its public observations through the
+        # compact finalization path instead of relying on stale Agent summaries.
+        state = action_environment.get("state", {})
+        state = state if isinstance(state, dict) else {}
+        recovery_context["alfworld_current_public_state"] = {
+            key: copy.deepcopy(state[key])
+            for key in (
+                "public_task_statement", "initial_observation", "observation",
+                "observation_truncated", "status", "step", "done", "success",
+                "score", "reward", "remaining_env_steps", "remaining_rollout_env_steps",
+            )
+            if key in state
+        }
+        recovery_context["alfworld_finalization_contract"] = {
+            "action_phase_closed": True,
+            "terminal_reason": previous_attempt_issue,
+            "empty_action_history_means": "no Action in this execution, not an empty or failed episode",
+            "state_authority": (
+                "The current episode's public goal and observed completion flags override "
+                "conflicting dataset descriptions or Agent summaries. Report only the "
+                "observed result; absence of success evidence does not imply success."
+            ),
+        }
     if action_adapter == "webshop":
         recovery_context["webshop_current_public_state"] = _webshop_finalization_state(
             action_environment.get("state", {}),
         )
-        if action_environment.get("worker_memory_policy") == "skillflow_history_v1":
-            recovery_context["worker_memory_policy"] = "skillflow_history_v1"
-            recovery_context["react_history"] = copy.deepcopy(
-                action_environment.get("react_history", [])
-            )
-            state = action_environment.get("state")
-            if isinstance(state, dict):
-                recovery_context["webshop_current_public_state"]["page_text"] = str(
-                    state.get("page_text", "")
-                )
-                recovery_context["webshop_current_public_state"]["page_text_omitted_chars"] = 0
         recovery_context["webshop_finalization_contract"] = {
             "action_phase_closed": True,
             "terminal_reason": previous_attempt_issue,
@@ -6084,23 +6792,59 @@ def _finalization_recovery_messages(
     )
     if short_answer_qa:
         qa_finalization_rule = (
-            " For short-answer QA, put only a short phrase, entity, date, number, or compact "
-            "relation in answer. The selected output Agent must use the shortest direct answer "
-            "for the whole question; an intermediate Worker may answer only its assigned local "
-            "sub-question. Put reasoning and evidence in summary or evidence."
+            " For short-answer QA, put only the shortest direct answer in answer and put "
+            "reasoning and evidence in summary or evidence."
         )
     else:
-        # Preserve the existing recovery prompt for every other dataset.
-        qa_finalization_rule = " For short-answer QA, answer must be the shortest answer span."
+        qa_finalization_rule = ""
+    role_instruction = selected_output_instruction(
+        dataset=dataset,
+        action_adapter=action_adapter,
+        short_answer_qa=short_answer_qa,
+        is_output_agent=is_output_agent,
+    )
+    output_instruction = (
+        "Return exactly one short JSON object with answer, summary, "
+        "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
+        "task result in answer and all explanation in summary or evidence."
+        + qa_finalization_rule
+        + (" " + role_instruction if role_instruction else "")
+    )
+    if action_adapter == "healthbench_professional":
+        output_instruction = (
+            "Return exactly one JSON object with answer, summary, confidence, evidence, "
+            "unresolved_issues, and tool_summary. "
+            + healthbench_answer_instruction()
+            + (" " + role_instruction if role_instruction else "")
+        )
+        recovery_context["artifact_schema"]["answer"] = recovery_answer_description(
+            is_output_agent=is_output_agent,
+            action_adapter=action_adapter,
+        )
+    if action_adapter in {"alfworld", "webshop"}:
+        task_scope_instruction = (
+            "Describe only the observed result of this Agent's own environment episode. "
+            "Trusted environment state, not prose, determines task success."
+        )
+    elif action_adapter == "swe_bench":
+        task_scope_instruction = (
+            "Return the runtime-owned code artifact or grounded completion blocker for this "
+            "Agent's assigned repository work; do not claim an unobserved test or patch."
+        )
+    elif is_output_agent:
+        task_scope_instruction = (
+            "Return the final result for the original public task under its dataset-specific "
+            "submission contract."
+        )
+    else:
+        task_scope_instruction = "Return your assigned local deliverable; it need not answer the complete task."
     return [
         {
             "role": "system",
             "content": (
                 "The Action phase is over. Do not call tools and do not emit tool-call XML or "
-                "tool-call JSON. Return exactly one short JSON object with answer, summary, "
-                "confidence, evidence, unresolved_issues, and tool_summary. Put only the direct "
-                "task result in answer and all explanation in summary or evidence."
-                + qa_finalization_rule
+                "tool-call JSON. "
+                + output_instruction
                 + " Use the assigned_task, "
                 "any public_task_context, and only the visible upstream, prior, and peer packets "
                 "provided below. Do not infer private or hidden task data. Action history is "
@@ -6114,8 +6858,9 @@ def _finalization_recovery_messages(
                 "Correct only the indicated serialization/schema problem using the supplied "
                 "evidence; preserve its substantive conclusion. Escape backslashes in JSON "
                 "strings. If truncated, finish a complete bounded artifact without inventing "
-                "missing evidence. Return your assigned local deliverable, not necessarily a "
-                "complete answer to the overall task."
+                "missing evidence. "
+                + task_scope_instruction
+                + " "
                 " Follow artifact_schema exactly: evidence, unresolved_issues and tool_summary "
                 "must be JSON arrays, even for one entry (wrap the entry in an array). "
                 "summary must be a string and confidence must be a numeric value, not a string."
@@ -6421,7 +7166,7 @@ def _webshop_staged_summary(staged_output: dict[str, Any]) -> str:
     return (
         "Runtime protocol: the Worker explicitly staged Buy Now on the public product "
         f"{identity} with price={price_text} and selected_options=[{selected_text}]. "
-        "Canvas SET_OUTPUT performs the commit; no post-commit observation can exist yet."
+        "The Director submits the candidate through the configured Canvas submission action; no post-commit observation can exist yet."
     )
 
 
@@ -6448,8 +7193,8 @@ def _webshop_visible_option_values(payload: dict[str, Any]) -> dict[str, list[st
     return values
 
 
-def _webshop_section_evidence(value: object) -> str:
-    """Clean public section prose without imposing a per-section character limit."""
+def _webshop_section_evidence(value: object, *, max_chars: int = 0) -> str:
+    """Clean public prose; M02 pins 1400 chars, current experiments default to unlimited."""
 
     lines = str(value).splitlines()
     content: list[str] = []
@@ -6467,7 +7212,7 @@ def _webshop_section_evidence(value: object) -> str:
         if line.startswith("[button]") and line.endswith("[button_]"):
             continue
         content.append(line)
-    return " ".join(content)
+    return " ".join(content)[:max_chars or None]
 
 
 def _annotate_webshop_product_state(
@@ -6744,7 +7489,6 @@ def _webshop_sync_transaction_journal(
     stall_first_round: int | None,
     max_reward: float,
     purchase_evidence_checkpoint: dict[str, Any],
-    react_history: list[dict[str, Any]] | None = None,
 ) -> None:
     if not isinstance(journal, dict):
         return
@@ -6781,8 +7525,6 @@ def _webshop_sync_transaction_journal(
             "purchase_evidence_checkpoint": copy.deepcopy(purchase_evidence_checkpoint),
         }
     )
-    if react_history is not None:
-        journal["react_history"] = copy.deepcopy(react_history)
 
 
 def _record_webshop_state_guidance_delivery(
@@ -6969,11 +7711,8 @@ def _webshop_context_for_prompt(
         environment.pop("workspace_changed", None)
         environment.pop("swe_progress", None)
         environment.pop("alfworld_progress", None)
-        history_mode = environment.get("worker_memory_policy") == "skillflow_history_v1"
         state = environment.get("state")
-        if history_mode:
-            project_webshop_history_environment(environment)
-        elif isinstance(state, dict):
+        if isinstance(state, dict):
             progress = environment.get("webshop_progress")
             progress = progress if isinstance(progress, dict) else {}
             state["decision_phase"] = _webshop_decision_phase(state)
@@ -6994,12 +7733,11 @@ def _webshop_context_for_prompt(
                     "audit_copy_retained": True,
                 }
                 page_text_truncated = len(page_text) - 8_000
-        if not history_mode:
-            environment["public_constraint_matrix"] = _webshop_public_constraint_matrix(
-                projected.get("public_task_context", ""),
-                state if isinstance(state, dict) else {},
-                progress=environment.get("webshop_progress"),
-            )
+        environment["public_constraint_matrix"] = _webshop_public_constraint_matrix(
+            projected.get("public_task_context", ""),
+            state if isinstance(state, dict) else {},
+            progress=environment.get("webshop_progress"),
+        )
 
     prompt_chars = len(json.dumps(projected, ensure_ascii=False, separators=separators))
     if stats is not None:

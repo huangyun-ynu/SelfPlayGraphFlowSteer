@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
-from .actions import ActionParser, ActionType, CanvasAction, PromptRevisionBasis
+from .actions import (
+    ACTION_FIELDS,
+    DIRECTOR_ACTION_PROTOCOL_VERSION,
+    ActionParser,
+    ActionType,
+    CanvasAction,
+    PromptRevisionBasis,
+)
 from .aime_submission import is_aime_dataset, parse_aime_answer
 from .artifact_protocol import WORKER_PROTOCOL_STATUS_VERSION, summarize_worker_protocol
 from .config import CanvasConfig
@@ -24,15 +32,54 @@ from .delegation import (
     responsibility_signature,
 )
 from .graph import GraphValidationError, MultiAgentGraph, MutationResult
+from .output_contract import OUTPUT_CONTRACT_VERSION, worker_output_role_changes_input
 from .qa_submission import is_short_qa_dataset
 from .runtime import (
+    SWE_SHARED_TOKEN_BUDGET,
     WORKER_BACKEND_FAILURE_SENTINEL,
     WORKER_PROTOCOL_FAILURE_SENTINEL,
     MultiAgentRuntime,
     _enforce_artifact_integrity,
     artifact_backend_failure_records,
+    artifact_integrity_failure_risks,
+)
+from .submission_contract import (
+    SUBMISSION_CONTRACT_VERSION,
+    DirectorCallContext,
+    SubmissionReceipt,
+    _issue_receipt,
+    answer_hash,
+    is_text_submission_dataset,
+    snapshot_hash,
 )
 from .webshop_budget import budget_partition, observed_request_bounds
+
+
+def _merge_submission_reports(first, later):
+    """Keep all real execution usage when bounded recovery precedes submission."""
+    import copy
+    from dataclasses import fields
+
+    reports = []
+    for report in [first, *later]:
+        if report is not None and all(report is not prior for prior in reports):
+            reports.append(report)
+    if not reports:
+        return None
+    merged = ExecutionReport()
+    for report in reports:
+        for item in fields(ExecutionReport):
+            value = getattr(report, item.name)
+            current = getattr(merged, item.name)
+            if isinstance(current, dict):
+                current.update(copy.deepcopy(value))
+            elif isinstance(current, list):
+                current.extend(copy.deepcopy(value))
+            elif isinstance(current, int):
+                setattr(merged, item.name, current + value)
+            else:
+                setattr(merged, item.name, value)
+    return merged
 
 
 class CanvasState(StrEnum):
@@ -114,10 +161,16 @@ class CanvasStep:
     relation_decision: dict[str, Any] = field(default_factory=dict)
     invalid_repeat_count: int = 0
     topology_edits_frozen: bool = False
+    event_id: str = ""
+    director_call_id: str = ""
+    submission_receipt: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "round_index": self.round_index,
+            "event_id": self.event_id,
+            "director_call_id": self.director_call_id,
+            "submission_receipt": self.submission_receipt,
             "action": self.action.to_dict(),
             "accepted": self.accepted,
             "active": self.active,
@@ -194,7 +247,20 @@ class PendingRelationDecision:
         }
 
 
-class GraphCanvas:
+@dataclass(frozen=True)
+class RuntimeRecoveryReport:
+    """Non-policy execution recovery; never serialized as a Director action."""
+
+    accepted: bool
+    execution: ExecutionReport
+    protocol_recovery: bool = True
+
+
+from .unified_submission import UnifiedSubmissionMixin
+from .unified_contract import PROTOCOL, RESULT_SCOPES
+
+
+class GraphCanvas(UnifiedSubmissionMixin):
     """Transactional graph editor plus factual execution feedback.
 
     Invalid mutations never alter the accepted graph. Like FlowSteer, adding an
@@ -222,13 +288,22 @@ class GraphCanvas:
         rollout_deadline: RolloutDeadline | None = None,
         structural_exploration_required: bool = False,
         binary_relation_policy: bool = False,
+        run_id: str = "",
+        prepare_text_submission: Callable[[Any], Any] | None = None,
     ) -> None:
+        self.run_id = run_id
+        self.prepare_text_submission = prepare_text_submission
+        self.submission_receipt: SubmissionReceipt | None = None
+        self._director_call_context: DirectorCallContext | None = None
+        self._submission_recovery_reports: list[ExecutionReport] = []
+        self._text_recovery_attempted = False
         self.task = task
         self.worker_task = worker_task if worker_task is not None else task
         self.director_task = director_task if director_task is not None else task
         self.runtime = runtime
         self.config = config or CanvasConfig()
-        self.parser = parser or ActionParser()
+        self.parser = parser or ActionParser(unified=self.unified)
+        self._init_unified()
         self.runtime_routes = tuple(runtime_routes)
         self.task_type = str(task_type)
         if model_router is not None:
@@ -255,11 +330,12 @@ class GraphCanvas:
         self.binary_relation_policy = bool(binary_relation_policy)
         self.structural_exploration_waived = False
         self.graph = MultiAgentGraph(
-            max_agents=self.config.max_agents, runtime_routes=self.runtime_routes
+            max_agents=self.config.max_agents, runtime_routes=self.runtime_routes, submission_protocol=self.config.submission_protocol
         )
         self.state = CanvasState.BUILDING
         self.pending_agent_id: str | None = None
         self.pending_relation_decision: PendingRelationDecision | None = None
+        self._last_relation_decision: dict[str, Any] = {}
         self._considered_relation_pairs: set[tuple[int, tuple[str, str]]] = set()
         self.dirty_agents: set[str] = set()
         self.dirty_reasons: dict[str, set[str]] = {}
@@ -306,24 +382,40 @@ class GraphCanvas:
         self._last_repair_signature: RepairProgressSignature | None = None
         self._repair_entry_pending = False
         self._recent_repair_actions: list[dict[str, Any]] = []
+        # Connectivity-repair state is tracked separately from output-lifecycle
+        # recovery. Its history survives intermediate structural reasons (for
+        # example a layer edit before the relation is added).
+        self._connectivity_repair_active = False
+        self._connectivity_repair_states: set[str] = set()
+        self._connectivity_cycle_blocks = 0
         self._consolidation_output_locked = False
         self._output_selection_budget_remaining = self.config.output_selection_budget
         self._output_incumbent: dict[str, Any] = {}
 
     @property
+    def director_round_limit(self) -> int | None:
+        return None if self.config.director_budget_policy == "edits_v1" else self.config.max_rounds
+
+    @property
     def active(self) -> bool:
         if self.state in {CanvasState.FINISHED, CanvasState.FAILED}:
             return False
-        return self.round_index < self.config.max_rounds
+        return self.director_round_limit is None or self.round_index < self.director_round_limit
 
     def reset(self) -> None:
+        self._init_unified()
+        self.submission_receipt = None
+        self._director_call_context = None
+        self._submission_recovery_reports = []
+        self._text_recovery_attempted = False
         self.graph = MultiAgentGraph(
-            max_agents=self.config.max_agents, runtime_routes=self.runtime_routes
+            max_agents=self.config.max_agents, runtime_routes=self.runtime_routes, submission_protocol=self.config.submission_protocol
         )
         self.runtime.reset()
         self.state = CanvasState.BUILDING
         self.pending_agent_id = None
         self.pending_relation_decision = None
+        self._last_relation_decision = {}
         self._considered_relation_pairs.clear()
         self.dirty_agents.clear()
         self.dirty_reasons.clear()
@@ -365,6 +457,9 @@ class GraphCanvas:
         self._last_repair_signature = None
         self._repair_entry_pending = False
         self._recent_repair_actions = []
+        self._connectivity_repair_active = False
+        self._connectivity_repair_states.clear()
+        self._connectivity_cycle_blocks = 0
         self._consolidation_output_locked = False
         self._output_selection_budget_remaining = self.config.output_selection_budget
         self._output_incumbent = {}
@@ -375,7 +470,10 @@ class GraphCanvas:
         *,
         count_round: bool = True,
         authoritative_director: bool = False,
+        director_context: DirectorCallContext | None = None,
     ) -> CanvasStep:
+        self._director_call_context = director_context
+        self._submission_recovery_reports = []
         self._time_admission_event = {}
         self._token_admission_event = {}
         self._step_invalidated_agents = set()
@@ -386,13 +484,16 @@ class GraphCanvas:
         action = (
             raw_action if isinstance(raw_action, CanvasAction) else self.parser.parse(raw_action)
         )
+        if self.unified:
+            self._restore_submission_lock()
         if self.rollout_deadline is not None:
             self.rollout_deadline.check("canvas_step_start")
         # Internal deterministic recovery actions do not consume Director
         # rounds and must remain possible after the model-turn budget is
         # exhausted. Terminal Canvas states are never reopened.
         if self.state in {CanvasState.FINISHED, CanvasState.FAILED} or (
-            count_round and self.round_index >= self.config.max_rounds
+            count_round and self.director_round_limit is not None
+            and self.round_index >= self.director_round_limit
         ):
             return self._record(
                 action,
@@ -406,7 +507,8 @@ class GraphCanvas:
         if (
             self.runtime_routes
             and action.action_type is ActionType.ADD_AGENT
-            and self.config.max_rounds - self.round_index < 4
+            and self.director_round_limit is not None
+            and self.config.max_rounds - self.round_index < (3 if self.unified else 4)
         ):
             return self._record(
                 action,
@@ -415,6 +517,13 @@ class GraphCanvas:
                 rejection_code="configuration_turn_budget_exhausted",
             )
         if not action.valid:
+            if action.parse_error_code:
+                return self._record(
+                    action, accepted=False,
+                    feedback=f"Rejected action encoding: {action.parse_error}",
+                    rejection_code=action.parse_error_code,
+                    rejection_details={"action_protocol_error": dict(action.parse_error_details)},
+                )
             awaiting = self.state is CanvasState.AWAITING_PROMPT
             return self._record(
                 action,
@@ -431,6 +540,16 @@ class GraphCanvas:
                     else None
                 ),
             )
+        if self.unified:
+            if action.action_type is ActionType.SET_OUTPUT:
+                return self._reject_graph_action(action, code="retired_action", message="Use result_scope in SET_PROMPT and FINISH(target).")
+            if action.action_type is ActionType.SET_PROMPT and action.result_scope not in RESULT_SCOPES:
+                return self._reject_graph_action(action, code="result_scope_required", message="SET_PROMPT requires result_scope: subtask or task_result.")
+            if action.action_type in {ActionType.RUN_AGENT, ActionType.FINISH} and not action.target:
+                return self._reject_graph_action(action, code="target_required", message="An explicit target is required.")
+            edit_rejection = self._director_edit_admission(action)
+            if edit_rejection is not None:
+                return edit_rejection
         if authoritative_director:
             # The Director chooses graph semantics, not concurrency metadata.
             # External Canvas callers retain the normal optimistic-version
@@ -445,8 +564,23 @@ class GraphCanvas:
                     f"{self.graph.version}"
                 ),
             )
+        # FINISH may submit an existing result while abandoning an isolated draft.
+        # Admission, provenance and transaction checks still run in _unified_finish.
+        if (self.unified and action.action_type is ActionType.FINISH
+                and self._isolated_submission_draft(str(action.target))):
+            return self._unified_finish(action)
+        pending_output_binding = bool(
+            self.state is CanvasState.AWAITING_MODEL
+            and action.action_type is ActionType.SET_OUTPUT
+            and action.target == self.pending_agent_id
+            and self.pending_agent_id in self.graph.nodes
+            and self.graph.nodes[self.pending_agent_id].prompt_configured
+            and not self._uses_staged_environment_commit()
+        )
         if self.state is CanvasState.AWAITING_MODEL and not (
             action.action_type is ActionType.SET_MODEL and action.target == self.pending_agent_id
+        ) and not pending_output_binding and not (
+            self.unified and action.action_type is ActionType.DELETE_AGENT and action.target == self.pending_agent_id
         ):
             return self._record(
                 action,
@@ -474,6 +608,12 @@ class GraphCanvas:
             if self._uses_staged_environment_commit()
             else set()
         )
+        staged_environment_cleanup = bool(
+            commit_ready_agents
+            and action.action_type is ActionType.DELETE_AGENT
+            and str(action.target or action.agent_id)
+            in set(self._staged_commit_safe_delete_targets())
+        )
         environment_owner_agents = (
             set(self.runtime.environment_owner_agents())
             if self._uses_staged_environment_commit()
@@ -491,14 +631,18 @@ class GraphCanvas:
                     "one official episode; revise or select that owner for bounded output closure"
                 ),
             )
-        if commit_ready_agents and action.action_type is not ActionType.SET_OUTPUT:
+        if (
+            commit_ready_agents
+            and action.action_type is not ActionType.SET_OUTPUT
+            and not staged_environment_cleanup
+        ):
             return self._reject_graph_action(
                 action,
                 code="webshop_commit_ready_selection_required",
                 message=(
-                    "a staged WebShop purchase is ready; select one commit-ready Agent as "
-                    "output. The trusted staged transaction is latched and cannot be revised "
-                    "or discarded by later model-authored prose"
+                    "a staged WebShop purchase is ready; select a commit-ready Agent as output "
+                    "or remove a non-contributing Agent exposed by Canvas. The trusted staged "
+                    "transaction is latched and cannot be revised or discarded"
                 ),
             )
         frozen_recovery_actions = {ActionType.SET_OUTPUT, ActionType.FINISH}
@@ -506,6 +650,8 @@ class GraphCanvas:
             frozen_recovery_actions.add(ActionType.DELETE_AGENT)
         if self.topology_edits_frozen and self.pending_agent_id:
             frozen_recovery_actions.add(ActionType.DELETE_AGENT)
+        if self.unified:
+            frozen_recovery_actions.update({ActionType.RUN_AGENT, ActionType.SET_PROMPT, ActionType.SET_MODEL, ActionType.SET_LAYER, ActionType.CONSIDER_RELATION, ActionType.SET_RELATION, ActionType.REMOVE_RELATION, ActionType.DELETE_AGENT})
         if self.topology_edits_frozen and action.action_type not in frozen_recovery_actions:
             return self._record(
                 action,
@@ -519,7 +665,7 @@ class GraphCanvas:
                 rejection_details=self._rejection_details("topology_edits_frozen"),
             )
         discards_pending_agent = bool(
-            self.topology_edits_frozen
+            (self.topology_edits_frozen or self.unified)
             and self.state is CanvasState.AWAITING_PROMPT
             and action.action_type is ActionType.DELETE_AGENT
             and str(action.target or action.agent_id) == self.pending_agent_id
@@ -528,7 +674,10 @@ class GraphCanvas:
             self.state is CanvasState.AWAITING_PROMPT
             and not self._completes_prompt(action)
             and not discards_pending_agent
-            and not (commit_ready_agents and action.action_type is ActionType.SET_OUTPUT)
+            and not (
+                commit_ready_agents
+                and action.action_type in {ActionType.SET_OUTPUT, ActionType.DELETE_AGENT}
+            )
         ):
             if (
                 action.action_type is ActionType.SET_PROMPT
@@ -613,7 +762,30 @@ class GraphCanvas:
         token_growth_admission = self._new_agent_token_admission(action)
         if token_growth_admission is not None:
             return self._reject_for_token_admission(action, token_growth_admission)
-        repair_error = self._structural_repair_gate_error(action)
+        if (
+            action.action_type is ActionType.SET_OUTPUT
+            and action.target in self.graph.nodes
+            and self._connectivity_repair_active
+            and self.structural_repair_reason in {"output_reachability", "disconnected_multi_agent"}
+            and not (
+                self._uses_staged_environment_commit()
+                and self.runtime.environment_commit_ready_agents()
+            )
+        ):
+            cycle = self._output_switch_cycle(str(action.target))
+            if cycle["blocked_as_cycle"]:
+                return self._reject_graph_action(
+                    action,
+                    code="connectivity_output_cycle",
+                    message=(
+                        f"SET_OUTPUT to {action.target} returns to a previously visited graph/output "
+                        "state and does not improve connectivity. Current actual edges and "
+                        "unreachable Agents are in graph_state. Continue with a legal layer or "
+                        "relation edit, or choose an output that improves reachability."
+                    ),
+                    rejection_details={"cycle_preview": cycle},
+                )
+        repair_error = None if self.unified else self._structural_repair_gate_error(action)
         if repair_error is not None:
             self.structural_repair_blocked_actions += 1
             return self._reject_graph_action(
@@ -634,8 +806,10 @@ class GraphCanvas:
                 return self._reject_graph_action(action, code=code, message=message)
         if action.action_type is ActionType.CONSIDER_RELATION:
             return self._begin_relation_decision(action)
+        if action.action_type is ActionType.RUN_AGENT and self.unified:
+            return self._unified_run(action)
         if action.action_type is ActionType.FINISH:
-            return self._finish(action)
+            return self._unified_finish(action) if self.unified else self._finish(action)
         if (
             action.action_type is ActionType.SET_OUTPUT
             and str(action.target) == self.graph.output_agent
@@ -675,7 +849,6 @@ class GraphCanvas:
         graph_before.pop("version", None)
         candidate = self.graph.clone()
         before = set(candidate.nodes)
-        staged_pruned_agents: list[str] = []
         rejection_code: str | None = None
         compilation: DelegationCompilation | None = None
         responsibility_issue: dict[str, Any] = {}
@@ -702,7 +875,7 @@ class GraphCanvas:
                     },
                     delegation_field_repairs=field_repairs,
                 )
-            if is_prompt_revision:
+            if is_prompt_revision and not self.unified:
                 prompt_revision_evidence, revision_error = self._validate_prompt_revision_evidence(
                     action
                 )
@@ -729,22 +902,6 @@ class GraphCanvas:
                             code=code,
                             message=message,
                         )
-            if staged_environment_commit:
-                selected = str(action.target)
-                staged_pruned_agents = [
-                    agent_id
-                    for agent_id, node in sorted(candidate.nodes.items())
-                    if agent_id != selected
-                    and (not node.configured or selected not in candidate.reachable_from(agent_id))
-                ]
-                for agent_id in staged_pruned_agents:
-                    candidate.delete_agent(agent_id)
-                mutation.dirty_agents.intersection_update(candidate.nodes)
-                if staged_pruned_agents:
-                    mutation.message += (
-                        "; deterministically pruned non-contributing Agents before staged "
-                        "commit: " + ", ".join(staged_pruned_agents)
-                    )
             candidate.assert_valid(final=False)
             if staged_environment_commit:
                 final_errors = candidate.validate(final=True)
@@ -836,6 +993,10 @@ class GraphCanvas:
         new_agent = next(iter(set(candidate.nodes) - before), None)
         previous_graph = self.graph
         self.graph = candidate
+        if self.unified and action.action_type in self._DIRECTOR_EDIT_ACTIONS:
+            # Charge the committed mutation even when its subsequent Worker
+            # execution fails. Validation failures and no-ops never reach here.
+            self.director_edits_used += 1
         if action.action_type is ActionType.DELETE_AGENT:
             self.runtime.discard_environment_candidate(str(action.target or action.agent_id))
         if prompt_revision_evidence is not None:
@@ -847,10 +1008,10 @@ class GraphCanvas:
         graph_after.pop("version", None)
         if self.rollout_deadline is not None and graph_after != graph_before:
             self.rollout_deadline.mark_progress(f"canvas_{action.action_type.value}")
-        # Most output selections change no Worker input. SWE is different: the
-        # selected node receives the exclusive code_commit responsibility only
-        # at this point. If its existing Artifact is not already patch+test ready,
-        # run one bounded final-fix pass with the prior Artifact preserved.
+        # Text-task output selection changes the selected Agent's Worker input
+        # and invalidates its downstream closure. Environment-backed adapters
+        # keep their own output/commit semantics; SWE may need one bounded final-
+        # fix pass if the selected node is not already patch+test ready.
         swe_commit_pass = bool(
             action.action_type is ActionType.SET_OUTPUT
             and self.action_adapter is not None
@@ -887,7 +1048,23 @@ class GraphCanvas:
                 or webshop_closure_pass
             )
         )
-        if action.action_type is not ActionType.SET_OUTPUT or commit_output:
+        output_contract_changed = bool(
+            action.action_type is ActionType.SET_OUTPUT
+            and worker_output_role_changes_input(
+                dataset=self.dataset,
+                action_adapter=(
+                    self.action_adapter.adapter_id if self.action_adapter is not None else ""
+                ),
+            )
+        )
+        if (
+            not staged_environment_cleanup
+            and (
+                action.action_type is not ActionType.SET_OUTPUT
+                or commit_output
+                or output_contract_changed
+            )
+        ):
             invalidated = (
                 {str(action.target)}
                 if swe_commit_pass or webshop_closure_pass
@@ -900,6 +1077,11 @@ class GraphCanvas:
                 if swe_commit_pass
                 else {str(action.target): {"webshop_output_closure_required"}}
                 if webshop_closure_pass
+                else {
+                    agent_id: {"output_contract_changed"}
+                    for agent_id in invalidated
+                }
+                if output_contract_changed and not commit_output
                 else self._mutation_invalidation_reasons(
                     action,
                     mutation,
@@ -944,8 +1126,20 @@ class GraphCanvas:
             else []
         )
         report: ExecutionReport | None = None
-        should_execute = action.action_type is not ActionType.ADD_AGENT and (
-            action.action_type is not ActionType.SET_OUTPUT or commit_output
+        pending_output_waits_for_model = bool(
+            action.action_type is ActionType.SET_OUTPUT
+            and self.state is CanvasState.AWAITING_MODEL
+            and str(action.target) == self.pending_agent_id
+        )
+        should_execute = (
+            action.action_type is not ActionType.ADD_AGENT
+            and not pending_output_waits_for_model
+            and not staged_environment_cleanup
+            and (
+                action.action_type is not ActionType.SET_OUTPUT
+                or commit_output
+                or output_contract_changed
+            )
         )
         if should_execute:
             try:
@@ -1185,6 +1379,8 @@ class GraphCanvas:
         return recovered
 
     def recover_output_lifecycle(self) -> list[CanvasStep]:
+        if self.unified:
+            return []
         """Deterministically close protocol-only output repair states.
 
         The Director retains one semantic choice when several usable artifacts
@@ -1305,6 +1501,8 @@ class GraphCanvas:
         *,
         failure_code: str = "topology_recovery_exhausted",
     ) -> list[CanvasStep]:
+        if self.unified:
+            return []
         """Boundedly finalize the best usable existing graph after edit-loop fusion."""
 
         if not self.topology_edits_frozen:
@@ -1416,8 +1614,11 @@ class GraphCanvas:
             )
         return recovered
 
-    def recover_selected_output_agent(self, *, reason_code: str) -> CanvasStep:
-        """Rerun only the selected output Agent with its prior evidence preserved."""
+    def recover_selected_output_agent(self, *, reason_code: str) -> RuntimeRecoveryReport:
+        """Rerun only the selected output Agent without fabricating a policy action."""
+
+        if self.submission_receipt is not None:
+            raise ValueError("selected-output recovery must precede FINISH acceptance")
 
         target = self.graph.output_agent
         if not target or target not in self.graph.nodes:
@@ -1437,29 +1638,18 @@ class GraphCanvas:
         self._step_responsibility_overlap_check = {}
         self.dirty_agents.add(target)
         self.dirty_reasons[target] = set(self._step_invalidation_reasons[target])
-        report = self._execute_dirty()
-        action = self.parser.parse(
-            json.dumps(
-                {
-                    "action": "set_output",
-                    "target": target,
-                    "expected_version": self.graph.version,
-                }
-            )
-        )
-        return self._record(
-            action,
-            accepted=True,
-            feedback=(f"System selected-output recovery reran only {target} after {reason_code}."),
-            execution=report,
-            protocol_recovery=True,
-            rejection_details={
-                "recovery_scope": "selected_output_agent",
-                "reason_code": str(reason_code),
-            },
-        )
+        try:
+            report = self._execute_dirty()
+        except (TokenBudgetExceeded, RequiredWorkerBackendFailure) as exc:
+            self._submission_recovery_reports.append(exc.report)
+            raise
+        if report is not None:
+            self._submission_recovery_reports.append(report)
+        return RuntimeRecoveryReport(accepted=True, execution=report)
 
     def recover_trusted_alfworld_success(self) -> list[CanvasStep]:
+        if self.unified:
+            return []
         """Lock and finalize an Agent whose ALFWorld episode officially succeeded."""
 
         if (
@@ -1546,16 +1736,12 @@ class GraphCanvas:
         return recovered
 
     def recover_finish_only(self) -> CanvasStep | None:
+        if self.unified:
+            return None
         """Finish a ready graph without spending another model turn."""
 
         if self.state in {CanvasState.FINISHED, CanvasState.FAILED}:
             return None
-        if is_aime_dataset(self.dataset) and self.graph.output_agent:
-            artifact = self.runtime.artifacts.get(self.graph.output_agent)
-            if artifact is not None and not parse_aime_answer(artifact.answer).valid:
-                # A format rejection is not a ready graph. Retrying finish here
-                # would loop without consuming Director rounds or allowing edits.
-                return None
         snapshot = self.control_snapshot()
         finish_is_only_action = snapshot["allowed_actions"] == [ActionType.FINISH.value]
         if self.dataset == "alfworld" and not finish_is_only_action:
@@ -1589,6 +1775,8 @@ class GraphCanvas:
         return step
 
     def recover_round_limit(self) -> list[CanvasStep]:
+        if self.unified:
+            return []
         """Close an exhausted Director loop with a final graph or a typed failure."""
 
         if self.state in {CanvasState.FINISHED, CanvasState.FAILED}:
@@ -1602,6 +1790,8 @@ class GraphCanvas:
         """Terminate an exhausted policy loop without editing the Director's graph."""
 
         if self.state in {CanvasState.FINISHED, CanvasState.FAILED}:
+            return None
+        if self.director_round_limit is None:
             return None
         if self.round_index < self.config.max_rounds:
             return None
@@ -1655,39 +1845,28 @@ class GraphCanvas:
         )
 
     def _finish(self, action: CanvasAction) -> CanvasStep:
+        text_submission = is_text_submission_dataset(self.dataset)
+        context = self._director_call_context
+        if text_submission and (
+            not isinstance(context, DirectorCallContext) or not context.runtime_owned
+            or context.run_id != self.run_id
+        ):
+            return self._record(
+                action, accepted=False, rejection_code="director_finish_source_required",
+                feedback="Text submission requires FINISH from an actual Director call.",
+            )
+        if self.total_tokens > self.config.max_total_tokens:
+            self.state = CanvasState.FAILED
+            return self._record(
+                action, accepted=False, rejection_code="execution_budget_exceeded",
+                feedback="Rejected finish: accumulated Worker tokens exceed the task budget.",
+                final_execution=True,
+            )
         if self.state in {CanvasState.AWAITING_PROMPT, CanvasState.AWAITING_MODEL}:
             return self._record(
                 action,
                 accepted=False,
                 feedback=f"Rejected action: {self.pending_agent_id} is incompletely configured.",
-            )
-        if (
-            self.graph.output_agent is not None
-            and self.action_adapter is not None
-            and self.action_adapter.adapter_id == "swe_bench"
-            and not self._swe_artifact_commit_ready(self.graph.output_agent)
-        ):
-            return self._reject_graph_action(
-                action,
-                code="swe_output_commit_incomplete",
-                message=(
-                    "selected SWE output did not produce a tested patch or a structured "
-                    "typed failure during its bounded final-fix pass"
-                ),
-            )
-        if self.graph.output_agent is not None and not self._artifact_is_usable_output(
-            self.graph.output_agent
-        ):
-            unusable_output = self.graph.output_agent
-            self._enter_structural_repair(
-                "output_artifact_unusable",
-                agents=(unusable_output,),
-            )
-            return self._record(
-                action,
-                accepted=False,
-                feedback=("Rejected finish: selected output Agent has no usable answer artifact"),
-                rejection_code="output_artifact_unusable",
             )
         errors = self.graph.validate(final=True)
         if errors:
@@ -1721,12 +1900,17 @@ class GraphCanvas:
             self._clear_structural_repair()
 
         report: ExecutionReport | None = None
+        prepared_submission = None
         try:
+            self._prepare_native_output_materialization()
             for agent_id in self.dirty_agents:
                 self.dirty_reasons.setdefault(agent_id, set()).add("residual_finish")
             report = self._execute_dirty(force=True)
+            if text_submission and self.prepare_text_submission is not None:
+                prepared_submission = self.prepare_text_submission(self)
+                report = _merge_submission_reports(report, self._submission_recovery_reports)
         except TokenBudgetExceeded as exc:
-            report = exc.report
+            report = _merge_submission_reports(report, [exc.report])
             self.state = CanvasState.FAILED
             return self._record(
                 action,
@@ -1734,9 +1918,10 @@ class GraphCanvas:
                 feedback=f"Rejected finish: {exc}",
                 execution=report,
                 final_execution=True,
+                rejection_code="execution_budget_exceeded",
             )
         except RequiredWorkerBackendFailure as exc:
-            report = exc.report
+            report = _merge_submission_reports(report, [exc.report])
             self.state = CanvasState.FAILED
             return self._record(
                 action,
@@ -1756,16 +1941,87 @@ class GraphCanvas:
                 accepted=False,
                 feedback=f"Final execution failed: {exc}",
                 final_execution=True,
+                rejection_code="execution_failure",
+            )
+        if self.graph.output_agent is not None and not self._artifact_is_usable_output(
+            self.graph.output_agent
+        ):
+            unusable_output = self.graph.output_agent
+            self._enter_structural_repair(
+                "output_artifact_unusable",
+                agents=(unusable_output,),
+            )
+            return self._record(
+                action,
+                accepted=False,
+                feedback=(
+                    "Rejected finish: selected output Agent did not produce a usable result "
+                    "for its current inputs"
+                ),
+                execution=report,
+                rejection_code="output_artifact_unusable",
+            )
+        if (
+            self.graph.output_agent is not None
+            and self.action_adapter is not None
+            and self.action_adapter.adapter_id == "swe_bench"
+            and not self._swe_artifact_commit_ready(self.graph.output_agent)
+        ):
+            return self._record(
+                action,
+                accepted=False,
+                feedback=(
+                    "Rejected finish: selected SWE output did not produce a tested patch or a "
+                    "structured typed failure during its bounded final-fix pass"
+                ),
+                execution=report,
+                rejection_code="swe_output_commit_incomplete",
+            )
+        selected_output = self.graph.output_agent
+        input_signature_check = getattr(
+            self.runtime, "artifact_matches_current_input_signature", None
+        )
+        if (
+            selected_output is not None
+            and worker_output_role_changes_input(
+                dataset=self.dataset,
+                action_adapter=(
+                    self.action_adapter.adapter_id if self.action_adapter is not None else ""
+                ),
+            )
+            and callable(input_signature_check)
+            and not input_signature_check(selected_output, task=self.worker_task, graph=self.graph)
+        ):
+            self.dirty_agents.add(selected_output)
+            self.dirty_reasons.setdefault(selected_output, set()).add(
+                "output_contract_signature_stale"
+            )
+            return self._record(
+                action,
+                accepted=False,
+                feedback=(
+                    "Rejected finish: selected output Artifact does not match a recorded input "
+                    "signature for its current output contract; it remains dirty for execution"
+                ),
+                execution=report,
+                rejection_code="stale_output_artifact",
             )
         output_artifact = (
             self.runtime.artifacts.get(self.graph.output_agent) if self.graph.output_agent else None
         )
-        output = (
-            report.output
-            if report is not None
-            else (output_artifact.answer if output_artifact is not None else "")
+        output = output_artifact.answer if output_artifact is not None else ""
+        trusted_alfworld_output = bool(
+            (
+                self.dataset == "alfworld"
+                or (
+                    self.action_adapter is not None
+                    and self.action_adapter.adapter_id == "alfworld"
+                )
+            )
+            and output_artifact is not None
+            and self._artifact_is_usable_output(output_artifact.agent_id)
         )
-        if not output:
+        if not output and not trusted_alfworld_output:
             self.state = CanvasState.FAILED
             return self._record(
                 action,
@@ -1795,28 +2051,56 @@ class GraphCanvas:
                     )
             # A graph may legitimately finish without a purchase (score zero).
             # Never select a different Agent or a candidate using hidden reward.
-        if is_aime_dataset(self.dataset):
-            parsed = parse_aime_answer(output)
-            if not parsed.valid:
-                # Keep all intermediate artifacts, the selected graph and the
-                # original budgets. Only Director may choose the next edit.
-                return self._record(
-                    action,
-                    accepted=False,
-                    feedback=(
-                        f"Rejected finish: selected output has an invalid AIME final answer "
-                        f"({parsed.reason}). Submit one explicit integer from 0 to 999, "
-                        "not a list, local derivation or conflicting candidates. Update the "
-                        "output Agent or select another usable output within remaining budgets. "
-                        "No mathematical correctness feedback is provided."
-                    ),
-                    rejection_code="output_answer_invalid",
-                    rejection_details={
-                        "submission_method": "aime_strict_submission_v1",
-                        "reason": parsed.reason,
-                    },
-                    execution=report,
+        if text_submission:
+            if prepared_submission is None:
+                from .answer_submission import AnswerFinalizer, AnswerSubmissionConfig
+                from .observability import TaskSpec
+
+                prepared_submission = AnswerFinalizer(
+                    AnswerSubmissionConfig(enabled=True)
+                ).finalize(
+                    TaskSpec(task_id=self.run_id, prompt=self.worker_task,
+                             metadata={"dataset": self.dataset}),
+                    output,
                 )
+            risks = artifact_integrity_failure_risks(output_artifact) if output_artifact else []
+            if not prepared_submission.valid or risks:
+                return self._record(
+                    action, accepted=False, execution=report,
+                    rejection_code="output_artifact_integrity_failure" if risks else "output_answer_missing",
+                    feedback="Rejected finish: selected output is incomplete or has no answer payload.",
+                    rejection_details={"integrity_risks": risks,
+                                       "submission_detail": prepared_submission.detail},
+                )
+            if (self.total_tokens > self.config.max_total_tokens
+                    or self.graph.validate(final=True) or not self.selected_output_is_current()):
+                return self._record(
+                    action, accepted=False, execution=report,
+                    rejection_code="submission_final_check_failed",
+                    feedback="Rejected finish: final graph, input binding or budget check failed.",
+                )
+            binding = self.runtime.artifact_input_binding(str(self.graph.output_agent))
+            if not binding.get("input_hash") or binding.get("artifact_id") != output_artifact.artifact_id:
+                return self._record(
+                    action, accepted=False, execution=report,
+                    rejection_code="submission_input_binding_missing",
+                    feedback="Rejected finish: selected output lacks its runtime input binding.",
+                )
+            self.submission_receipt = _issue_receipt(
+                context=context, dataset=self.dataset,
+                accepted_event_id=f"{self.run_id}:canvas:{len(self.history)}",
+                output_agent_id=str(self.graph.output_agent),
+                graph_snapshot_hash=snapshot_hash(self.graph.to_dict()),
+                artifact_id=output_artifact.artifact_id,
+                input_signature=str(binding.get("input_hash", "")),
+                execution_generation=int(binding.get("generation", 0)),
+                raw_answer_snapshot=output,
+                submitted_answer_snapshot=prepared_submission.submitted_answer,
+                answer_hash=answer_hash(prepared_submission.submitted_answer),
+                normalization_version=prepared_submission.method,
+                worker_tokens_used=self.total_tokens,
+                worker_token_limit=self.config.max_total_tokens,
+            )
         self.state = CanvasState.FINISHED
         if self.rollout_deadline is not None:
             self.rollout_deadline.mark_progress("canvas_finish")
@@ -1833,6 +2117,22 @@ class GraphCanvas:
 
         return self.graph.evaluate_flowsteer_structure(enabled=False)
 
+    def selected_output_is_current(self) -> bool:
+        """One submission gate shared by Director, finalization and scoring."""
+        selected = self.graph.output_agent
+        if not selected or selected not in self.runtime.artifacts:
+            return False
+        if self.unified and self.submission_receipt is not None and self.state is CanvasState.FINISHED:
+            return self.runtime.artifacts[selected].artifact_id == self.submission_receipt.artifact_id
+        if not self.unified and not worker_output_role_changes_input(
+            dataset=self.dataset,
+            action_adapter=self.action_adapter.adapter_id if self.action_adapter else "",
+        ):
+            return True  # Environment/code provenance is checked by the adapter.
+        return selected not in self.dirty_agents and self.runtime.artifact_matches_current_input_signature(
+            selected, task=self.worker_task, graph=self.graph
+        )
+
     def _execute_dirty(self, *, force: bool = False) -> ExecutionReport | None:
         # A deleted Agent can remain in the mutation's historical dirty set but
         # must never survive as executable state.
@@ -1846,7 +2146,26 @@ class GraphCanvas:
         executable_dirty = self.dirty_agents & configured
         if not executable_dirty and not force:
             return None
-        if (is_short_qa_dataset(self.dataset) or self.dataset == "swe_bench") and executable_dirty:
+        if self.dataset == "swe_bench" and configured:
+            remaining = max(0, self.config.max_total_tokens - self.total_tokens)
+            self._token_admission_event.update(
+                budget_schema=SWE_SHARED_TOKEN_BUDGET,
+                remaining_worker_tokens=remaining,
+                budget_scope="per_question",
+                allocation="shared_remaining",
+                reserved_closure_tokens=0,
+                request_admission="authoritative_after_request_serialization",
+            )
+            for agent_id in configured:
+                metadata = self.graph.nodes[agent_id].metadata
+                metadata.update(
+                    _runtime_token_credit=remaining,
+                    _runtime_budget_kind=SWE_SHARED_TOKEN_BUDGET,
+                )
+                # Restored nodes must not retain the old finalization reserve.
+                metadata.pop("_runtime_finalization_output_reserve", None)
+        elif (is_short_qa_dataset(self.dataset)
+                or (self.unified and self.dataset != "webshop")) and executable_dirty:
             # The estimator is a scheduling hint, not permission to spend past
             # the budget. Give each scheduled execution/revision a bounded share
             # and enforce it against serialized requests in the gateway.
@@ -1865,9 +2184,8 @@ class GraphCanvas:
             remaining = max(0, self.config.max_total_tokens - self.total_tokens)
             credit = remaining // calls
             budget_kind = (
-                "swe_primary_request_credit_v1"
-                if self.dataset == "swe_bench"
-                else "short_qa_request_credit_v1"
+                "short_qa_request_credit_v1" if is_short_qa_dataset(self.dataset)
+                else "unified_request_credit_v1"
             )
             self._token_admission_event.update(
                 {
@@ -1943,6 +2261,9 @@ class GraphCanvas:
             invalidation_reasons={
                 agent_id: set(self.dirty_reasons.get(agent_id, ())) for agent_id in executable_dirty
             },
+            token_credit=(max(0, self.config.max_total_tokens - self.total_tokens)
+                          if self.dataset != "webshop" or self.config.remaining_token_admission_enabled
+                          else None),
         )
         self._step_scheduled_agents.update(report.scheduled_agents)
         self.total_tokens += report.token_in + report.token_out
@@ -1950,12 +2271,17 @@ class GraphCanvas:
         # corresponding dirty bits before reporting a budget violation; otherwise
         # every later graph edit re-executes the same Agents and compounds the
         # over-budget trajectory without producing new feedback.
-        completed = set(report.scheduled_agents)
+        completed = set(report.scheduled_agents) - report.blocked_agents.keys()
         self.dirty_agents -= completed
         for agent_id in completed:
             self.dirty_reasons.pop(agent_id, None)
+        self.dirty_agents.update(report.blocked_agents)
+        for agent_id, blocker in report.blocked_agents.items():
+            self.dirty_reasons.setdefault(agent_id, set()).add(blocker)
         if any(
             artifact.answer == WORKER_BACKEND_FAILURE_SENTINEL
+            and not (self.unified and self.runtime.artifact_matches_current_input_signature(
+                artifact.agent_id, task=self.worker_task, graph=self.graph))
             for artifact in report.artifacts.values()
         ):
             raise RequiredWorkerBackendFailure(report)
@@ -1988,7 +2314,8 @@ class GraphCanvas:
 
     def _new_agent_token_admission(self, action: CanvasAction) -> dict[str, Any] | None:
         if (
-            action.action_type is not ActionType.ADD_AGENT
+            self.dataset == "swe_bench"
+            or action.action_type is not ActionType.ADD_AGENT
             or not self.graph.nodes
             or not self.config.remaining_token_admission_enabled
             or not self._has_usable_artifact()
@@ -2067,7 +2394,10 @@ class GraphCanvas:
         webshop_closure_pass: bool = False,
     ) -> dict[str, Any] | None:
         if (
-            not self.config.remaining_token_admission_enabled
+            # SWE uses the serialized request gate against the shared balance;
+            # historical execution estimates must not withhold future credit.
+            self.dataset == "swe_bench"
+            or not self.config.remaining_token_admission_enabled
             or (self.dataset != "webshop" and not self._has_usable_artifact())
             or action.action_type
             in {
@@ -2175,6 +2505,7 @@ class GraphCanvas:
 
     def _uses_staged_environment_commit(self) -> bool:
         return bool(
+            not self.unified and
             self.action_adapter is not None
             and self.action_adapter.commit_activation.value == "commit_pending_on_output"
         )
@@ -2186,6 +2517,19 @@ class GraphCanvas:
         artifact = self.runtime.artifacts.get(agent_id)
         if node is None or not node.configured or artifact is None:
             return False
+        if (
+            (
+                self.dataset == "alfworld"
+                or (
+                    self.action_adapter is not None
+                    and self.action_adapter.adapter_id == "alfworld"
+                )
+            )
+            and isinstance(artifact.environment_result, dict)
+            and isinstance(artifact.environment_result.get("environment_completed"), bool)
+            and "won" in artifact.environment_result
+        ):
+            return True
         answer = str(artifact.answer or "").strip()
         return bool(
             answer
@@ -2225,17 +2569,131 @@ class GraphCanvas:
 
     def _eligible_output_agents(self) -> tuple[str, ...]:
         usable = self._usable_output_agents()
+        if (
+            self.state is CanvasState.AWAITING_MODEL
+            and self.pending_agent_id in self.graph.nodes
+            and self.graph.nodes[self.pending_agent_id].prompt_configured
+            and not self._uses_staged_environment_commit()
+            and (
+                not self.structural_exploration_required
+                or self.structural_exploration_waived
+                or self._structural_exploration_satisfied()
+            )
+            and (
+                self.structural_repair_reason is None
+                or ActionType.SET_OUTPUT in self._structural_repair_allowed_action_types()
+            )
+            and worker_output_role_changes_input(
+                dataset=self.dataset,
+                action_adapter=(
+                    self.action_adapter.adapter_id if self.action_adapter is not None else ""
+                ),
+            )
+        ):
+            usable = (*usable, self.pending_agent_id)
         if not self._uses_staged_environment_commit():
             return usable
         ready = set(self.runtime.environment_commit_ready_agents())
         owners = set(self.runtime.environment_owner_agents())
         return tuple(agent_id for agent_id in usable if agent_id in ready or agent_id in owners)
 
+    def _staged_commit_safe_delete_targets(self) -> tuple[str, ...]:
+        """Nodes that cannot contribute to any latched environment candidate."""
+
+        if not self._uses_staged_environment_commit():
+            return ()
+        candidates = set(self.runtime.environment_commit_ready_agents())
+        owners = set(self.runtime.environment_owner_agents())
+        if not candidates:
+            return ()
+        return tuple(
+            agent_id
+            for agent_id in sorted(self.graph.nodes)
+            if agent_id not in owners
+            and (
+                not self.graph.nodes[agent_id].configured
+                or agent_id not in self.runtime.artifacts
+                or not any(
+                    candidate in self.graph.reachable_from(agent_id) for candidate in candidates
+                )
+            )
+        )
+
     def _output_health(self) -> str:
         output = self.graph.output_agent
         if output is None:
             return "missing"
         return "usable" if self._artifact_is_usable_output(output) else "unusable"
+
+    def _native_webshop_task_status(self) -> dict[str, Any] | None:
+        """Live public completion facts, independent of model claims and stale artifacts."""
+        if not (self.runtime.native_webshop and self.dataset == "webshop"):
+            return None
+        ready = set(self.runtime.environment_commit_ready_agents())
+        selected = self.graph.output_agent
+        artifact = self.runtime.artifacts.get(selected)
+        purchased = bool(
+            artifact is not None
+            and isinstance(artifact.environment_result, dict)
+            and artifact.environment_result.get("purchased")
+        )
+        ledger = getattr(self.runtime.executor, "budget_ledger", None)
+        scope = f"webshop-rollout:{self.runtime.environment_fingerprint}:whole-graph"
+        if self.config.action_budget_policy == "shared_total_v1":
+            scope = "tool-rollout:whole-graph"
+        budgets = {}
+        if ledger is not None:
+            for agent_id, node in sorted(self.graph.nodes.items()):
+                initial = ledger.remaining(node, revision=False, scope=scope)
+                revision = ledger.remaining(node, revision=True, scope=scope)
+                budgets[agent_id] = {
+                    "initial_actions_remaining": min(initial["phase"], initial["total"]),
+                    "revision_actions_remaining": min(revision["phase"], revision["total"]),
+                    "total_actions_remaining": initial["total"],
+                }
+        return {
+            "selected_output": selected,
+            "selected_candidate_staged": selected in ready,
+            "candidate_agents": sorted(ready),
+            "purchase_committed": purchased,
+            "completion_state": (
+                "purchased"
+                if purchased
+                else "candidate_staged"
+                if selected in ready
+                else "no_candidate"
+            ),
+            "action_budget_scope": "whole_graph_shared_not_additive",
+            "remaining_actions_by_agent": budgets,
+        }
+
+    def _prepare_native_output_materialization(self) -> None:
+        """A single selected-output revision within the existing shared allowance.
+
+        Ordinary graph edits and dirty-closure execution retain their semantics.
+        No alternative Agent or purchase is chosen by the scheduler.
+        """
+        if not self.config.native_webshop_output_materialization or self.dirty_agents:
+            return
+        status = self._native_webshop_task_status()
+        if status is None or status["selected_candidate_staged"] or status["purchase_committed"]:
+            return
+        selected = self.graph.output_agent
+        if selected not in self.runtime.artifacts:
+            return
+        remaining = status["remaining_actions_by_agent"].get(selected, {})
+        if remaining.get("revision_actions_remaining", 0) <= 0:
+            return
+        node = self.graph.nodes[selected]
+        if node.metadata.get("_runtime_native_output_materialization_attempted"):
+            return
+        node.metadata["_runtime_native_output_materialization_attempted"] = True
+        self.dirty_agents.add(selected)
+        self.dirty_reasons.setdefault(selected, set()).add("selected_output_recovery_required")
+        self._step_invalidated_agents.add(selected)
+        self._step_invalidation_reasons.setdefault(selected, set()).add(
+            "selected_output_recovery_required"
+        )
 
     def _final_validation_error_codes(self) -> tuple[str, ...]:
         codes: set[str] = set()
@@ -2296,10 +2754,44 @@ class GraphCanvas:
         accepted: bool,
         rejection_code: str | None,
     ) -> None:
-        # Stage 2B intentionally scopes semantic fusion to output lifecycle
-        # repair. Other repair reasons can require neutral intermediate edits
-        # (for example SET_LAYER before SET_RELATION), so their progress models
-        # must be designed and validated separately.
+        connectivity_repair = (
+            self.structural_repair_reason in {"output_reachability", "disconnected_multi_agent"}
+            or (self._connectivity_repair_active and not self._is_consolidation_repair())
+        )
+        if connectivity_repair:
+            self._connectivity_repair_active = True
+            signature = self._connectivity_state_signature()
+            was_visited = signature in self._connectivity_repair_states
+            if accepted:
+                if was_visited:
+                    self.semantic_no_progress_streak += 1
+                else:
+                    # A novel state may be a legitimate intermediate step, such
+                    # as SET_LAYER before relation selection. Do not freeze it.
+                    self.semantic_no_progress_streak = 0
+                    self._connectivity_repair_states.add(signature)
+            elif rejection_code == "connectivity_output_cycle":
+                self._connectivity_cycle_blocks += 1
+                self.semantic_no_progress_streak += 1
+            self._recent_repair_actions.append({
+                "action": action.action_type.value,
+                "accepted": accepted,
+                "rejection_code": rejection_code,
+                "semantic_progress": not was_visited if accepted else False,
+                "state_revisited": was_visited,
+                "signature": {"state_hash": signature},
+                "unreachable_agents": list(self._unreachable_to_output()),
+            })
+            self._recent_repair_actions = self._recent_repair_actions[
+                -self.config.repair_recent_action_limit :
+            ]
+            if self.structural_repair_reason is None:
+                self._connectivity_repair_active = False
+                self._connectivity_repair_states.clear()
+                self.semantic_no_progress_streak = 0
+            return
+
+        # Other repair classes retain their existing progress policy.
         if not self._is_output_lifecycle_repair():
             return
         current = self._repair_progress_signature()
@@ -2470,6 +2962,7 @@ class GraphCanvas:
         self.pending_relation_decision = pending
         self.state = CanvasState.AWAITING_RELATION_CHOICE
         payload = {"phase": "proposal", **pending.to_dict()}
+        self._last_relation_decision = dict(payload)
         return self._record(
             action,
             accepted=True,
@@ -2501,7 +2994,7 @@ class GraphCanvas:
                 rejection_code="no_pending_relation_choice",
             )
         if count_round:
-            if self.round_index >= self.config.max_rounds:
+            if self.director_round_limit is not None and self.round_index >= self.director_round_limit:
                 return self._record(
                     CanvasAction(
                         ActionType.INVALID,
@@ -2554,6 +3047,7 @@ class GraphCanvas:
             "previously_present": currently_present,
             "policy": dict(policy_audit or {}),
         }
+        self._last_relation_decision = dict(decision_payload)
         self.pending_relation_decision = None
         self.state = CanvasState.BUILDING
         if desired_present == currently_present:
@@ -2637,6 +3131,9 @@ class GraphCanvas:
         if kind is ActionType.ADD_AGENT:
             mutation = graph.add_agent(action.agent_id)
             agent_id = next(iter(mutation.dirty_agents))
+            if self.unified:
+                from uuid import uuid4
+                graph.nodes[agent_id].metadata.update(submission_protocol=PROTOCOL, result_scope="subtask", incarnation_id=uuid4().hex, task_dataset=self.dataset)
             if self.action_adapter is not None:
                 configured = graph.configure_action_environment(
                     agent_id,
@@ -2656,10 +3153,13 @@ class GraphCanvas:
             )
             if action.runtime_route is not None:
                 raise GraphValidationError("use SET_MODEL to select a Worker model")
+            metadata_updates = compilation.metadata() if compilation is not None else {}
+            if self.unified:
+                metadata_updates["result_scope"] = action.result_scope
             mutation = graph.set_prompt(
                 str(action.target),
                 prompt,
-                metadata_updates=(compilation.metadata() if compilation is not None else None),
+                metadata_updates=metadata_updates,
             )
             if compilation is not None and compilation.field_repairs:
                 repaired_fields = ", ".join(
@@ -2885,11 +3385,15 @@ class GraphCanvas:
             if is_aime_dataset(self.dataset) and target == self.graph.output_agent:
                 submitted = parse_aime_answer(artifact.answer)
                 if not submitted.valid:
-                    protocol_evidence.append(
+                    # Public answer-format evidence permits an optional revision;
+                    # it is not a Worker protocol failure or a FINISH prerequisite.
+                    add(
+                        PromptRevisionBasis.UNRESOLVED_ISSUE,
+                        target,
                         {
-                            "stage": "final_answer_submission",
+                            "stage": "answer_format",
                             "artifact_id": artifact.artifact_id,
-                            "rejection_reason": submitted.reason,
+                            "format_reason": submitted.reason,
                         }
                     )
             protocol_status = summarize_worker_protocol(
@@ -3064,6 +3568,7 @@ class GraphCanvas:
         action_names = set(self.action_adapter.action_names if self.action_adapter else ())
         compilation, issue = compile_delegation(
             fields,
+            public_task=self.task,
             dataset=self.dataset if self.managed_delegation_contracts else "",
             action_names=action_names,
             webshop_native=self.runtime.native_webshop and self.dataset == "webshop",
@@ -3189,6 +3694,10 @@ class GraphCanvas:
         if self.dirty_agents:
             facts.append("Dirty agents: " + ", ".join(sorted(self.dirty_agents)))
         if report is not None:
+            if report.blocked_agents:
+                facts.append("Execution blocked: " + "; ".join(
+                    f"{agent_id}={reason}" for agent_id, reason in sorted(report.blocked_agents.items())
+                ) + ". No new Worker request or workspace was started for the blocked phase.")
             facts.append(
                 "Execution: ran=[{}], reused=[{}], tokens={}/{}.".format(
                     ", ".join(report.executed_agents),
@@ -3288,6 +3797,12 @@ class GraphCanvas:
                         "session, or SET_OUTPUT may select it for one bounded same-session "
                         "closure pass using only the remaining episode budget."
                     )
+                if self.unified and self.dataset == "webshop":
+                    webshop_recovery = (
+                        "Worker reports do not terminate a live shopping session. "
+                        "Use RUN_AGENT for admissible bounded continuation; FINISH(target) "
+                        "submits only a current valid candidate or a runtime-confirmed terminal result."
+                    )
                 signals.append(
                     f"{agent_id}(summary={json.dumps(summary, ensure_ascii=False)}, "
                     f"confidence={artifact.confidence:.2f}, "
@@ -3337,6 +3852,66 @@ class GraphCanvas:
                 frontier.extend(unseen)
         return count
 
+    @staticmethod
+    def _unreachable_for_graph(graph: MultiAgentGraph, output: str | None) -> tuple[str, ...]:
+        if output is None or output not in graph.nodes:
+            return ()
+        return tuple(sorted(
+            agent_id for agent_id in graph.nodes
+            if agent_id != output and output not in graph.reachable_from(agent_id)
+        ))
+
+    def _connectivity_state_signature(self, *, output: str | None = None) -> str:
+        """Stable repair state; excludes counters and output-role bookkeeping metadata."""
+        graph = self.graph.clone()
+        if output is not None and output != graph.output_agent:
+            graph.set_output(output)
+        payload = graph.to_dict()
+        payload.pop("version", None)
+        layer_rank = {
+            value: rank for rank, value in enumerate(
+                sorted({node.layer for node in graph.nodes.values()})
+            )
+        }
+        for node in payload.get("nodes", []):
+            node["layer"] = layer_rank.get(int(node.get("layer", 0)), 0)
+            metadata = node.get("metadata", {})
+            metadata.pop("_runtime_is_output_agent", None)
+        artifacts = {}
+        for agent_id, artifact in sorted(self.runtime.artifacts.items()):
+            artifacts[agent_id] = {
+                "answer": artifact.answer,
+                "summary": artifact.summary,
+                "evidence": list(artifact.evidence),
+                "environment_result": artifact.environment_result,
+                "code_artifact_sha256": (
+                    artifact.code_artifact_ref.artifact_sha256
+                    if hasattr(artifact.code_artifact_ref, "artifact_sha256") else None
+                ),
+            }
+        return hashlib.sha256(json.dumps(
+            {"graph": payload, "artifacts": artifacts},
+            sort_keys=True, ensure_ascii=False, default=str,
+        ).encode("utf-8")).hexdigest()
+
+    def _output_switch_cycle(self, target: str) -> dict[str, Any]:
+        current = set(self._unreachable_to_output())
+        projected = set(self._unreachable_for_graph(self.graph, target))
+        resolves = not projected
+        improves = projected < current
+        signature = self._connectivity_state_signature(output=target)
+        repeated = signature in self._connectivity_repair_states
+        blocked = bool(repeated and not improves and not resolves)
+        return {
+            "target": target,
+            "unreachable_before": sorted(current),
+            "unreachable_after": sorted(projected),
+            "improves_reachability": improves,
+            "resolves_reachability": resolves,
+            "returns_to_visited_state": repeated,
+            "blocked_as_cycle": blocked,
+        }
+
     def topology_audit(self) -> dict[str, Any]:
         relation_count = len(self.graph.directed_edges) + len(self.graph.bidirectional_edges)
         unreachable = self._unreachable_to_output()
@@ -3347,6 +3922,17 @@ class GraphCanvas:
             ),
             "relation_count": relation_count,
             "weak_component_count": self._weak_component_count(),
+            "weakly_disconnected": self._weak_component_count() > 1,
+            "actual_relations": (
+                [
+                    {"source": source, "target": target, "relation": "directed"}
+                    for source, target in sorted(self.graph.directed_edges)
+                ]
+                + [
+                    {"source": source, "target": target, "relation": "bidirectional"}
+                    for source, target in sorted(self.graph.bidirectional_edges)
+                ]
+            ),
             "output_agent": self.graph.output_agent,
             "unreachable_agents": list(unreachable),
             "all_agents_reach_output": (
@@ -3354,6 +3940,120 @@ class GraphCanvas:
             ),
             "disconnected_multi_agent": (len(self.graph.nodes) > 1 and relation_count == 0),
         }
+
+    def _graph_state_snapshot(self) -> dict[str, Any]:
+        # Snapshots also enter feedback/history sent to the Director. Keep the
+        # sampled choice here, but retain probability/request audit details only
+        # in the original relation_decision event and DirectorTurn records.
+        relation_facts = {
+            key: value for key, value in self._last_relation_decision.items()
+            if key != "policy"
+        }
+        nodes = [
+            {"id": agent_id, "layer": self.graph.nodes[agent_id].layer,
+             "configured": self.graph.nodes[agent_id].configured}
+            for agent_id in sorted(self.graph.nodes)
+        ]
+        actual_relations = self.topology_audit()["actual_relations"]
+        if self.unified:
+            targets = [key for key, node in self.graph.nodes.items()
+                       if node.metadata.get("result_scope") == "task_result"]
+            validation = {}
+            for target in targets:
+                candidate = self.graph.clone()
+                candidate.output_agent = target
+                validation[target] = {
+                    "unreachable_nodes": list(self._unreachable_for_graph(candidate, target)),
+                    "graph_blockers": list(candidate.validate(final=True)),
+                }
+            return {
+                "nodes": [{**node, "result_scope": self.graph.nodes[node["id"]].metadata.get("result_scope")} for node in nodes],
+                "actual_relations": actual_relations,
+                "candidate_relations_are_not_edges": True,
+                "submission_target": self.graph.output_agent,
+                "task_result_agents": sorted(targets),
+                "reachability_by_target": validation,
+                "weak_components": self._weak_component_count(),
+                "weakly_disconnected": self._weak_component_count() > 1,
+                "last_relation_decision": relation_facts,
+            }
+        return {
+            "nodes": nodes,
+            "actual_relations": actual_relations,
+            "candidate_relations_are_not_edges": True,
+            "output_agent": self.graph.output_agent,
+            "weak_components": self._weak_component_count(),
+            "weakly_disconnected": self._weak_component_count() > 1,
+            "unreachable_to_output": list(self._unreachable_to_output()),
+            "last_relation_decision": relation_facts,
+            "finish_validation_errors": list(self.graph.validate(final=True)),
+        }
+
+    def _topology_action_previews(
+        self, legal_parameters: dict[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        if not (
+            self._connectivity_repair_active
+            or self.structural_repair_reason in {"output_reachability", "disconnected_multi_agent"}
+        ):
+            return {"set_output": {}, "relation_choices": []}
+        before = set(self._unreachable_to_output())
+        output_previews = {
+            agent_id: {
+                "unreachable_after": list(self._unreachable_for_graph(self.graph, agent_id)),
+                "improves_reachability": (
+                    set(self._unreachable_for_graph(self.graph, agent_id)) < before
+                ),
+                "resolves_reachability": not self._unreachable_for_graph(self.graph, agent_id),
+                "blocked_as_cycle": self._output_switch_cycle(agent_id)["blocked_as_cycle"]
+                if self._connectivity_repair_active
+                and self.structural_repair_reason in {"output_reachability", "disconnected_multi_agent"}
+                else False,
+            }
+            for agent_id in self._eligible_output_agents()
+            if agent_id != self.graph.output_agent
+        }
+        relation_previews: list[dict[str, Any]] = []
+        candidates = legal_parameters.get(ActionType.CONSIDER_RELATION.value, {}).get("relations", [])
+        if not candidates:
+            candidates = legal_parameters.get(ActionType.SET_RELATION.value, {}).get("relations", [])
+        relevant_agents = set(self._unreachable_to_output())
+        if self.graph.output_agent is not None:
+            relevant_agents.add(self.graph.output_agent)
+        for candidate in candidates:
+            source = str(candidate["source"])
+            target = str(candidate["target"])
+            if (
+                self.graph.output_agent is not None
+                and not ({source, target} & relevant_agents)
+            ):
+                continue
+            relation = RelationType(str(candidate["relation"]))
+            present = (
+                tuple(sorted((source, target))) in self.graph.bidirectional_edges
+                if relation is RelationType.BIDIRECTIONAL
+                else (source, target) in self.graph.directed_edges
+            )
+            choices: dict[str, Any] = {}
+            for choice in ("off", "on"):
+                simulated = self.graph.clone()
+                desired = choice == "on"
+                if desired != present:
+                    if desired:
+                        simulated.set_relation(source, target, relation)
+                    else:
+                        simulated.remove_relation(source, target, relation)
+                unreachable = list(self._unreachable_for_graph(simulated, self.graph.output_agent))
+                choices[choice] = {
+                    "candidate_edge_present_after": desired,
+                    "unreachable_to_output_after": unreachable,
+                    "resolves_reachability": not unreachable,
+                }
+            relation_previews.append({
+                "source": source, "target": target, "relation": relation.value,
+                "actual_present_before": present, "choices": choices,
+            })
+        return {"set_output": output_previews, "relation_choices": relation_previews}
 
     def _enter_structural_repair(
         self,
@@ -3380,11 +4080,23 @@ class GraphCanvas:
             self._consolidation_output_locked = False
             self._output_selection_budget_remaining = self.config.output_selection_budget
         self.structural_repair_reason = reason
+        if self._is_consolidation_repair():
+            self._connectivity_repair_active = False
+            self._connectivity_repair_states.clear()
         self.structural_repair_agents = tuple(
             sorted(agent_id for agent_id in agents if agent_id in self.graph.nodes)
         )
         self.structural_repair_pair = pair
         self.structural_repair_relation = relation
+        if reason in {"output_reachability", "disconnected_multi_agent"}:
+            self._connectivity_repair_active = True
+            self._connectivity_repair_states.add(self._connectivity_state_signature())
+            if not self._is_consolidation_repair():
+                # A generic invalid-action fuse must not strand a graph whose
+                # known structural defect requires layer/relation edits.
+                self.topology_edits_frozen = False
+                self._invalid_repeat_count = 0
+                self._last_invalid_signature = None
         if self._is_consolidation_repair() and self.graph.output_agent is not None:
             self._lock_consolidation_output()
 
@@ -3555,9 +4267,19 @@ class GraphCanvas:
         if self._uses_staged_environment_commit():
             commit_ready = tuple(self.runtime.environment_commit_ready_agents())
             if commit_ready:
-                return (ActionType.SET_OUTPUT,)
+                return (ActionType.SET_OUTPUT, ActionType.DELETE_AGENT)
         if reason in {"output_not_set", "output_artifact_unusable"}:
-            return (ActionType.SET_OUTPUT,)
+            return (
+                ActionType.ADD_AGENT,
+                ActionType.SET_PROMPT,
+                ActionType.SET_MODEL,
+                ActionType.SET_LAYER,
+                ActionType.CONSIDER_RELATION,
+                ActionType.SET_RELATION,
+                ActionType.REMOVE_RELATION,
+                ActionType.DELETE_AGENT,
+                ActionType.SET_OUTPUT,
+            )
         if reason == "relation_layer_mismatch":
             return (
                 ActionType.SET_LAYER,
@@ -3585,19 +4307,21 @@ class GraphCanvas:
         return ()
 
     def _structural_repair_snapshot(self) -> dict[str, Any]:
-        allowed = [
-            action_type.value for action_type in self._structural_repair_allowed_action_types()
-        ]
+        # Report the same state/protocol/parameter mask that admission uses.
+        # The repair-type superset alone can advertise disabled relation actions.
+        allowed = (
+            self.control_snapshot()["allowed_actions"] if self.structural_repair_reason else []
+        )
         guidance = ""
         if self.structural_repair_reason == "time_budget_consolidation":
             guidance = (
-                "Do not start another Worker execution. Select a usable existing Agent as "
-                "output, delete incomplete extra Agents if needed, and FINISH."
+                "Time admission is active and no additional Worker execution is budgeted. "
+                "The allowed actions and their valid targets are listed separately."
             )
         if self.structural_repair_reason == "token_budget_consolidation":
             guidance = (
-                "Do not start another Worker execution. Select a usable existing Agent as "
-                "output, delete incomplete extra Agents if needed, and FINISH."
+                "The remaining Worker token budget does not admit another execution. The "
+                "allowed actions and their valid targets are listed separately."
             )
         if self.structural_repair_reason == "relation_layer_mismatch":
             source, target = self.structural_repair_pair or ("", "")
@@ -3606,17 +4330,23 @@ class GraphCanvas:
             if source_node is not None and target_node is not None:
                 if self.structural_repair_relation == "bidirectional":
                     guidance = (
-                        f"Current layers: {source}={source_node.layer}, "
-                        f"{target}={target_node.layer}. Set {target} to layer "
-                        f"{source_node.layer}, then retry the bidirectional relation."
+                        f"Current layers are {source}={source_node.layer} and "
+                        f"{target}={target_node.layer}; a bidirectional relation requires equal "
+                        "layers."
                     )
                 else:
                     guidance = (
-                        f"Current layers: {source}={source_node.layer}, "
-                        f"{target}={target_node.layer}. For directed {source}->{target}, "
-                        f"set {target} to layer {source_node.layer + 1}, then retry "
-                        "the same relation. Do not set an Agent to its current layer."
+                        f"Current layers are {source}={source_node.layer} and "
+                        f"{target}={target_node.layer}; directed relations require the source "
+                        "layer to be lower than the target layer."
                     )
+        if self.structural_repair_reason in {"output_reachability", "disconnected_multi_agent"}:
+            guidance = (
+                f"Actual edges are {self.topology_audit()['actual_relations']}; optional relation "
+                "parameters are only candidates. Check topology_action_previews before switching "
+                "output. A legal edge may still point away from the selected output. Keep layer "
+                "and relation edits available until the graph validates."
+            )
         return {
             "required": self.structural_repair_reason is not None,
             "reason": self.structural_repair_reason,
@@ -3643,6 +4373,9 @@ class GraphCanvas:
             "semantic_no_progress_streak": self.semantic_no_progress_streak,
             "semantic_no_progress_limit": self.config.semantic_no_progress_limit,
             "semantic_no_progress_recoveries_total": (self.semantic_no_progress_recovery_count),
+            "connectivity_repair_active": self._connectivity_repair_active,
+            "connectivity_repair_visited_states": len(self._connectivity_repair_states),
+            "connectivity_output_cycle_blocks": self._connectivity_cycle_blocks,
             "output_switches_without_progress_total": (self.output_switches_without_progress),
             "output_lifecycle_recoveries_total": self.output_lifecycle_recovery_count,
             "recent_actions": list(self._recent_repair_actions),
@@ -3656,17 +4389,44 @@ class GraphCanvas:
         }
 
     def _audit_feedback(self, audit: dict[str, Any], repair: dict[str, Any]) -> str:
+        if self.unified:
+            return "Actual topology: " + json.dumps(self._graph_state_snapshot(), ensure_ascii=False, sort_keys=True) + ". FINISH(target) eligibility is recorded in result_assessments."
         unreachable = ", ".join(audit["unreachable_agents"]) or "none"
+        actual_relations = json.dumps(audit["actual_relations"], ensure_ascii=False, sort_keys=True)
         facts = [
             "Topology audit: agents={agent_count}, configured={configured_agent_count}, "
             "relations={relation_count}, components={weak_component_count}, output={output}, "
-            "unreachable=[{unreachable}], disconnected_multi_agent={disconnected}.".format(
+            "unreachable=[{unreachable}], disconnected_multi_agent={disconnected}, "
+            "actual_relations={actual_relations_text}. Candidate relation parameters are not graph edges.".format(
                 **audit,
                 output=audit["output_agent"] or "not set",
                 unreachable=unreachable,
                 disconnected=str(audit["disconnected_multi_agent"]).lower(),
+                actual_relations_text=actual_relations,
             )
         ]
+        if self._last_relation_decision:
+            relation_fact = dict(self._last_relation_decision)
+            if relation_fact.get("phase") == "choice":
+                facts.append(
+                    "Last relation choice: {source}->{target} {relation}, choice={choice}, "
+                    "actual_present_after={present}.".format(
+                        source=relation_fact.get("source"),
+                        target=relation_fact.get("target"),
+                        relation=relation_fact.get("relation_type"),
+                        choice=relation_fact.get("choice"),
+                        present=relation_fact.get("chosen_present"),
+                    )
+                )
+            else:
+                facts.append(
+                    "Pending relation proposal only: {source}->{target} {relation}; "
+                    "no edge is established until its on/off choice.".format(
+                        source=relation_fact.get("source"),
+                        target=relation_fact.get("target"),
+                        relation=relation_fact.get("relation_type"),
+                    )
+                )
         if repair["required"]:
             facts.append(
                 "STRUCTURAL_REPAIR_REQUIRED: reason={}; agents=[{}]; pair=[{}]; "
@@ -3739,6 +4499,8 @@ class GraphCanvas:
             )
         if not accepted:
             rejection_code = rejection_code or "rejected_action"
+        if self.unified:
+            self._record_unified_progress(accepted=accepted)
         self._record_repair_progress(
             action,
             accepted=accepted,
@@ -3769,13 +4531,23 @@ class GraphCanvas:
                 (
                     feedback,
                     self._audit_feedback(audit, repair),
-                    f"Canvas state: {self.state.value}; round {self.round_index}/"
-                    f"{self.config.max_rounds}; cumulative Worker tokens={self.total_tokens}/"
+                    f"Canvas state: {self.state.value}; "
+                    + (f"round {self.round_index}/{self.director_round_limit}; "
+                       if self.director_round_limit is not None else
+                       f"Director decisions recorded={self.round_index} (statistics only); ")
+                    + f"cumulative Worker tokens={self.total_tokens}/"
                     f"{self.config.max_total_tokens}.",
                 )
             )
         )
         step = CanvasStep(
+            event_id=f"{self.run_id}:canvas:{len(self.history)}",
+            director_call_id=(self._director_call_context.call_id
+                              if isinstance(self._director_call_context, DirectorCallContext)
+                              and self._director_call_context.runtime_owned else ""),
+            submission_receipt=(self.submission_receipt.to_dict()
+                                if accepted and action.action_type is ActionType.FINISH
+                                and self.submission_receipt is not None else None),
             round_index=self.round_index,
             action=action,
             accepted=accepted,
@@ -3851,13 +4623,20 @@ class GraphCanvas:
             self._invalid_repeat_count = 1
         if (
             self._invalid_repeat_count >= 3
+            and not self.unified
             and self.state is CanvasState.BUILDING
             and self.graph.nodes
+            and not self._connectivity_repair_active
+            and self.structural_repair_reason not in {
+                "output_reachability", "disconnected_multi_agent"
+            }
         ):
             self.topology_edits_frozen = True
 
     def director_progress_signature(self) -> str:
         """Effective state, excluding rounds, feedback and rejection counters."""
+        if self.unified:
+            return self._unified_progress_signature()
         graph = self.graph.to_dict()
         graph.pop("version", None)
         return json.dumps(
@@ -3880,14 +4659,31 @@ class GraphCanvas:
 
     def terminate_director_stall(self, code: str) -> CanvasStep:
         """Record runtime closure only; no model call or graph repair is invented."""
-        if code not in {"director_no_legal_continuation", "director_no_progress_exhausted"}:
+        if code not in {"director_no_legal_continuation", "director_no_progress_exhausted",
+                        "director_action_protocol_exhausted"}:
             raise ValueError(f"unsupported Director stall: {code}")
+        if (self.unified and code == "director_no_legal_continuation"
+                and self._unified_transaction is None
+                and self.director_edit_budget()["remaining"] == 0
+                and not self._unified_control_snapshot()["allowed_actions"]):
+            code = "director_edit_budget_dead_end"
+        if (self.unified and code == "director_no_legal_continuation"
+                and not self.graph.nodes and self.runtime_routes
+                and self.director_round_limit is not None
+                and not self.topology_edits_frozen and self._unified_transaction is None
+                and 0 <= self.config.max_rounds - self.round_index < 4):
+            # ADD_AGENT, SET_PROMPT, SET_MODEL and FINISH require four policy
+            # actions. Deleting the last node can exhaust that completion path
+            # before the numeric round counter reaches its absolute ceiling.
+            code = "director_round_budget_dead_end"
         return self._fail_terminal_recovery(
             code=code,
             message="no legal continuation or bounded Director recovery exhausted",
         )
 
     def control_snapshot(self) -> dict[str, Any]:
+        if self.unified:
+            return self._unified_control_snapshot()
         """Bounded authoritative state supplied to the Director after every turn."""
 
         legal_ids = sorted(self.graph.nodes)
@@ -3962,22 +4758,33 @@ class GraphCanvas:
             else []
         )
         if commit_ready_agents and self.state not in {CanvasState.FINISHED, CanvasState.FAILED}:
-            # The accepted purchase Action is newer and more authoritative
-            # than model-authored post-Action prose. Keep the transaction
-            # latched until the zero-Worker-token SET_OUTPUT commit.
-            revisable_agents: list[str] = []
+            # Preserve the staged transaction. The Director may select its
+            # owner or explicitly remove a node proven unable to contribute to
+            # any latched candidate; Canvas never prunes it as a side effect.
             allowed_actions = [ActionType.SET_OUTPUT.value]
+            if legal_parameters[ActionType.DELETE_AGENT.value]["targets"]:
+                allowed_actions.append(ActionType.DELETE_AGENT.value)
             prompt_parameters = legal_parameters[ActionType.SET_PROMPT.value]
-            prompt_parameters["targets"] = revisable_agents
+            prompt_parameters["targets"] = []
             revision_evidence = prompt_parameters.get("revision_evidence_by_target", {})
             if isinstance(revision_evidence, dict):
-                prompt_parameters["revision_evidence_by_target"] = {
-                    agent_id: revision_evidence[agent_id]
-                    for agent_id in revisable_agents
-                    if agent_id in revision_evidence
-                }
+                prompt_parameters["revision_evidence_by_target"] = {}
         if self.state is CanvasState.AWAITING_MODEL and not commit_ready_agents:
-            allowed_actions = ["set_model"]
+            allowed_actions = [ActionType.SET_MODEL.value]
+            if (
+                self.pending_agent_id in legal_parameters[ActionType.SET_OUTPUT.value]["targets"]
+                and (
+                    not self.structural_exploration_required
+                    or self.structural_exploration_waived
+                    or exploration_satisfied
+                )
+                and (
+                    self.structural_repair_reason is None
+                    or ActionType.SET_OUTPUT
+                    in self._structural_repair_allowed_action_types()
+                )
+            ):
+                allowed_actions.append(ActionType.SET_OUTPUT.value)
         parameterized_actions = {
             ActionType.SET_PROMPT.value: "targets",
             ActionType.SET_MODEL.value: "targets",
@@ -4006,6 +4813,10 @@ class GraphCanvas:
             allowed_actions = ["relation_choice"]
         return {
             "canvas_version": self.graph.version,
+            "director_action_protocol_version": DIRECTOR_ACTION_PROTOCOL_VERSION,
+            "output_contract_version": OUTPUT_CONTRACT_VERSION,
+            "submission_contract_version": SUBMISSION_CONTRACT_VERSION,
+            "submission_status": "submitted" if self.submission_receipt else "candidate",
             "worker_protocol_status_version": WORKER_PROTOCOL_STATUS_VERSION,
             "worker_protocol_status": {
                 agent_id: {
@@ -4033,7 +4844,12 @@ class GraphCanvas:
                 "remaining": max(0, self.graph.max_agents - len(legal_ids)),
             },
             "allowed_actions": allowed_actions,
+            "action_field_requirements": {
+                name: list(ACTION_FIELDS[name]) for name in allowed_actions if name in ACTION_FIELDS
+            },
             "legal_action_parameters": legal_parameters,
+            "graph_state": self._graph_state_snapshot(),
+            "topology_action_previews": self._topology_action_previews(legal_parameters),
             "output_agent": self.graph.output_agent,
             "environment_commit_ready_agents": (
                 list(self.runtime.environment_commit_ready_agents())
@@ -4041,8 +4857,19 @@ class GraphCanvas:
                 else list(commit_ready_agents)
             ),
             "environment_owner_agents": list(self.runtime.environment_owner_agents()),
+            **(
+                {"environment_task_status": self._native_webshop_task_status()}
+                if self.runtime.native_webshop and self.dataset == "webshop"
+                else {}
+            ),
             "environment_commit_resolution": (
-                "SET_OUTPUT only selects an output. FINISH validates the graph, updates dirty "
+                "SET_OUTPUT selects the output. FINISH validates the graph and commits its staged "
+                "candidate. A clean selected output with no candidate receives at most one "
+                "same-session output execution, charged to the shared revision allowance."
+                if self.config.native_webshop_output_materialization
+                and self.runtime.native_webshop
+                and self.dataset == "webshop"
+                else "SET_OUTPUT only selects an output. FINISH validates the graph, updates dirty "
                 "nodes, then commits only the selected output's latest staged candidate. "
                 "Candidates remain revisable before FINISH."
                 if self.runtime.native_webshop and self.dataset == "webshop"
@@ -4058,6 +4885,9 @@ class GraphCanvas:
                 "epoch": self.repair_epoch,
                 "semantic_no_progress_streak": self.semantic_no_progress_streak,
                 "recent_actions": list(self._recent_repair_actions),
+                "connectivity_repair_active": self._connectivity_repair_active,
+                "connectivity_repair_visited_states": len(self._connectivity_repair_states),
+                "connectivity_output_cycle_blocks": self._connectivity_cycle_blocks,
             },
             "structural_exploration": {
                 "required": self.structural_exploration_required,
@@ -4094,7 +4924,8 @@ class GraphCanvas:
             implicated = set(self.structural_repair_agents)
             delete_targets = [agent_id for agent_id in legal_ids if agent_id in implicated]
         elif reason in {"output_not_set", "output_artifact_unusable"}:
-            delete_targets = []
+            if reason == "output_not_set" and len(legal_ids) <= 1:
+                delete_targets = []
         elif reason in {"token_budget_consolidation", "time_budget_consolidation"}:
             delete_targets = (
                 list(self._unreachable_to_output()) if self._consolidation_output_locked else []
@@ -4105,6 +4936,21 @@ class GraphCanvas:
             for agent_id in self._eligible_output_agents()
             if agent_id != self.graph.output_agent and not self._consolidation_output_locked
         ]
+        if (
+            self._connectivity_repair_active
+            and reason in {"output_reachability", "disconnected_multi_agent"}
+            and not (
+                self._uses_staged_environment_commit()
+                and self.runtime.environment_commit_ready_agents()
+            )
+        ):
+            output_targets = [
+                agent_id for agent_id in output_targets
+                if not self._output_switch_cycle(agent_id)["blocked_as_cycle"]
+            ]
+        if self._uses_staged_environment_commit() and self.runtime.environment_commit_ready_agents():
+            safe_delete_targets = set(self._staged_commit_safe_delete_targets())
+            delete_targets = [agent_id for agent_id in delete_targets if agent_id in safe_delete_targets]
         directed_relations: list[dict[str, str]] = []
         bidirectional_relations: list[dict[str, str]] = []
         relation_candidates: list[dict[str, str]] = []
@@ -4247,6 +5093,8 @@ class GraphCanvas:
             ActionType.DELETE_AGENT,
             ActionType.SET_OUTPUT,
         }
+        if self.unified:
+            target_actions.update({ActionType.RUN_AGENT, ActionType.FINISH})
         if action.action_type in target_actions:
             target = str(action.target or action.agent_id or "")
             if target not in parameters["targets"]:
@@ -4254,7 +5102,11 @@ class GraphCanvas:
                     "unknown_agent"
                     if target not in self.graph.nodes
                     else (
-                        "output_already_selected"
+                        (
+                            "output_already_selected"
+                            if target == self.graph.output_agent
+                            else "output_target_not_eligible"
+                        )
                         if action.action_type is ActionType.SET_OUTPUT
                         else "director_parameter_not_allowed"
                     )
@@ -4265,17 +5117,20 @@ class GraphCanvas:
             ActionType.SET_RELATION,
             ActionType.REMOVE_RELATION,
         }:
-            requested = {
-                "source": str(action.source),
-                "target": str(action.target),
-                "relation": (
-                    action.relation.value
-                    if action.relation
-                    else self._canonical_relation_candidate(str(action.source), str(action.target))[
-                        2
-                    ].value
-                ),
-            }
+            if action.action_type is ActionType.CONSIDER_RELATION:
+                # This action proposes an unordered pair. Use exactly the same
+                # layer-based inference as _begin_relation_decision; raw name
+                # order must not reject an otherwise legal binary proposal.
+                source, target, relation = self._canonical_relation_candidate(
+                    str(action.source), str(action.target)
+                )
+                requested = {"source": source, "target": target, "relation": relation.value}
+            else:
+                requested = {
+                    "source": str(action.source),
+                    "target": str(action.target),
+                    "relation": action.relation.value if action.relation else "",
+                }
             if requested not in parameters["relations"]:
                 return (
                     "director_parameter_not_allowed",
@@ -4312,6 +5167,8 @@ class GraphCanvas:
     def _rejection_details(self, code: str) -> dict[str, Any]:
         snapshot = self.control_snapshot()
         recovery_actions: list[dict[str, Any]] = []
+        if self.unified:
+            return {"reason_code": code, "current_version": self.graph.version, "legal_agent_ids": list(snapshot["legal_agent_ids"]), "allowed_actions": list(snapshot["allowed_actions"]), "result_assessments": snapshot["result_assessments"]}
         if self.pending_agent_id:
             recovery_actions.append({"action": "set_prompt", "target": self.pending_agent_id})
         else:

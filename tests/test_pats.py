@@ -94,7 +94,10 @@ def operation(op="ADD", *, skill_id=None, plan=None):
 
 @pytest.fixture
 def config():
-    return PatsConfig(enabled=True, max_tokens=10000)
+    # These controller tests count characters with len(), unlike production's
+    # Director tokenizer. Use the real request character ceiling here; token
+    # packing and insufficient-budget behavior are tested in test_pats_refiner.
+    return PatsConfig(enabled=True, max_tokens=10000, max_review_input_tokens=64000)
 
 
 def test_mode_bands_capacity_priority_and_validation():

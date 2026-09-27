@@ -53,12 +53,12 @@ max_rounds = 24
 relay_max_chars = 1000
 
 [canvas.max_total_tokens_by_dataset]
-aime = 65536
-nq_open = 65536
-hotpotqa = 65536
+aime = 240000
+nq_open = 240000
+hotpotqa = 240000
 webshop = 350000
 alfworld = 350000
-healthbench_professional = 65536
+healthbench_professional = 240000
 swe_bench = 350000
 
 [solver_skillbank]
@@ -96,10 +96,6 @@ mode = "auto"
 
 [answer_submission]
 enabled = true
-qa_model_enabled = true
-runtime_route = "gpt"
-max_tokens = 128
-require_source_span = true
 
 # Pure-local Python execution support for AIME Workers.
 [aime_actions]
@@ -138,7 +134,7 @@ pending_ttl_s = 900.0
 # Preserve legacy page text while selecting the candidate native Worker protocol.
 search_observation_mode = "legacy"
 worker_guidance_policy = "baseline"
-worker_memory_policy = "skillflow_history_v1"
+worker_memory_policy = "factual_memory_v1"
 worker_execution_policy = "skillflow_native_v1"
 
 # Local assets are present; the formal environment installs the alfworld extra.

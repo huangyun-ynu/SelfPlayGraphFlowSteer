@@ -1,0 +1,78 @@
+{
+  "schema": "spgfs-webshop-baseline-v1",
+  "status": "official",
+  "selected_on": "2026-09-24",
+  "source_run": "state/formal-eval/webshop-budget-off-laser-c24-20260923-191922",
+  "metrics": {
+    "examples": 128,
+    "strict_successes": 63,
+    "strict_success_rate": 0.4921875,
+    "mean_reward": 0.7102213541666668
+  },
+  "webshop": {
+    "enabled": true,
+    "service_url": "http://127.0.0.1:18020",
+    "timeout_s": 240.0,
+    "max_observation_chars": 0,
+    "max_query_chars": 500,
+    "max_initial_calls": 12,
+    "max_revision_calls": 4,
+    "max_total_calls": 16,
+    "staged_commit_enabled": true,
+    "max_pending_sessions": 8,
+    "pending_ttl_s": 900.0,
+    "search_observation_mode": "legacy",
+    "worker_guidance_policy": "laser_checklist_v1"
+  },
+  "evaluation": {
+    "director_model": "Qwen3.5-9B",
+    "director_thinking": true,
+    "worker_routes": [
+      "deepseek"
+    ],
+    "deepseek": {
+      "served_model": "deepseek-flash",
+      "enable_thinking": true,
+      "reasoning_effort": "low",
+      "max_tokens": 16384,
+      "max_concurrency": 20,
+      "api_surface": "chat_completions",
+      "network_path": "direct"
+    },
+    "director_skill_root": "",
+    "skill_context": "off",
+    "workers": 24,
+    "seeds": [
+      0
+    ],
+    "dataset": "data/formal/eval/webshop_official_test_128.jsonl"
+  },
+  "source_artifacts": {
+    "aggregate_summary.json": {
+      "path": "state/formal-eval/webshop-budget-off-laser-c24-20260923-191922/aggregate_summary.json",
+      "sha256": "c4309c07b0864da5cfb839255be28b544d08a40fcc77dcc90e84fa13ecb9d2d8"
+    },
+    "summary.json": {
+      "path": "state/formal-eval/webshop-budget-off-laser-c24-20260923-191922/summary.json",
+      "sha256": "857b90f32a842a84cdd07b91f69672d8ddc2eb5070fd629714d7fba0c5f70db5"
+    },
+    "run_manifest.json": {
+      "path": "state/formal-eval/webshop-budget-off-laser-c24-20260923-191922/run_manifest.json",
+      "sha256": "d96205e563b6dc5ca05ff7db60a0bdde282b1e45cae75f95abcf886776f87997"
+    }
+  },
+  "dataset_sha256": "35fbda3aef098050f649ca569a8c8e1c8f3a4dbf0e8c800ba3fade74f7335328",
+  "provenance_note": "Selected by the user on 2026-09-24 as the prompt-comparison baseline. W08 includes LASER and uses DeepSeek reasoning_effort=low. Historical source restored with all 92 indexed file hashes verified. No new evaluation, model updates, or runtime prompt changes made. Current main-tree configs/entrypoints are not an exact W08 reproduction; a frozen-source evaluation launcher is not yet configured.",
+  "active_eval_config": null,
+  "entrypoint": null,
+  "supersedes": "configs/history/webshop_legacy_20260918.json",
+  "selected_version": "W08 budget-off",
+  "canvas": {
+    "remaining_token_admission_enabled": false
+  },
+  "source_version_id": "webshop-budget-off-128",
+  "source_version_index": "experiment_versions/index.json",
+  "restored_source": "state/restored-versions/webshop-budget-off-128",
+  "restored_verified_files": 92,
+  "historical_eval_config": "configs/webshop_laser_checklist_eval.toml"
+}

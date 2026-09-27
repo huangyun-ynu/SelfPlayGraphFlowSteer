@@ -23,6 +23,7 @@ from .application import (
 )
 from .benchmark import BenchmarkRunner, load_flowsteer_records, write_benchmark
 from .benchmark_tracking import BenchmarkRunTracker, benchmark_aggregate
+from .config import canonical_dataset_name
 from .curriculum import ADSBoundaryScheduler, CurriculumProfile, FixedTaskPool, TSDSRetriever
 from .features import E5DelegationEncoder, SemanticGraphFeatureExtractor
 from .graph import MultiAgentGraph
@@ -1328,7 +1329,16 @@ def benchmark(args: argparse.Namespace) -> int:
     if args.worker_route is not None:
         if args.worker_route not in config.runtime_pool():
             raise ValueError(f"unknown Worker route: {args.worker_route}")
-        config = replace(config, worker_runtime_routes=(args.worker_route,))
+        config = replace(
+            config,
+            worker_runtime_routes=(args.worker_route,),
+            dataset_worker_routes={},
+            dataset_route_overrides={
+                dataset: {source: target for source, target in overrides.items()
+                          if source == args.worker_route}
+                for dataset, overrides in config.dataset_route_overrides.items()
+            },
+        )
     director_overrides = {
         key: value
         for key, value in (
@@ -1392,13 +1402,36 @@ def benchmark(args: argparse.Namespace) -> int:
     wandb_mode = args.wandb_mode or os.environ.get("WANDB_MODE", "disabled")
     tracker = BenchmarkRunTracker(args.output, wandb_mode=wandb_mode)
     runtime_pool = config.runtime_pool()
+    director_default_thinking = (
+        args.director_thinking if args.director_thinking is not None
+        else config.solver_model.enable_thinking
+        if config.solver_model.enable_thinking is not None else True
+    )
+    director_thinking_by_dataset = {
+        canonical_dataset_name((example.metadata or {}).get("dataset", "unknown")): (
+            config.director_thinking_by_dataset.get(
+                canonical_dataset_name((example.metadata or {}).get("dataset", "unknown")),
+                director_default_thinking,
+            ) if args.director_thinking is None else args.director_thinking
+        )
+        for example in examples
+    }
+    planned_by_dataset: dict[str, int] = {}
+    for example in examples:
+        dataset = str((example.metadata or {}).get("dataset", "unknown"))
+        planned_by_dataset[dataset] = planned_by_dataset.get(dataset, 0) + len(seeds)
     tracker.start_wandb(
         {
             "evaluation_only": True,
             "parameter_updates": 0,
+            "execution_semantics": config.model_manifest()["execution_semantics"],
             "director_model": config.solver_model.served_model,
             "director_model_source": str(config.solver_model.base_model_path),
-            "director_thinking": args.director_thinking,
+            "director_thinking": (
+                next(iter(director_thinking_by_dataset.values()))
+                if len(set(director_thinking_by_dataset.values())) == 1 else None
+            ),
+            "director_thinking_by_dataset": director_thinking_by_dataset,
             "parameter_update_entrypoint": False,
             "worker_logical_routes": list(config.worker_runtime_routes),
             "worker_endpoint_pools": {
@@ -1426,8 +1459,12 @@ def benchmark(args: argparse.Namespace) -> int:
             ),
             "swe_enabled": config.swe.enabled,
             "director_skill_root": str(args.director_skill_root or ""),
-            "deepseek_thinking": runtime_pool["deepseek"].enable_thinking,
-            "minimax_thinking": runtime_pool["minimax"].enable_thinking,
+            "deepseek_thinking": (
+                runtime_pool["deepseek"].enable_thinking if "deepseek" in runtime_pool else None
+            ),
+            "minimax_thinking": (
+                runtime_pool["minimax"].enable_thinking if "minimax" in runtime_pool else None
+            ),
         }
     )
     failed = True
@@ -1450,7 +1487,7 @@ def benchmark(args: argparse.Namespace) -> int:
             continue_on_error=True,
         )
         records = tracker.records()
-        aggregate = benchmark_aggregate(records, tracker.dataset_by_task())
+        aggregate = benchmark_aggregate(records, tracker.dataset_by_task(), planned_by_dataset=planned_by_dataset)
         aggregate["run"] = {
             "planned": len(examples) * len(seeds),
             "completed": len(records),
@@ -1473,7 +1510,7 @@ def benchmark(args: argparse.Namespace) -> int:
         return 2 if failed else 0
     finally:
         records = tracker.records()
-        aggregate = benchmark_aggregate(records, tracker.dataset_by_task())
+        aggregate = benchmark_aggregate(records, tracker.dataset_by_task(), planned_by_dataset=planned_by_dataset)
         aggregate["run"] = {
             "planned": len(examples) * len(seeds),
             "completed": len(records),
@@ -1823,9 +1860,13 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
         raise ValueError(f"route qualification is stale: age_s={age_s:.1f}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     requested = frozenset(str(value) for value in payload.get("routes_requested", []))
-    required = set(config.worker_runtime_routes) | {
+    required = set(config.all_worker_routes()) | {
         member for members in config.runtime_endpoint_pools.values() for member in members
     }
+    override_targets = {
+        target for overrides in config.dataset_route_overrides.values() for target in overrides.values()
+    }
+    required.update(override_targets)
     if config.healthbench_judge_runtime_route:
         required.add(config.healthbench_judge_runtime_route)
     if not required <= requested:
@@ -1843,8 +1884,10 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
     dedicated_judge = config.healthbench_judge_runtime_route
     if dedicated_judge and not logical_route_usable(dedicated_judge):
         raise ValueError("dedicated HealthBench Judge route must be freshly qualified")
+    if any(not logical_route_usable(route) for route in override_targets):
+        raise ValueError("dataset Worker override routes must be freshly qualified")
     qualified = tuple(
-        route for route in config.worker_runtime_routes if logical_route_usable(route)
+        route for route in config.all_worker_routes() if logical_route_usable(route)
     )
     if len(set(qualified)) < minimum_selected_routes or not set(qualified) <= requested:
         raise ValueError("route report does not contain the requested minimum usable routes")
@@ -1854,6 +1897,17 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
     routes = selected or qualified
     if len(set(routes)) < minimum_selected_routes or not set(routes) <= set(qualified):
         raise ValueError("selected routes must be a subset of the freshly qualified routes")
+    default_routes = tuple(route for route in routes if route in config.worker_runtime_routes)
+    dataset_routes = {
+        dataset: tuple(route for route in choices if route in routes)
+        for dataset, choices in config.dataset_worker_routes.items()
+    }
+    if not default_routes or any(not choices for choices in dataset_routes.values()):
+        raise ValueError("route report/subset leaves a configured dataset without Worker routes")
+    selected_overrides = {
+        dataset: {source: target for source, target in overrides.items() if source in routes}
+        for dataset, overrides in config.dataset_route_overrides.items()
+    }
     pool = config.runtime_pool()
     missing = set(routes) - set(pool)
     if missing:
@@ -1872,6 +1926,7 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
                 *routes,
                 *((judge_route,) if judge_route else ()),
                 config.skill_distiller_runtime,
+                *(target for overrides in selected_overrides.values() for target in overrides.values()),
             )
         )
     )
@@ -1895,7 +1950,9 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
         runtime=pool[primary],
         runtime_name=primary,
         additional_runtimes={route: pool[route] for route in support_routes if route != primary},
-        worker_runtime_routes=routes,
+        worker_runtime_routes=default_routes,
+        dataset_worker_routes=dataset_routes,
+        dataset_route_overrides=selected_overrides,
         runtime_endpoint_pools=active_pools,
         skill_distiller_runtime=config.skill_distiller_runtime,
     )
@@ -1905,6 +1962,7 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
         "age_s_at_start": age_s,
         "qualified_routes": list(qualified),
         "selected_routes": list(routes),
+        "dataset_worker_routes": {dataset: list(choices) for dataset, choices in dataset_routes.items()},
         "minimum_selected_routes": minimum_selected_routes,
         "degraded_route_mode": (minimum_selected_routes < _DEFAULT_MINIMUM_QUALIFIED_ROUTES),
         "support_routes": list(support_routes),
@@ -3118,6 +3176,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 learner_proposer_snapshot=learner_snapshots.proposer_snapshot,
                 learner_solver_snapshot=learner_snapshots.solver_snapshot,
                 expected_skill_context=pats_skill_context_lineage(cycle_dir),
+                expected_execution_semantics=config.model_manifest()["execution_semantics"],
             )
             if update_already_committed:
                 learner_binding["mode"] = "committed_update_recovery"

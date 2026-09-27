@@ -17,8 +17,12 @@
     "hotpotqa": {
       "path": "data/formal/eval/hotpotqa_official_test.jsonl",
       "rows": 128,
-      "sha256": "110da0e2274d70235651bfae68ecaa2ab845dad3af78b2ac3d6287efc38c311f",
-      "unique_source_rows": 128
+      "sha256": "84db56807e8e8cd98224ba53b124b289f783faf463a55f5a7e6785b2127cbcc2",
+      "unique_source_rows": 128,
+      "selection": "flowsteer_public_eval_128",
+      "source_url": "https://huggingface.co/datasets/beita6969/FlowSteer-Dataset/resolve/main/eval/hotpotqa.jsonl",
+      "canonical_path": "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl",
+      "source_sha256": "55a74378c02a8fc3d40fa6bbcd967447f10b6021d3a39c707c14e3b5d265f25a"
     },
     "alfworld": {
       "path": "data/formal/eval/alfworld_official_test.jsonl",

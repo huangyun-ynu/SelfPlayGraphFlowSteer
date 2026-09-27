@@ -107,6 +107,13 @@ def benchmark_summary(rows, dataset):
         "aggregation": "equal_source_weight_after_averaging_repeated_rollouts",
         "ci_method": "source_bootstrap_percentile_1000_seed_20260915",
         "planned_slots": len(rows),
+        "submitted_slots": sum(row.get("submission_status") == "submitted" for row in rows),
+        "policy_failure_slots": sum(bool(row.get("policy_failure_zero")) for row in rows),
+        "submission_rate": (sum(row.get("submission_status") == "submitted" for row in rows)
+                            / len(rows) if rows else None),
+        "successful_submission_rate_all": (
+            sum(row.get("submission_status") == "submitted" and row.get("task_outcome_passed") is True
+                for row in rows) / len(rows) if rows else None),
         "recorded_slots": sum(bool(row.get("recorded")) for row in rows),
         "unscored_slots": sum(not row.get("reward_known") for row in rows),
         "metrics": metrics,

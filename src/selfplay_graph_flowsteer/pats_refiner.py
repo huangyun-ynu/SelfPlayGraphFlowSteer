@@ -57,9 +57,9 @@ def review_system_prompt(config, mode):
         "each other field to one or two short sentences. Return an empty operations list "
         "if the evidence does not justify an edit.\n"
         "Runtime contract (reference specification for the Director, not your output protocol):\n"
-        + runtime_contract()
+        + runtime_contract(config.director_prompt_variant)
         + "\nDirector design guidance (preferences within the API, not extra legality requirements):\n"
-        + director_design_reference()
+        + director_design_reference(config.director_prompt_variant)
         + "\nPreserve conditional API prerequisites in each card; do not turn a rejection "
         "of one configured Agent's action into a rule for all Agents or lifecycle states. "
         "An independent interface checker will reject incompatible proposals.\nCurrent review objective: "

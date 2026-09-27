@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -22,6 +25,10 @@ from urllib.request import Request, urlopen
 
 from .contracts import CodeArtifactRef
 from .observability import TaskSpec, VerificationResult
+from .swe_paths import normalize_swe_directory_path
+from .swe_public_tests import (
+    PUBLIC_TEST_PROFILES, PublicTestError, environment_status, resolve_target, run_public_test,
+)
 
 SWE_ACTION_NAMES = (
     "swe_list",
@@ -127,6 +134,25 @@ def _validate_identity(instance_id: str, repo: str, base_commit: str) -> None:
         raise ValueError(f"invalid SWE repo: {repo!r}")
     if not _COMMIT_RE.fullmatch(base_commit):
         raise ValueError(f"invalid SWE base_commit: {base_commit!r}")
+
+
+@contextmanager
+def _git_safe_environment(*paths: Path):
+    """Exact per-call trust for runtime-owned repos on root-squashed mounts.
+
+    Older Git ignores safe.directory from command-only config. Keep the
+    global-scope exception in a private temporary file, never the user's config.
+    """
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix="spgfs-git-safe-", suffix=".config") as handle:
+        handle.write("[safe]\n")
+        for path in paths:
+            handle.write(f"\tdirectory = {json.dumps(str(path.resolve()))}\n")
+            # Local clone's upload-pack identifies non-bare sources by .git.
+            git_dir = path / ".git"
+            if git_dir.is_dir() and not git_dir.is_symlink():
+                handle.write(f"\tdirectory = {json.dumps(str(git_dir.resolve()))}\n")
+        handle.flush()
+        yield {"GIT_CONFIG_GLOBAL": handle.name}
 
 
 class TencentCVMError(RuntimeError):
@@ -242,6 +268,19 @@ class TencentCVMClient:
         state = str(instances[0].get("InstanceState", "")).strip().casefold()
         return state
 
+    def public_ip(self) -> str:
+        response = self._request("DescribeInstances", {"InstanceIds": [self.instance_id]})
+        instances = response.get("InstanceSet") or []
+        if not instances:
+            raise TencentCVMError("DescribeInstances returned no matching instance")
+        addresses = instances[0].get("PublicIpAddresses") or []
+        if not addresses:
+            raise TencentCVMError("SWE CVM has no public IPv4 address")
+        try:
+            return str(ipaddress.IPv4Address(addresses[0]))
+        except (ipaddress.AddressValueError, TypeError) as exc:
+            raise TencentCVMError("SWE CVM returned an invalid public IPv4 address") from exc
+
     def wait_for(self, expected: str, *, timeout_s: float, poll_s: float) -> None:
         deadline = time.monotonic() + timeout_s
         expected = expected.casefold()
@@ -267,14 +306,26 @@ class TencentCVMClient:
 
     def stop(self, *, timeout_s: float, poll_s: float) -> None:
         state = self.state()
-        if state == "stopped":
-            return
-        if state not in {"running", "starting"}:
+        if state not in {"running", "starting", "stopping", "stopped"}:
             raise TencentCVMError(f"cannot stop CVM from state {state or 'unknown'}")
         if state == "starting":
             self.wait_for("running", timeout_s=timeout_s, poll_s=poll_s)
-        self._request("StopInstances", {"InstanceIds": [self.instance_id]})
-        self.wait_for("stopped", timeout_s=timeout_s, poll_s=poll_s)
+        if state in {"running", "starting"}:
+            self._request(
+                "StopInstances",
+                {
+                    "InstanceIds": [self.instance_id],
+                    "StopType": "SOFT",
+                    "StoppedMode": "STOP_CHARGING",
+                },
+            )
+        if state != "stopped":
+            self.wait_for("stopped", timeout_s=timeout_s, poll_s=poll_s)
+        response = self._request("DescribeInstances", {"InstanceIds": [self.instance_id]})
+        instances = response.get("InstanceSet") or []
+        mode = str(instances[0].get("StopChargingMode", "") if instances else "")
+        if mode != "STOP_CHARGING":
+            raise TencentCVMError(f"SWE CVM stopped without STOP_CHARGING: {mode or 'unknown'}")
 
 
 class TencentCVMLease:
@@ -301,20 +352,27 @@ class TencentCVMLease:
             if self._users == 0:
                 before = self.client.state()
                 if before != "running":
-                    self.client.start(timeout_s=self.timeout_s, poll_s=self.poll_s)
-                self._started_by_us = before != "running"
+                    # A timed-out StartInstances may still have started the VM.
+                    # Retain ownership until a confirmed stop, including retries.
+                    self._started_by_us = True
+                    try:
+                        self.client.start(timeout_s=self.timeout_s, poll_s=self.poll_s)
+                    except BaseException:
+                        if self.stop_when_idle:
+                            self._stop_owned_idle()
+                        raise
             self._users += 1
 
     def release(self) -> None:
         with self._lock:
-            if self._users <= 0:
-                return
-            self._users -= 1
-            if self._users == 0 and self._started_by_us and self.stop_when_idle:
-                try:
-                    self.client.stop(timeout_s=self.timeout_s, poll_s=self.poll_s)
-                finally:
-                    self._started_by_us = False
+            if self._users > 0:
+                self._users -= 1
+            self._stop_owned_idle()
+
+    def _stop_owned_idle(self) -> None:
+        if self._users == 0 and self._started_by_us and self.stop_when_idle:
+            self.client.stop(timeout_s=self.timeout_s, poll_s=self.poll_s)
+            self._started_by_us = False
 
 
 def shared_tencent_cvm_lease(
@@ -553,7 +611,9 @@ def swe_task_is_training_split(metadata: dict[str, Any]) -> bool:
 
 
 def safe_repo_path(value: object) -> PurePosixPath:
-    raw = str(value).strip().replace("\\", "/")
+    if not isinstance(value, str) or not value.strip() or "\x00" in value:
+        raise SWEActionError("invalid_path", "path must be a non-empty repository-relative string")
+    raw = value.strip().replace("\\", "/")
     if raw == ".":
         return PurePosixPath(".")
     path = PurePosixPath(raw)
@@ -734,11 +794,19 @@ class SSHSWEHarnessBackend:
             "patch_b64": base64.b64encode(patch).decode("ascii"),
         }
         lease_acquired = False
+        verifier_host = self.host
         if self.server_lease is not None:
             try:
                 self.server_lease.acquire()
                 lease_acquired = True
+                verifier_host = self.server_lease.client.public_ip()
+                self._wait_for_ssh_ready(verifier_host)
             except (TencentCVMError, ValueError) as exc:
+                if lease_acquired:
+                    try:
+                        self.server_lease.release()
+                    except TencentCVMError:
+                        pass
                 result = self._infrastructure_result(
                     f"cvm_control_error:{type(exc).__name__}"
                 )
@@ -764,8 +832,10 @@ class SSHSWEHarnessBackend:
             "ServerAliveInterval=15",
             "-o",
             "ServerAliveCountMax=4",
-            f"{self.user}@{self.host}",
         ]
+        if self.server_lease is not None:
+            command.extend(("-o", f"HostKeyAlias={self.host}"))
+        command.append(f"{self.user}@{verifier_host}")
         try:
             try:
                 completed = subprocess.run(
@@ -803,6 +873,19 @@ class SSHSWEHarnessBackend:
         finally:
             if lease_acquired:
                 self.server_lease.release()
+
+    def _wait_for_ssh_ready(self, host: str) -> None:
+        deadline = time.monotonic() + min(120.0, self.server_lease.timeout_s)
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection((host, 22), timeout=5) as connection:
+                    connection.settimeout(5)
+                    if connection.recv(64).startswith(b"SSH-2.0-"):
+                        return
+            except OSError:
+                pass
+            time.sleep(2)
+        raise TencentCVMError("SWE CVM is running but SSH did not become ready")
 
     def _validated_response(self, request: dict[str, Any], response: object) -> dict[str, Any]:
         if not isinstance(response, dict) or set(response) != self._RESPONSE_KEYS:
@@ -926,11 +1009,10 @@ class SSHSWEHarnessBackend:
 
 
 class SWEWorkspaceLifecycle:
-    """Offline lifecycle with the production isolation contract.
+    """Isolated local workspaces and public development tests.
 
-    This implementation is deliberately local-only and never downloads a
-    repository. Production SWE execution must replace it with the official
-    instance-image backend, while preserving this lifecycle contract.
+    Trusted missing commits may be fetched into the repository cache. Official
+    scoring remains the responsibility of the separately configured harness.
     """
 
     def __init__(
@@ -941,9 +1023,12 @@ class SWEWorkspaceLifecycle:
         artifact_store: CodeArtifactStore,
         log_path: str | Path | None = None,
         test_profiles: dict[str, tuple[str, ...]] | None = None,
+        public_test_environment_root: str | Path | None = None,
+        public_test_setup_timeout_s: float = 300.0,
         test_timeout_s: float = 60.0,
         max_output_chars: int = 12_000,
         max_file_chars: int = 200_000,
+        max_file_bytes: int = 10 * 1024 * 1024,
         harness_backend: SWEHarnessBackend | None = None,
         verifier_registry: TrustedSWEVerifierRegistry | None = None,
     ) -> None:
@@ -953,15 +1038,29 @@ class SWEWorkspaceLifecycle:
         self.artifact_store = artifact_store
         self.log_path = Path(log_path).resolve() if log_path is not None else None
         self.test_profiles = dict(test_profiles or {})
+        self.public_test_environment_root = (
+            Path(public_test_environment_root).resolve()
+            if public_test_environment_root is not None else None
+        )
+        self.public_test_setup_timeout_s = float(public_test_setup_timeout_s)
+        if self.public_test_environment_root is not None and set(self.test_profiles) & set(PUBLIC_TEST_PROFILES):
+            raise ValueError("public_tests and public_smoke are reserved built-in profiles")
         self.test_timeout_s = float(test_timeout_s)
         self.max_output_chars = int(max_output_chars)
         self.max_file_chars = int(max_file_chars)
+        # Bound edit payloads separately from the size of existing source files.
+        self.max_file_bytes = int(max_file_bytes)
+        if min(self.max_output_chars, self.max_file_chars, self.max_file_bytes) <= 0:
+            raise ValueError("SWE file and output limits must be positive")
         self.harness_backend = harness_backend
         self.verifier_registry = verifier_registry
         self._binding: TrustedSWETaskBinding | None = None
         self._active: _WorkspaceAttempt | None = None
         self._results: dict[str, dict[str, Any]] = {}
         self._visible_artifacts: dict[str, CodeArtifactRef] = {}
+        # Task-scoped recovery references survive failed attempts and node
+        # deletion. They never stand in for a current tested Worker result.
+        self._recovery_candidates: dict[str, dict[str, Any]] = {}
         self._attempt_counter = 0
         self.created_workspace_count = 0
         self.cleaned_workspace_count = 0
@@ -1001,6 +1100,11 @@ class SWEWorkspaceLifecycle:
             private = self.verifier_registry.resolve(public)
         if bool(task.metadata.get("reward_capable", False)) and private is None:
             raise ValueError("reward-capable SWE task is absent from trusted verifier registry")
+        if self._active is not None:
+            raise RuntimeError("Cannot bind a new task during a SWE execution")
+        self._results.clear()
+        self._visible_artifacts.clear()
+        self._recovery_candidates.clear()
         self._binding = TrustedSWETaskBinding(public, private)
         # Reward capability is granted only after the trusted local registry
         # matches the public identity; a pool row cannot self-authorize it.
@@ -1011,6 +1115,10 @@ class SWEWorkspaceLifecycle:
 
     def set_visible_artifacts(self, refs: list[CodeArtifactRef]) -> None:
         self._visible_artifacts = {ref.artifact_sha256: ref for ref in refs}
+
+    def recoverable_code_artifacts(self) -> list[dict[str, Any]]:
+        # JSON copy keeps a consumer from changing runtime-owned references.
+        return json.loads(json.dumps(list(reversed(self._recovery_candidates.values()))))
 
     def begin_execution(self, *, agent_id: str, seed: int, revision: bool) -> dict[str, Any]:
         del seed
@@ -1062,7 +1170,11 @@ class SWEWorkspaceLifecycle:
         self._active = _WorkspaceAttempt(
             agent_id=agent_id,
             workspace=workspace,
-            visible_artifacts=dict(self._visible_artifacts),
+            visible_artifacts={
+                **self._visible_artifacts,
+                **{sha: CodeArtifactRef.from_dict(item["code_artifact_ref"])
+                   for sha, item in self._recovery_candidates.items()},
+            },
         )
         self._log(
             {
@@ -1111,6 +1223,14 @@ class SWEWorkspaceLifecycle:
                 result["code_artifact_ref"] = ref.to_dict()
                 result["patch_sha256"] = ref.artifact_sha256
                 result["changed_files"] = list(ref.changed_files)
+                self._recovery_candidates.pop(ref.artifact_sha256, None)
+                self._recovery_candidates[ref.artifact_sha256] = {
+                    "code_artifact_ref": ref.to_dict(),
+                    "source_agent_id": attempt.agent_id,
+                    "source_workspace_version": attempt.version,
+                    "requires_current_dependency_validation": True,
+                    "requires_post_restore_test": True,
+                }
         except Exception as exc:  # noqa: BLE001 - preserve cleanup and mark infra failure
             result.update(
                 {
@@ -1173,20 +1293,33 @@ class SWEWorkspaceLifecycle:
     def status(self) -> dict[str, Any]:
         attempt = self._require_active()
         public = self._require_binding().public
-        return {
+        result = {
             "status": "ok",
             "instance_id": public.instance_id,
             "repo": public.repo,
             "base_commit": public.base_commit,
             "workspace_version": attempt.version,
             "changed_files": list(self._changed_files(attempt.workspace)),
+            "recoverable_code_artifacts": self.recoverable_code_artifacts(),
         }
+        if self.public_test_environment_root is not None:
+            result["public_test_environment"] = environment_status(
+                self.public_test_environment_root, public.repo, public.version,
+            )
+        result["test_profiles"] = self.available_test_profiles
+        return result
+
+    @property
+    def available_test_profiles(self) -> list[str]:
+        return sorted(set(self.test_profiles) | (
+            set(PUBLIC_TEST_PROFILES) if self.public_test_environment_root is not None else set()
+        ))
 
     def list_files(
         self, path: object, *, workspace_version: object, max_entries: int
     ) -> dict[str, Any]:
         attempt = self._check_version(workspace_version)
-        relative, target = self._resolve_path(path, require_exists=True)
+        relative, target = self._resolve_path(normalize_swe_directory_path(path), require_exists=True)
         if not target.is_dir():
             raise SWEActionError("not_a_directory", f"{relative} is not a directory")
         entries = []
@@ -1210,56 +1343,95 @@ class SWEWorkspaceLifecycle:
         needle = str(query)
         if not needle or len(needle) > 500:
             raise SWEActionError("invalid_query", "query must contain 1..500 characters")
-        _, root = self._resolve_path(path, require_exists=True)
+        _, root = self._resolve_path(normalize_swe_directory_path(path), require_exists=True)
         candidates = [root] if root.is_file() else root.rglob("*")
         results: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
+        skipped_count = 0
+        output_chars = 0
+        truncated = False
         for candidate in candidates:
-            if len(results) >= max_results:
+            if truncated:
                 break
             if not candidate.is_file() or ".git" in candidate.parts:
                 continue
             try:
-                if candidate.stat().st_size > self.max_file_chars:
-                    continue
-                lines = candidate.read_text(encoding="utf-8").splitlines()
-            except (OSError, UnicodeDecodeError):
-                continue
-            for line_number, line in enumerate(lines, start=1):
-                if needle in line:
-                    results.append(
-                        {
-                            "path": candidate.relative_to(attempt.workspace).as_posix(),
-                            "line": line_number,
-                            "text": line[:500],
-                        }
-                    )
-                    if len(results) >= max_results:
-                        break
-        return self._ok(attempt, matches=results, truncated=len(results) >= max_results)
+                relative = candidate.relative_to(attempt.workspace).as_posix()
+                # Directory searches must apply the same symlink checks as reads.
+                _, candidate = self._resolve_path(relative, require_exists=True)
+                self._check_source_file(candidate)
+                with candidate.open(encoding="utf-8") as handle:
+                    for line_number, line in enumerate(handle, start=1):
+                        if needle not in line:
+                            continue
+                        match = {"path": relative, "line": line_number,
+                                 "text": line.rstrip("\r\n")[:500]}
+                        size = len(json.dumps(match, ensure_ascii=False))
+                        if output_chars + size > self.max_output_chars:
+                            truncated = True
+                            break
+                        results.append(match)
+                        output_chars += size
+                        if len(results) >= max_results:
+                            truncated = True
+                            break
+            except (SWEActionError, OSError, UnicodeDecodeError) as exc:
+                skipped_count += 1
+                if len(skipped) < 10:
+                    skipped.append({"path": candidate.relative_to(attempt.workspace).as_posix(),
+                                    "code": exc.code if isinstance(exc, SWEActionError) else
+                                    ("binary_file" if isinstance(exc, UnicodeDecodeError) else "file_not_readable"),
+                                    "details": exc.details if isinstance(exc, SWEActionError) else {}})
+        return self._ok(attempt, matches=results, truncated=truncated,
+                        skipped_count=skipped_count, skipped_files=skipped)
+
+    def _check_source_file(self, target: Path) -> None:
+        if not target.is_file():
+            raise SWEActionError("file_not_readable", "path is not a regular file")
+        size = target.stat().st_size
+        if size > self.max_file_bytes:
+            raise SWEActionError("file_too_large", "source file exceeds the processing limit",
+                                 details={"size_bytes": size, "max_file_bytes": self.max_file_bytes})
+
+    @staticmethod
+    def _file_sha256(target: Path) -> str:
+        digest = hashlib.sha256()
+        with target.open("rb") as handle:
+            for block in iter(lambda: handle.read(65536), b""):
+                digest.update(block)
+        return digest.hexdigest()
 
     def read_file(
         self, path: object, *, workspace_version: object, start_line: int, end_line: int
     ) -> dict[str, Any]:
         attempt = self._check_version(workspace_version)
         relative, target = self._resolve_path(path, require_exists=True)
-        if not target.is_file() or target.stat().st_size > self.max_file_chars:
-            raise SWEActionError("file_not_readable", "file is absent, non-regular, or too large")
+        self._check_source_file(target)
+        start, requested_end = max(1, int(start_line)), int(end_line)
+        if requested_end < start or requested_end - start > 400:
+            raise SWEActionError("invalid_line_range", "read range must contain at most 401 lines")
+        lines: list[str] = []
+        end = 0
         try:
-            lines = target.read_text(encoding="utf-8").splitlines()
+            with target.open(encoding="utf-8") as handle:
+                for number, line in enumerate(handle, start=1):
+                    end = number
+                    if number >= start:
+                        lines.append(line.rstrip("\r\n"))
+                    if number >= requested_end:
+                        break
         except UnicodeDecodeError as exc:
             raise SWEActionError("binary_file", "binary files cannot be read") from exc
-        start = max(1, int(start_line))
-        end = min(len(lines), int(end_line))
-        if end < start or end - start > 400:
-            raise SWEActionError("invalid_line_range", "read range must contain at most 401 lines")
-        content = "\n".join(lines[start - 1 : end])
+        if end < start:
+            raise SWEActionError("invalid_line_range", "start_line is beyond the end of the file")
+        content = "\n".join(lines)
         return self._ok(
             attempt,
             path=str(relative),
             start_line=start,
             end_line=end,
             content=content[: self.max_output_chars],
-            file_sha256=hashlib.sha256(target.read_bytes()).hexdigest(),
+            file_sha256=self._file_sha256(target),
             truncated=len(content) > self.max_output_chars,
         )
 
@@ -1273,7 +1445,8 @@ class SWEWorkspaceLifecycle:
             raise SWEActionError("protected_path", "tests and evaluator files are read-only")
         expected_sha = str(arguments.get("expected_sha256", "")).strip()
         if operation in {"replace", "delete"}:
-            actual_sha = hashlib.sha256(target.read_bytes()).hexdigest()
+            self._check_source_file(target)
+            actual_sha = self._file_sha256(target)
             if expected_sha != actual_sha:
                 raise SWEActionError(
                     "stale_file_sha",
@@ -1287,12 +1460,16 @@ class SWEWorkspaceLifecycle:
                 raise SWEActionError("invalid_edit", "replace requires non-empty old_content")
             if not isinstance(new, str):
                 raise SWEActionError("invalid_edit", "replace requires string new_content")
+            if max(len(old), len(new)) > self.max_file_chars:
+                raise SWEActionError("invalid_edit", "replacement text exceeds the edit payload limit")
             content = target.read_text(encoding="utf-8")
             if content.count(old) != 1:
                 raise SWEActionError("ambiguous_edit", "old_content must match exactly once")
             updated = content.replace(old, new, 1)
-            if len(updated) > self.max_file_chars:
-                raise SWEActionError("file_too_large", "edited file exceeds the size limit")
+            if len(updated.encode("utf-8")) > self.max_file_bytes:
+                raise SWEActionError("file_too_large", "edited file exceeds the processing limit",
+                                     details={"size_bytes": len(updated.encode("utf-8")),
+                                              "max_file_bytes": self.max_file_bytes})
             target.write_text(updated, encoding="utf-8")
         elif operation == "create":
             if target.exists():
@@ -1300,6 +1477,10 @@ class SWEWorkspaceLifecycle:
             content = arguments.get("new_content")
             if not isinstance(content, str) or len(content) > self.max_file_chars:
                 raise SWEActionError("invalid_edit", "create requires bounded string new_content")
+            if len(content.encode("utf-8")) > self.max_file_bytes:
+                raise SWEActionError("file_too_large", "new file exceeds the processing limit",
+                                     details={"size_bytes": len(content.encode("utf-8")),
+                                              "max_file_bytes": self.max_file_bytes})
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
         elif operation == "delete":
@@ -1338,12 +1519,14 @@ class SWEWorkspaceLifecycle:
                 "artifact_binding_mismatch", "artifact belongs to another task or base commit"
             )
         patch = self.artifact_store.read(ref)
-        completed = self._run_process(
-            ["git", "apply", "--index", "--whitespace=nowarn", "-"],
-            cwd=attempt.workspace,
-            timeout_s=20.0,
-            input_bytes=patch,
-        )
+        with _git_safe_environment(attempt.workspace) as git_environment:
+            completed = self._run_process(
+                ["git", "apply", "--index", "--whitespace=nowarn", "-"],
+                cwd=attempt.workspace,
+                timeout_s=20.0,
+                input_bytes=patch,
+                environment_overrides=git_environment,
+            )
         if completed[0] != 0:
             self._run_git(["reset", "--quiet"], cwd=attempt.workspace, timeout_s=10.0)
             raise SWEActionError(
@@ -1364,13 +1547,34 @@ class SWEWorkspaceLifecycle:
     def test(self, profile: object, target: object, *, workspace_version: object) -> dict[str, Any]:
         attempt = self._check_version(workspace_version)
         profile_name = str(profile).strip()
+        if profile_name in PUBLIC_TEST_PROFILES and self.public_test_environment_root is not None:
+            public = self._require_binding().public
+            try:
+                selected = resolve_target(attempt.workspace, public.repo, public.version, profile_name, target)
+                result = run_public_test(
+                    root=self.public_test_environment_root, repo=public.repo, version=public.version,
+                    workspace=attempt.workspace, target=selected, run_process=self._run_process,
+                    timeout=self.test_timeout_s, setup_timeout=self.public_test_setup_timeout_s,
+                )
+            except PublicTestError as exc:
+                raise SWEActionError(exc.code, str(exc)) from exc
+            result["truncated"] = any(len(result[k]) > self.max_output_chars for k in ("stdout", "stderr"))
+            for key in ("stdout", "stderr"):
+                result[key] = result[key][:self.max_output_chars]
+            return self._ok(attempt, profile=profile_name, target=selected,
+                            status="ok" if result["test_executed"] else "error",
+                            test_kind="public_tests",
+                            test_passed=(result["returncode"] == 0 and not result["timed_out"])
+                            if result["test_executed"] else None, **result)
         command = self.test_profiles.get(profile_name)
         if command is None:
             raise SWEActionError(
                 "test_profile_not_allowed",
                 "select a runtime-configured test profile",
-                details={"allowed_profiles": sorted(self.test_profiles)},
+                details={"allowed_profiles": self.available_test_profiles},
             )
+        if tuple(command[1:]) == ("-m", "py_compile"):
+            return self._test_python_syntax(attempt, profile_name, target, command[0])
         resolved_command = list(command)
         if target not in (None, ""):
             relative, _ = self._resolve_path(target, require_exists=True)
@@ -1386,9 +1590,62 @@ class SWEWorkspaceLifecycle:
             target=str(target or ""),
             returncode=returncode,
             timed_out=timed_out,
+            test_executed=True,
             stdout=stdout[: self.max_output_chars],
             stderr=stderr[: self.max_output_chars],
             truncated=len(stdout) > self.max_output_chars or len(stderr) > self.max_output_chars,
+        )
+
+    def _test_python_syntax(
+        self, attempt: _WorkspaceAttempt, profile: str, target: object, python: str,
+    ) -> dict[str, Any]:
+        if target in (None, ""):
+            paths = [path for path in self._changed_files(attempt.workspace)
+                     if path.endswith(".py") and (attempt.workspace / path).exists()]
+        else:
+            paths = [target]
+        targets = []
+        for path in paths:
+            relative, source = self._resolve_path(path, require_exists=True)
+            if relative.suffix != ".py":
+                raise SWEActionError("invalid_test_target", "python_syntax requires Python source files")
+            self._check_source_file(source)
+            targets.append("./" + relative.as_posix())
+        if not targets:
+            raise SWEActionError("test_target_required",
+                                 "Specify a Python file or first modify an existing/new Python file")
+        if self.public_test_environment_root is not None:
+            public = self._require_binding().public
+            status = environment_status(self.public_test_environment_root, public.repo, public.version)
+            if status["ready"]:
+                from .swe_public_recipes import environment_key
+                python = str(self.public_test_environment_root /
+                             environment_key(public.repo, public.version) / "venv/bin/python")
+        try:
+            returncode, stdout, stderr, timed_out = self._run_process(
+                [python, str(Path(__file__).with_name("_swe_syntax_probe.py")), *targets],
+                cwd=attempt.workspace, timeout_s=self.test_timeout_s,
+            )
+        except OSError as exc:
+            raise SWEActionError("test_environment_setup_failed",
+                                 "Could not start the syntax checker", details={"message": str(exc)}) from exc
+        try:
+            evidence = json.loads(stdout)
+        except ValueError:
+            evidence = {}
+        if not isinstance(evidence, dict):
+            evidence = {}
+        executed = (not timed_out and evidence.get("execution_evidence") == "syntax_probe_v1"
+                    and evidence.get("complete") is True and evidence.get("files_checked") == targets)
+        return self._ok(
+            attempt, status="ok" if executed else "error", profile=profile, target=str(target or ""),
+            targets=targets, test_kind="syntax", returncode=returncode, timed_out=timed_out,
+            test_executed=executed, test_passed=(returncode == 0) if executed else None,
+            execution_evidence=evidence.get("execution_evidence"),
+            files_checked=evidence.get("files_checked", []), complete=executed,
+            stdout=stdout[:self.max_output_chars], stderr=stderr[:self.max_output_chars],
+            truncated=len(stdout) > self.max_output_chars or len(stderr) > self.max_output_chars,
+            **({} if executed else {"error": {"code": "syntax_check_not_executed"}}),
         )
 
     def _ok(self, attempt: _WorkspaceAttempt, **payload: Any) -> dict[str, Any]:
@@ -1432,23 +1689,25 @@ class SWEWorkspaceLifecycle:
             canonical_commit = self._resolve_cached_commit(source, commit)
             if canonical_commit:
                 return canonical_commit
-            completed = subprocess.run(
-                [
-                    "git",
-                    "-c",
-                    f"safe.directory={source}",
-                    "-C",
-                    str(source),
-                    "fetch",
-                    "--no-tags",
-                    "origin",
-                    commit,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120.0,
-                check=False,
-            )
+            with _git_safe_environment(source) as git_environment:
+                completed = subprocess.run(
+                    [
+                        "git",
+                        "-c",
+                        f"safe.directory={source}",
+                        "-C",
+                        str(source),
+                        "fetch",
+                        "--no-tags",
+                        "origin",
+                        commit,
+                    ],
+                    env={**os.environ, **git_environment},
+                    capture_output=True,
+                    text=True,
+                    timeout=120.0,
+                    check=False,
+                )
             canonical_commit = self._resolve_cached_commit(source, commit)
             if completed.returncode == 0 and canonical_commit:
                 return canonical_commit
@@ -1459,22 +1718,24 @@ class SWEWorkspaceLifecycle:
 
     @staticmethod
     def _resolve_cached_commit(source: Path, commit: str) -> str:
-        completed = subprocess.run(
-            [
-                "git",
-                "-c",
-                f"safe.directory={source}",
-                "-C",
-                str(source),
-                "rev-parse",
-                "--verify",
-                f"{commit}^{{commit}}",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10.0,
-            check=False,
-        )
+        with _git_safe_environment(source) as git_environment:
+            completed = subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    f"safe.directory={source}",
+                    "-C",
+                    str(source),
+                    "rev-parse",
+                    "--verify",
+                    f"{commit}^{{commit}}",
+                ],
+                env={**os.environ, **git_environment},
+                capture_output=True,
+                text=True,
+                timeout=10.0,
+                check=False,
+            )
         canonical_commit = completed.stdout.strip()
         return canonical_commit if completed.returncode == 0 and canonical_commit else ""
 
@@ -1491,11 +1752,12 @@ class SWEWorkspaceLifecycle:
         not guaranteed to be copied.  The full object id makes the operation
         idempotent and prevents two cached commits from sharing a ref.
         """
-        self._run_git(
-            ["update-ref", f"refs/heads/spgfs-cache-{commit}", commit],
-            cwd=source,
-            timeout_s=10.0,
-        )
+        with self._cache_fetch_lock(source):
+            self._run_git(
+                ["update-ref", f"refs/heads/spgfs-cache-{commit}", commit],
+                cwd=source,
+                timeout_s=10.0,
+            )
 
     def _resolve_path(self, value: object, *, require_exists: bool) -> tuple[PurePosixPath, Path]:
         attempt = self._require_active()
@@ -1581,48 +1843,24 @@ class SWEWorkspaceLifecycle:
         timeout_s: float,
         safe_directories: tuple[Path, ...] = (),
     ) -> None:
-        trusted_paths = (cwd.resolve(), *(path.resolve() for path in safe_directories))
-        git_environment = {
-            "GIT_CONFIG_COUNT": "1",
-            "GIT_CONFIG_KEY_0": "safe.directory",
-            "GIT_CONFIG_VALUE_0": str(trusted_paths[0]),
-        }
-        temporary_global_config: Path | None = None
-        if safe_directories:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                prefix="spgfs-git-safe-",
-                suffix=".config",
-                dir=self.workspace_root,
-                delete=False,
-            ) as handle:
-                handle.write("[safe]\n")
-                for path in trusted_paths:
-                    handle.write(f"\tdirectory = {json.dumps(str(path))}\n")
-                temporary_global_config = Path(handle.name)
-            git_environment["GIT_CONFIG_GLOBAL"] = str(temporary_global_config)
-        try:
+        with _git_safe_environment(cwd, *safe_directories) as git_environment:
             returncode, _stdout, stderr, timed_out = self._run_process(
-                ["git", *arguments],
-                cwd=cwd,
-                timeout_s=timeout_s,
+                ["git", *arguments], cwd=cwd, timeout_s=timeout_s,
                 environment_overrides=git_environment,
             )
-        finally:
-            if temporary_global_config is not None:
-                temporary_global_config.unlink(missing_ok=True)
         if timed_out or returncode != 0:
             raise RuntimeError(f"git operation failed: {stderr[:1000]}")
 
     def _git_bytes(self, arguments: list[str], cwd: Path) -> bytes:
-        completed = subprocess.run(
-            ["git", "-c", f"safe.directory={cwd.resolve()}", *arguments],
-            cwd=cwd,
-            capture_output=True,
-            timeout=20.0,
-            check=False,
-        )
+        with _git_safe_environment(cwd) as git_environment:
+            completed = subprocess.run(
+                ["git", "-c", f"safe.directory={cwd.resolve()}", *arguments],
+                cwd=cwd,
+                env={**os.environ, **git_environment},
+                capture_output=True,
+                timeout=20.0,
+                check=False,
+            )
         if completed.returncode != 0:
             raise RuntimeError(completed.stderr.decode("utf-8", errors="replace")[:1000])
         return completed.stdout
@@ -1693,12 +1931,13 @@ class _SWEToolBase:
 class SWEListTool(_SWEToolBase):
     name: str = "swe_list"
     description: str = (
-        "List one repository directory in the current isolated workspace. Repeating the same "
+        "List one repository directory; use '.' for root (empty string is an alias). Repeating the same "
         "path at an unchanged workspace_version yields no new evidence and is rejected."
     )
     parameters: dict[str, Any] = field(
         default_factory=lambda: _schema(
-            {"path": {"type": "string"}, "workspace_version": {"type": "integer", "minimum": 0}},
+            {"path": {"type": "string", "description": "Repository-relative directory; '.' or '' means root."},
+             "workspace_version": {"type": "integer", "minimum": 0}},
             ("path", "workspace_version"),
         )
     )
@@ -1715,14 +1954,14 @@ class SWEListTool(_SWEToolBase):
 class SWESearchTool(_SWEToolBase):
     name: str = "swe_search"
     description: str = (
-        "Search literal source text under one repository-relative path. Use a new query or path "
+        "Search literal source text under one repository-relative path; '.' or '' means root. Use a new query or path "
         "to advance localization; identical searches at one workspace_version are rejected."
     )
     parameters: dict[str, Any] = field(
         default_factory=lambda: _schema(
             {
                 "query": {"type": "string", "minLength": 1, "maxLength": 500},
-                "path": {"type": "string"},
+                "path": {"type": "string", "description": "Repository-relative path; '.' or '' means root."},
                 "workspace_version": {"type": "integer", "minimum": 0},
             },
             ("query", "path", "workspace_version"),
@@ -1744,7 +1983,7 @@ class SWESearchTool(_SWEToolBase):
 class SWEReadTool(_SWEToolBase):
     name: str = "swe_read"
     description: str = (
-        "Read a bounded line range and return its SHA-256 for guarded editing. Use the returned "
+        "Read at most 401 lines (output may be truncated) and return the full file SHA-256. Use the returned "
         "file_sha256 as expected_sha256 for replace/delete; identical reads are rejected until "
         "the workspace version changes."
     )
@@ -1827,15 +2066,25 @@ class SWETestTool(_SWEToolBase):
 
     @property
     def description(self) -> str:
-        profiles = ", ".join(sorted(self.lifecycle.test_profiles)) or "none"
-        return (
+        profiles = ", ".join(self.lifecycle.available_test_profiles) or "none"
+        description = (
             "Run one runtime-configured test profile after a workspace change; raw commands "
             f"and flags are forbidden. Available profiles: {profiles}."
+            " python_syntax checks the target .py file, or all changed existing .py files when target is omitted."
+            " Syntax evidence is separate from public functional test evidence."
         )
+        if self.lifecycle.public_test_environment_root is not None:
+            description += (
+                " public_tests runs a public test file/directory or pytest file::test identifier; "
+                "Django accepts tests/module.py or a dotted test label, SymPy a test path. "
+                "public_smoke runs a fixed public smoke suite (omit target). "
+                "python_syntax checks syntax only. Inspect public_test_environment in initial status."
+            )
+        return description
 
     @property
     def parameters(self) -> dict[str, Any]:
-        profiles = sorted(self.lifecycle.test_profiles)
+        profiles = self.lifecycle.available_test_profiles
         profile_schema: dict[str, Any] = {"type": "string"}
         if profiles:
             profile_schema["enum"] = profiles

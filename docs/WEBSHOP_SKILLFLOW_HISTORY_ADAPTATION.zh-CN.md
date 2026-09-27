@@ -1,4 +1,6 @@
-# WebShop：SkillFlow 完整交互历史适配
+# WebShop：SkillFlow 完整交互历史适配（历史记录，已移除）
+
+2026-09-27：根据用户要求，已从当前代码删除 `skillflow_history_v1` 模式、候选配置、启动脚本和专用审计脚本；当前只支持 `factual_memory_v1`。以下描述的是当时的实现与命令，不能作为当前使用说明。已完成实验的冻结源码、输入和结果保留，最新128题结果见 [完整历史复跑报告](../state/audits/webshop-engineering-20260927/online-history128-v2/REPORT.zh-CN.md)。
 
 实现参考本地 SkillFlow 提交 `74be52bb6bd9f0e9e68dacb72636b75649197983` 的
 `training/environment.py`：`_react_step` 将动作前的观察与动作追加到 `_react_history`，

@@ -50,12 +50,12 @@ max_rounds = 24
 relay_max_chars = 1000
 
 [canvas.max_total_tokens_by_dataset]
-aime = 65536
-nq_open = 65536
-hotpotqa = 65536
+aime = 240000
+nq_open = 240000
+hotpotqa = 240000
 webshop = 350000
 alfworld = 350000
-healthbench_professional = 65536
+healthbench_professional = 240000
 swe_bench = 350000
 
 [solver_skillbank]
@@ -93,10 +93,6 @@ mode = "auto"
 
 [answer_submission]
 enabled = true
-qa_model_enabled = true
-runtime_route = "gpt"
-max_tokens = 128
-require_source_span = true
 
 # Pure-local Python execution support for AIME Workers.
 [aime_actions]
@@ -173,8 +169,12 @@ cvm_timeout_s = 600.0
 cvm_poll_s = 5.0
 dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
 local_test_timeout_s = 60.0
+# Enables built-in public_tests and public_smoke; fixed argv profiles remain below.
+public_test_environment_root = "state/swe/public-test-envs"
+public_test_setup_timeout_s = 600.0
 max_output_chars = 12000
 max_file_chars = 200000
+max_file_bytes = 10485760
 max_patch_bytes = 2000000
 max_initial_calls = 20
 max_revision_calls = 12

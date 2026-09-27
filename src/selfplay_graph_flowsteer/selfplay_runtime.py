@@ -37,6 +37,7 @@ from .observability import (
     task_requires_reference,
     task_to_public_dict,
 )
+from .output_contract import OUTPUT_CONTRACT_VERSION
 from .proposer_learning import NORMALIZATION, freeze_proposer_baseline
 from .protocol_reward import (
     LEGACY_REWARD_VERSION,
@@ -466,37 +467,10 @@ def _rollout_sampling_seed(
     )
 
 
-def _outcome_task_reward(
-    dataset: str,
-    verification: Any,
-    *,
-    prediction: str,
-) -> tuple[float, dict[str, Any]]:
-    if verification is None:
-        return 0.0, {"source": "empty_or_missing_verification"}
-    dataset_key = canonical_dataset_name(dataset)
-    if dataset_key == "healthbench_professional":
-        try:
-            detail = json.loads(str(verification.detail or "{}"))
-            breakdown = dict(detail["training_reward_breakdown"])
-            reward = float(breakdown["training_reward"])
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ValueError(
-                "HealthBench verification lacks the versioned training reward breakdown"
-            ) from exc
-        if breakdown.get("version") != "healthbench_theoretical_bounds_length_v1":
-            raise ValueError("unexpected HealthBench training reward adapter version")
-        if not 0.0 <= reward <= 1.0:
-            raise ValueError("HealthBench training reward must be in [0, 1]")
-        return reward, {"source": "healthbench_training_adapter", **breakdown}
-    reward = float(verification.score)
-    if not 0.0 <= reward <= 1.0:
-        raise ValueError(f"trusted task outcome for {dataset_key or dataset!r} must be in [0, 1]")
-    if dataset_key in _BINARY_OUTCOME_DATASETS and reward not in {0.0, 1.0}:
-        raise ValueError(
-            f"trusted task outcome for binary dataset {dataset_key!r} must be exactly 0 or 1"
-        )
-    return reward, {"source": "trusted_verifier_outcome", "evaluation_score": reward}
+def _outcome_task_reward(dataset: str, verification: Any, *, prediction: str):
+    from .outcome_admission import task_reward_from_verification
+
+    return task_reward_from_verification(dataset, verification, prediction=prediction)
 
 
 _SCOPED_ROUTE_CIRCUIT_DATASETS = frozenset(
@@ -704,17 +678,6 @@ def _recovery_decision(
             RecoveryScope.FRESH_STATEFUL_SESSION,
             "stateful_environment_or_action_integrity_failure",
         )
-    if (
-        reasons
-        & {
-            "not_finished",
-            "invalid_final_graph",
-            "execution_incomplete",
-            "execution_budget_exceeded",
-        }
-        or failure_mode == "director_protocol_failure"
-    ):
-        return RecoveryDecision(RecoveryScope.FULL_PRIMARY, "director_protocol_failure")
     if dataset_key == "aime" and (
         "worker_artifact_integrity_failure" in reasons
         or failure_mode == "worker_artifact_integrity_failure"
@@ -727,6 +690,17 @@ def _recovery_decision(
             RecoveryScope.FULL_PRIMARY,
             "aime_selected_output_recovery_exhausted",
         )
+    if (
+        reasons
+        & {
+            "not_finished",
+            "invalid_final_graph",
+            "execution_incomplete",
+            "execution_budget_exceeded",
+        }
+        or failure_mode == "director_protocol_failure"
+    ):
+        return RecoveryDecision(RecoveryScope.FULL_PRIMARY, "director_protocol_failure")
     return RecoveryDecision(RecoveryScope.NONE, "dataset_terminal_contract_failed")
 
 
@@ -745,6 +719,20 @@ def _uncertain_failure_zero(rollout: SolverRollout, reason: str) -> SolverRollou
     Preserve trusted scores and all policy/training exclusions. A scored slot is
     not necessarily a trainable slot, and raw verification remains audit evidence.
     """
+    from .submission_contract import SUBMISSION_CONTRACT_VERSION, is_text_submission_dataset
+
+    metadata = rollout.trajectory.metadata
+    swe_failure = metadata.get("swe_failure_attribution") or {}
+    if (canonical_dataset_name(metadata.get("dataset", "")) == "swe_bench"
+            and swe_failure.get("source") == "swe_runtime_failure_evidence_v1"
+            and swe_failure.get("blocks_policy_failure")):
+        # An unresolved execution defect is not a scored model outcome, even
+        # when the caller enabled the legacy uncertain-failure-zero convention.
+        return rollout
+    if (metadata.get("submission_contract_version") in {SUBMISSION_CONTRACT_VERSION, "unified_submission_v1"}
+            and is_text_submission_dataset(metadata.get("dataset", ""))
+            and not metadata.get("reward_known")):
+        return rollout
     metadata = rollout.trajectory.metadata
     if metadata.get("reward_known") is True or any(
         metadata.get(key)
@@ -1445,6 +1433,31 @@ def adaptive_result_to_rollout(
     }
     swe_non_train_split = bool(is_swe_task and not swe_task_is_training_split(result.task.metadata))
     dataset_key = canonical_dataset_name(result.task.metadata.get("dataset", ""))
+    from .submission_contract import (
+        SUBMISSION_CONTRACT_VERSION,
+        OutcomeDecision,
+        is_text_submission_dataset,
+        receipt_error,
+    )
+
+    text_primary = is_text_submission_dataset(dataset_key)
+    unified_primary = result.task.metadata.get("submission_contract_version") == "unified_submission_v1"
+    submission_required = text_primary or unified_primary
+    outcome = result.solver_result.outcome_decision
+    runtime_outcome = isinstance(outcome, OutcomeDecision) and outcome.runtime_owned
+    receipt = run.submission_receipt
+    submission_error = (receipt_error(
+        receipt, run=run, events=result.solver_result.trace.events,
+        run_id=result.run_id, dataset=dataset_key,
+    ) if submission_required else None)
+    text_score_valid = bool(
+        submission_required and runtime_outcome and outcome.status == "scored"
+        and submission_error is None and outcome.receipt_ref == receipt.receipt_ref
+        and verification == outcome.verification
+    )
+    if submission_required and not text_score_valid:
+        # A caller cannot restore a candidate score by populating verification/metadata.
+        verification = None
     stateful_environment_result = (
         result.task.metadata.get("alfworld_environment_result", {})
         if dataset_key == "alfworld"
@@ -1460,7 +1473,7 @@ def adaptive_result_to_rollout(
         and stateful_environment_result.get("purchased") is True
         and stateful_environment_result.get("terminal") is True
     )
-    answer_score = float(verification.score) if verification else 0.0
+    answer_score = float(verification.score) if verification else None if text_primary else 0.0
     result_payload = result.to_dict()
     submission = result.solver_result.answer_submission
     submitted_output = submission.submitted_answer if submission else run.output
@@ -1471,10 +1484,12 @@ def adaptive_result_to_rollout(
         events=result.solver_result.trace.events,
         finished=run.finished,
         output=submitted_output,
-        answer_score=answer_score,
+        answer_score=answer_score if answer_score is not None else 0.0,
         submission_valid=(submission.valid if submission else bool(run.output.strip())),
         worker_backend_failure=bool(worker_backend_failure),
         environment_commit_complete=environment_commit_execution_complete,
+        submission_required=submission_required,
+        submission_receipt=(receipt.to_dict() if submission_required and submission_error is None else None),
     )
     answer_reward_released = protocol_reward.answer_reward_released
     reward_semantics = "outcome_only"
@@ -1607,6 +1622,7 @@ def adaptive_result_to_rollout(
             in {
                 "director_no_legal_continuation",
                 "director_no_progress_exhausted",
+                "director_action_protocol_exhausted",
             }
         ),
         None,
@@ -1625,6 +1641,10 @@ def adaptive_result_to_rollout(
         }
     )
     training_exclusion_reasons: list[str] = []
+    if result.task.metadata.get("output_contract_failure"):
+        training_exclusion_reasons.append("output_contract_failure")
+    if submission_required and submission_error:
+        training_exclusion_reasons.append(submission_error)
     if not run.turns or any(not turn.trainable for turn in run.turns):
         training_exclusion_reasons.append("director_policy_call_ineligible")
     if policy_encoding_error:
@@ -1712,6 +1732,8 @@ def adaptive_result_to_rollout(
         for artifact in worker_artifact_integrity.values()
         if isinstance(artifact, dict)
     )
+    if result.task.metadata.get("output_contract_failure"):
+        typed_policy_failure = None
     if unresolved_tool_failure:
         typed_policy_failure = None
         training_exclusion_reasons.append("tool_failure_attribution_unresolved")
@@ -1777,8 +1799,22 @@ def adaptive_result_to_rollout(
             "original_training_exclusion_reasons": list(training_exclusion_reasons),
         }
         trusted_result = False
-    # A completed official result wins over post-commit text/graph failure.
-    if trusted_result and not (
+    if submission_required:
+        # Only the solver's runtime-owned decision is authoritative for text primary runs.
+        # The old trusted_result/clearable_terminal_reasons shortcut is environment-only.
+        trusted_result = text_score_valid
+        typed_policy_failure = None
+        if (runtime_outcome and outcome.status == "policy_failure"
+                and isinstance(terminal, dict)
+                and terminal.get("source") == "runtime_terminal_ledger_v1"
+                and terminal.get("code") == outcome.reason
+                and not worker_backend_failure and not unresolved_tool_failure
+                and not result.task.metadata.get("output_contract_failure")):
+            typed_policy_failure = terminal
+        if runtime_outcome and outcome.status == "scoring_pending":
+            training_exclusion_reasons.append("scoring_pending")
+    # Only adapter-owned environment results can supersede post-commit graph failures.
+    if not submission_required and trusted_result and not (
         dataset_key == "alfworld" and typed_policy_failure and float(verification.score) == 0.0
     ):
         typed_policy_failure = None
@@ -1788,7 +1824,8 @@ def adaptive_result_to_rollout(
             if reason not in clearable_terminal_reasons
         ]
     elif (
-        isinstance(terminal, dict)
+        not text_primary
+        and isinstance(terminal, dict)
         and terminal.get("source") == "runtime_terminal_ledger_v1"
         and not worker_backend_failure
         and not swe_infrastructure_failure
@@ -1842,6 +1879,12 @@ def adaptive_result_to_rollout(
             "source": "training_ineligible",
             "reasons": list(training_exclusion_reasons),
         }
+    answer_reward_released = bool(trusted_result and typed_policy_failure is None)
+    if submission_required and runtime_outcome:
+        outcome = replace(
+            outcome, training_eligible=training_eligible,
+            training_exclusion_reasons=tuple(training_exclusion_reasons),
+        )
     last_safe_graph: dict[str, Any] = {}
     for event in canvas_events:
         payload = event.payload
@@ -1879,6 +1922,7 @@ def adaptive_result_to_rollout(
             executor_version="adaptive-v1",
             metadata={
                 "run_id": result.run_id,
+                "dataset": dataset_key,
                 "finished": run.finished,
                 "interactive_turns": len(run.turns),
                 "accepted_turns": sum(int(turn.accepted) for turn in run.turns),
@@ -1951,7 +1995,7 @@ def adaptive_result_to_rollout(
                 "answer_reward_released": answer_reward_released,
                 "director_reward": director_reward,
                 "base_director_reward": director_reward,
-                "task_reward": director_reward,
+                "task_reward": (director_reward if not text_primary or trusted_result or typed_policy_failure is not None else None),
                 "task_reward_breakdown": task_reward_breakdown,
                 "reward_semantics": reward_semantics,
                 "director_reward_version": OUTCOME_ONLY_REWARD_VERSION,
@@ -1965,11 +2009,21 @@ def adaptive_result_to_rollout(
                 "delegation_issues": list(protocol_reward.delegation_issues),
                 "skills_enabled": result.solver_result.trace.task.metadata.get("skills_enabled"),
                 "action_protocol": "director_model_v1",
+                "output_contract_version": OUTPUT_CONTRACT_VERSION,
+                "submission_contract_version": result.task.metadata.get("submission_contract_version", SUBMISSION_CONTRACT_VERSION),
+                "submission_receipt": receipt.to_dict() if receipt else None,
+                "submission_status": ("submitted" if (text_primary and submission_error is None) or (receipt and receipt.version == "unified_submission_v1")
+                                      else "unsubmitted" if submission_required else "adapter_owned"),
+                "outcome_decision": outcome.to_dict() if runtime_outcome else None,
+                "candidate_output": run.candidate_output,
+                "diagnostic_qa_metrics": result.task.metadata.get("diagnostic_qa_metrics"),
                 "environment_request_events": result.task.metadata.get(
                     "environment_request_events", []
                 ),
                 "deadline_accounting": result.task.metadata.get("deadline_accounting", {}),
                 "model_roles": result.task.metadata.get("model_roles", {}),
+                "output_contract_failure": result.task.metadata.get("output_contract_failure"),
+                "output_artifact_binding": result.task.metadata.get("output_artifact_binding"),
                 "canvas_prefixes": prefixes,
                 "action_token_spans": action_spans,
                 "relation_choice_token_spans": tuple(relation_choice_spans),
@@ -2019,7 +2073,8 @@ def adaptive_result_to_rollout(
                 "swe_non_train_split": swe_non_train_split,
                 "training_eligible": training_eligible,
                 "reward_known": trusted_result or typed_policy_failure is not None,
-                "task_outcome_passed": bool(trusted_result and verification.passed),
+                "task_outcome_passed": (bool(verification.passed) if trusted_result
+                                        else False if typed_policy_failure is not None else None),
                 "reward_admission_reason": (
                     "trusted_task_result"
                     if trusted_result
@@ -2030,6 +2085,7 @@ def adaptive_result_to_rollout(
                 "policy_data_exclusion_reasons": policy_data_exclusions,
                 "policy_encoding_error": policy_encoding_error,
                 "runtime_terminal_policy_failure": terminal,
+                "swe_failure_attribution": result.task.metadata.get("swe_failure_attribution"),
                 "bounded_director_terminal": bounded_director_terminal,
                 "training_exclusion_reasons": training_exclusion_reasons,
                 "typed_policy_failure": typed_policy_failure,
@@ -3831,6 +3887,7 @@ class SelfPlayRolloutRunner:
                     ) in {
                         "director_no_legal_continuation",
                         "director_no_progress_exhausted",
+                        "director_action_protocol_exhausted",
                     } and not any(
                         outcome.rollout.trajectory.metadata.get(key)
                         for key in (
@@ -5002,6 +5059,18 @@ class SelfPlayRolloutRunner:
         )
         if selection is not None:
             result = replace(result, tasks=tuple(p.task for p in proposals))
+        from .execution_contract import bind_rollout_contract
+
+        contract_rollouts = [
+            *eligible_rollouts, *(frontier_rollouts if self._independent_frontier else [])
+        ]
+        # Empty training batches still carry the execution contract of the
+        # collected run. This binds provenance without admitting excluded slots.
+        bound_proposer, bound_solver = bind_rollout_contract(
+            (result.proposer_batch, result.solver_batch),
+            contract_rollouts or list(rollouts_by_id.values()),
+        )
+        result = replace(result, proposer_batch=bound_proposer, solver_batch=bound_solver)
         self._persist_result(result)
         if selection is not None:
             selection["proposer_task_ids"] = [s.task_id for s in result.proposer_batch.samples]
@@ -5094,6 +5163,8 @@ class SelfPlayRolloutRunner:
         groups = group_rollouts_by_task(rollouts)
         candidates: list[tuple[str, str, float]] = []
         provisional: dict[str, float] = {}
+        from .execution_contract import manifest_semantics, require_same_semantics
+
         current_bundle = None
         if self.config.canary_exclude_migrated_frontier:
             application = self.application_factory(self.config.base_seed)
@@ -5106,6 +5177,13 @@ class SelfPlayRolloutRunner:
         excluded_frontiers: dict[str, Any] = {}
         for proposal in proposals:
             group = groups[proposal.task.task_id]
+            if any(item.trajectory.metadata.get("task_reward", item.trajectory.reward) is None
+                   for item in group):
+                excluded_frontiers[proposal.task.task_id] = {
+                    "reason": "unknown_primary_task_reward",
+                    "proposer_training_eligible": False,
+                }
+                continue
             rewards = [
                 float(item.trajectory.metadata.get("task_reward", item.trajectory.reward))
                 for item in group
@@ -5232,6 +5310,11 @@ class SelfPlayRolloutRunner:
             reverify_seed = _stable_execution_seed(
                 self.config.base_seed, task_id, phase="frontier_reverify"
             )
+            semantic_contract = manifest_semantics(group[0].trajectory.metadata.get("model_roles", {}))
+            for item in group:
+                require_same_semantics(semantic_contract, manifest_semantics(
+                    item.trajectory.metadata.get("model_roles", {})
+                ))
             bundle_signatures = {_rollout_executor_compatibility_signature(item) for item in group}
 
             if len(bundle_signatures) != 1:
@@ -5248,7 +5331,22 @@ class SelfPlayRolloutRunner:
                 for item in group
             ]
             existing_record = records.get(task_id)
+            if semantic_contract is not None and (
+                existing_record is not None
+                or any(key[0] == task_id for key in graph_partial_records)
+            ):
+                # Even a completed journal must match the live contract. Do
+                # this only for actual reuse; zero-Frontier groups require no
+                # extra application/session creation or Executor capability.
+                validation_application = self.application_factory(reverify_seed)
+                try:
+                    require_same_semantics(semantic_contract, manifest_semantics(
+                        validation_application.config.model_manifest()
+                    ))
+                finally:
+                    validation_application.close()
             if existing_record is not None:
+                require_same_semantics(semantic_contract, existing_record.get("execution_semantics"))
                 if (
                     existing_record.get("graph_ids") != expected_graph_ids
                     or len(existing_record.get("rewards", ())) != len(group)
@@ -5281,9 +5379,11 @@ class SelfPlayRolloutRunner:
                 expected_graph_ids=expected_graph_ids,
                 bundle_signatures=bundle_signatures,
                 journal_lock=journal_lock,
+                semantic_contract=semantic_contract,
             ):
                 existing_graph_record = graph_partial_records.get((task_id, graph_index))
                 if existing_graph_record is not None:
+                    require_same_semantics(semantic_contract, existing_graph_record.get("execution_semantics"))
                     if (
                         existing_graph_record.get("graph_id") != expected_graph_ids[graph_index]
                         or existing_graph_record.get("reverify_executor_seed") != reverify_seed
@@ -5308,9 +5408,9 @@ class SelfPlayRolloutRunner:
                 try:
                     application = self.application_factory(reverify_seed)
                     application.runtime.seed = reverify_seed
-                    current_bundle = _executor_compatibility_signature(
-                        application.config.model_manifest()
-                    )
+                    current_manifest = application.config.model_manifest()
+                    require_same_semantics(semantic_contract, manifest_semantics(current_manifest))
+                    current_bundle = _executor_compatibility_signature(current_manifest)
                     if current_bundle not in bundle_signatures:
                         override_path = self.output_dir / "frontier_execution_override.json"
                         override = (
@@ -5402,6 +5502,7 @@ class SelfPlayRolloutRunner:
                         "actual_executor_bundle_signature": current_bundle,
                         "reverify_executor_seed": reverify_seed,
                         "executor_bundle_signature": next(iter(bundle_signatures)),
+                        "execution_semantics": semantic_contract,
                         "selection_sha256": selection_sha256,
                     }
                     return graph_record
@@ -5417,6 +5518,7 @@ class SelfPlayRolloutRunner:
                 "group": group,
                 "reverify_seed": reverify_seed,
                 "executor_bundle_signature": next(iter(bundle_signatures)),
+                "execution_semantics": semantic_contract,
             }
             graph_results_by_task[task_id] = {}
             for index, item in enumerate(group):
@@ -5486,6 +5588,7 @@ class SelfPlayRolloutRunner:
                 "graph_ids": [graph_results[i]["graph_id"] for i in range(len(group))],
                 "rollout_ids": [item.trajectory.rollout_id for item in group],
                 "executor_bundle_signature": context["executor_bundle_signature"],
+                "execution_semantics": context.get("execution_semantics"),
                 "persistent_mace_updates": False,
                 "selection_sha256": selection_sha256,
             }
@@ -5518,9 +5621,13 @@ class SelfPlayRolloutRunner:
 
     def _validate_action_protocol(self) -> None:
         """Never resume old sampled actions or MACE state under the new policy."""
+        from .execution_contract import execution_semantics
+
         path = self.output_dir / "action_protocol.json"
         expected = {
+            "execution_semantics": execution_semantics(),
             "action_protocol": "director_model_v1",
+            "output_contract_version": OUTPUT_CONTRACT_VERSION,
             "counterfactual_execution": "full_graph_v1",
         }
         if path.exists():
@@ -5911,6 +6018,23 @@ class SelfPlayRolloutRunner:
 
     def _prepare_counterfactual(self, primary: _PrimaryCollection) -> None:
         rollout = primary.rollout
+        from .submission_contract import (
+            SUBMISSION_CONTRACT_VERSION,
+            validate_primary_training_outcome,
+        )
+
+        if rollout.trajectory.metadata.get("submission_contract_version") in {SUBMISSION_CONTRACT_VERSION, "unified_submission_v1"}:
+            if not rollout.trajectory.metadata.get("reward_known"):
+                primary.decisions = ()
+                rollout.trajectory.metadata["relation_counterfactual_candidate_count"] = 0
+                rollout.trajectory.metadata["relation_counterfactual_skip_reason"] = "unknown_primary_outcome"
+                return
+            validate_primary_training_outcome(rollout.trajectory.metadata)
+            if rollout.graph.validate(final=True):
+                primary.decisions = ()
+                rollout.trajectory.metadata["relation_counterfactual_candidate_count"] = 0
+                rollout.trajectory.metadata["relation_counterfactual_skip_reason"] = "incomplete_terminal_graph"
+                return
         try:
             check = getattr(primary.application, "supports_graph_counterfactual", None)
             capability = (

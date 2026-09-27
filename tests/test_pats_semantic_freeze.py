@@ -179,11 +179,11 @@ def test_historical_snapshot_replay_keeps_original_cards_and_manifest(tmp_path):
     path.write_text(json.dumps(legacy))
     original = path.read_bytes()
     checker = Checker(error=True)
-    frozen = freeze_collection(
-        config, directory, step=2, semantic_backend=checker, tokenizer=ByteTokenizer()
-    )
+    with pytest.raises(ValueError, match="runtime contract changed"):
+        freeze_collection(config, directory, step=2, semantic_backend=checker, tokenizer=ByteTokenizer())
     assert checker.calls == 0 and path.read_bytes() == original
-    selected, context, manifest = select(load_bank(frozen))
+    from selfplay_graph_flowsteer.skill_evolution_v2 import DirectorSkillBankV2
+    selected, context, manifest = select(DirectorSkillBankV2(legacy))
     assert {item.skill_id for item in selected} == {"seed", "good", "bad"}
     assert "semantic_gate_revision" not in manifest and "semantic_contract_sha256" not in manifest
     assert not (directory / "pats_semantic_preflight.json").exists()
@@ -191,7 +191,7 @@ def test_historical_snapshot_replay_keeps_original_cards_and_manifest(tmp_path):
     broken["pats"].update(semantic_gate_revision="unknown", semantic_contract_sha256="a" * 64)
     path.write_text(json.dumps(broken))
     with pytest.raises(ValueError, match="unknown PATS semantic gate"):
-        load_bank(frozen)
+        DirectorSkillBankV2(broken)
     with pytest.raises(ValueError, match="unknown PATS semantic gate"):
         freeze_collection(config, directory, step=2)
 
@@ -217,12 +217,18 @@ def test_live_view_requires_exact_approval_identity_but_frozen_context_is_immuta
     elif change == "scope":
         state["scopes"] = {resolve_scope("qa", {"dataset": "hotpotqa"}): state["scopes"][scope]}
     else:
-        monkeypatch.setattr(pats_semantics, "contract_hash", lambda: "b" * 64)
+        monkeypatch.setattr(pats_semantics, "contract_hash", lambda *args: "b" * 64)
     with store.connect() as db:
         db.execute("UPDATE pats_state SET payload=? WHERE id=1", (json.dumps(state),))
     live = load_bank(config)
     assert select(live, "hotpotqa" if change == "scope" else "nq_open")[0:2] == ([], "")
-    assert select(load_bank(frozen))[1:] == original[1:]
+    if change == "contract":
+        with pytest.raises(ValueError, match="runtime contract changed"):
+            load_bank(frozen)
+        from selfplay_graph_flowsteer.skill_evolution_v2 import DirectorSkillBankV2
+        assert select(DirectorSkillBankV2(json.loads(frozen.skillbank_path.read_text())))[1:] == original[1:]
+    else:
+        assert select(load_bank(frozen))[1:] == original[1:]
 
 
 def test_review_budget_withholds_unreviewed_scope_without_seed_fallback(tmp_path):

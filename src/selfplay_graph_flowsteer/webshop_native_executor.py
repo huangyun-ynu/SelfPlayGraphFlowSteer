@@ -10,7 +10,12 @@ from .contracts import AgentArtifact
 from .llm import request_token_credit
 from .webshop_budget import execution_accounting
 from .webshop_native import NativeWebShopLifecycle
-from .webshop_native_protocol import NATIVE_POLICY, native_prompt, parse_native_action
+from .webshop_native_protocol import (
+    NATIVE_POLICY,
+    native_observation,
+    native_prompt,
+    parse_native_action,
+)
 
 
 def execute_native(executor, *, task, node, upstream, peers, revision, seed, prior=None):
@@ -35,6 +40,9 @@ def execute_native(executor, *, task, node, upstream, peers, revision, seed, pri
         "peer_packets": [p.to_dict() for p in peers],
         "prior_packet": prior.to_dict() if prior else None,
     }
+    if node.metadata.get("_runtime_native_output_materialization_attempted"):
+        context["execution_phase"] = "selected_output"
+        context["selected_output_type"] = "webshop_purchase_candidate"
     instruction = (
         "Carry out your assigned responsibility for the public task. You are a generic Agent; "
         "choose whether environment interaction is needed. Use only your own observations and "
@@ -50,6 +58,8 @@ def execute_native(executor, *, task, node, upstream, peers, revision, seed, pri
         "in the packet. No extra skill or shopping checklist is supplied.\n"
         + json.dumps(context, ensure_ascii=False)
     )
+    from .unified_contract import result_instruction
+    instruction += result_instruction(node, "webshop")
     tokens_in = tokens_out = 0
     events, traces, diagnostics, request_audit = [], [], [], []
     response = None
@@ -91,21 +101,34 @@ def execute_native(executor, *, task, node, upstream, peers, revision, seed, pri
     journal = state.pop("_runtime_transaction_journal")
     history = journal.setdefault("native_history", [])
     restored = len(history)
-    error_feedback = ""
+    error_feedback = (
+        "\nPrevious action failed: " + history[-1]["error"]
+        if history and history[-1].get("error")
+        else ""
+    )
     try:
         while True:
             remaining = executor.budget_ledger.remaining(node, revision=revision, scope=scope)
             if min(remaining["phase"], remaining["total"]) <= 0:
                 break
-            messages = [
-                {"role": "system", "content": instruction},
-                {
-                    "role": "user",
-                    "content": native_prompt(task=task, state=state, history=history)
-                    + f"\nAction allowance: {remaining['phase']} in this phase, {remaining['total']} total."
-                    + error_feedback,
-                },
-            ]
+            conversation = executor.webshop_native_conversation_history
+            turn_prompt = (
+                native_prompt(task=task, state=state, history=[] if conversation else history)
+                + (f"\nShared task tool allowance: {remaining['total']} calls remaining across all Agents and executions."
+                   if executor.budget_ledger.shared_total(node)
+                   else f"\nAction allowance: {remaining['phase']} in this phase, {remaining['total']} total.")
+                + error_feedback
+            )
+            messages = [{"role": "system", "content": instruction}]
+            if conversation:
+                for row in history:
+                    messages.extend(
+                        [
+                            {"role": "user", "content": row.get("turn_prompt", row["observation"])},
+                            {"role": "assistant", "content": row["action"]},
+                        ]
+                    )
+            messages.append({"role": "user", "content": turn_prompt})
             result = generate(messages)
             payload, _ = check_artifact(result.text)
             if payload is not None and result.metadata.get("finish_reason") not in {
@@ -140,10 +163,12 @@ def execute_native(executor, *, task, node, upstream, peers, revision, seed, pri
                 }
                 error_feedback = "\nPrevious action failed: " + error
             record = {
-                "observation": str(before.get("page_text", "")),
+                "observation": native_observation(before),
                 "action": action or "<INVALID>",
                 "status": observation["status"],
             }
+            if conversation:
+                record["turn_prompt"] = turn_prompt
             if error:
                 record["error"] = error
             history.append(record)
@@ -171,8 +196,10 @@ def execute_native(executor, *, task, node, upstream, peers, revision, seed, pri
             report_context = {
                 **context,
                 "public_task": task,
-                "private_history": history,
-                "current_page": state.get("page_text", ""),
+                "private_history": [
+                    {k: v for k, v in row.items() if k != "turn_prompt"} for row in history
+                ],
+                "current_page": native_observation(state),
                 "purchase_staged": bool(state.get("commit_pending")),
                 "stop_reason": reason,
             }
@@ -234,7 +261,7 @@ def execute_native(executor, *, task, node, upstream, peers, revision, seed, pri
         artifact.webshop_progress = {
             "trusted": True,
             "execution_policy": NATIVE_POLICY,
-            "state": "purchase_staged" if state.get("commit_pending") else "execution_completed",
+            "state": "purchase_staged" if state.get("commit_pending") else "no_purchase_candidate",
             "commit_ready": bool(state.get("commit_pending")),
             "commit_protocol_status": "awaiting_canvas_finish"
             if state.get("commit_pending")

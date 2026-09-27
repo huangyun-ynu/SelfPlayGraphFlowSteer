@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 NATIVE_POLICY = "skillflow_native_v1"
@@ -62,6 +63,20 @@ def parse_native_action(text: str) -> str | None:
     return found.group(0) if found else None
 
 
+def native_observation(state: dict) -> str:
+    """Preserve the public selection state lost by the simple HTML text renderer.
+
+    Only current UI selections are projected, never catalog defaults, requirements,
+    rewards, or proposed next actions. Historical observations use the same projection.
+    """
+    text = str(state.get("page_text", ""))
+    selected = state.get("selected_options")
+    if state.get("page_type") in {"product", "product_section"} and isinstance(selected, dict):
+        public = {k: v for k, v in selected.items() if isinstance(k, str) and isinstance(v, str)}
+        text += "\nSelected options: " + json.dumps(public, ensure_ascii=False, sort_keys=True)
+    return text
+
+
 def native_prompt(*, task: str, state: dict, history: list[dict]) -> str:
     actions = state.get("raw_available_actions")
     if not isinstance(actions, list):
@@ -69,7 +84,7 @@ def native_prompt(*, task: str, state: dict, history: list[dict]) -> str:
     formatted = "\n".join(f"'{('search[<your query>]' if a == 'search' else a)}'," for a in actions)
     return (TEMPLATE_HISTORY if history else TEMPLATE_NO_HISTORY).format(
         task_description=task,
-        current_observation=str(state.get("page_text", "")),
+        current_observation=native_observation(state),
         available_actions=formatted,
         action_history="\n".join(
             f"[Observation {i}: '{row['observation']}', Action {i}: '{row['action']}']"

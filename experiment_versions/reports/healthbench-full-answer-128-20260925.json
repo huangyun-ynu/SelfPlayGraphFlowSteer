@@ -1,0 +1,427 @@
+{
+  "protocol": "healthbench_full_answer_v1",
+  "baseline": {
+    "n": 128,
+    "means": {
+      "score": 30.458675559364,
+      "raw": 29.103427434364,
+      "positive_credit": 40.06532110082181,
+      "negative_penalty": -10.961893666457811,
+      "answer_chars": 1539.03125,
+      "summary_chars": 536.1484375,
+      "token_cost": 6000.8125,
+      "duration_s": 150.270792134379,
+      "length_adjustment": 1.3552481249999992
+    },
+    "counts": {
+      "positive_criteria_met": 92,
+      "negative_criteria_triggered": 17,
+      "raw_zero": 55,
+      "raw_negative": 12,
+      "answer_under_300_chars": 46,
+      "summary_longer_than_answer": 54,
+      "director_unfinished": 4,
+      "project_threshold_pass": 51,
+      "nodes": {
+        "1": 104,
+        "2": 20,
+        "3": 4
+      }
+    },
+    "groups": {
+      "difficulty": {
+        "difficult": {
+          "n": 64,
+          "score": 5.723961089703425,
+          "raw": 3.0613317147034254
+        },
+        "typical": {
+          "n": 64,
+          "score": 55.19339002902458,
+          "raw": 55.14552315402457
+        }
+      },
+      "use_case": {
+        "consult": {
+          "n": 56,
+          "score": 20.44914031633706,
+          "raw": 18.079080316337063
+        },
+        "research": {
+          "n": 39,
+          "score": 46.94385088694327,
+          "raw": 45.92352011771249
+        },
+        "writing": {
+          "n": 33,
+          "score": 27.96207361493725,
+          "raw": 27.933119069482707
+        }
+      },
+      "stratum": {
+        "red_teaming_difficult": {
+          "n": 45,
+          "score": 6.384212858442402,
+          "raw": 3.5514248584424024
+        },
+        "good_faith_difficult": {
+          "n": 19,
+          "score": 4.160206900584796,
+          "raw": 1.9005847953216375
+        },
+        "good_faith_typical": {
+          "n": 64,
+          "score": 55.19339002902458,
+          "raw": 55.14552315402457
+        }
+      },
+      "turns": {
+        "single": {
+          "n": 97,
+          "score": 36.512680165392126,
+          "raw": 35.976115010752956
+        },
+        "multi": {
+          "n": 31,
+          "score": 11.515499856630825,
+          "raw": 7.598566308243727
+        }
+      }
+    }
+  },
+  "candidate": {
+    "n": 128,
+    "means": {
+      "score": 41.32507303555304,
+      "raw": 46.55135944180304,
+      "positive_credit": 59.06982625835422,
+      "negative_penalty": -12.518466816551182,
+      "answer_chars": 3777.6484375,
+      "summary_chars": 302.75,
+      "token_cost": 6638.4375,
+      "duration_s": 190.64913707204323,
+      "length_adjustment": -5.226286406249997
+    },
+    "counts": {
+      "positive_criteria_met": 134,
+      "negative_criteria_triggered": 19,
+      "raw_zero": 37,
+      "raw_negative": 13,
+      "answer_under_300_chars": 8,
+      "summary_longer_than_answer": 3,
+      "director_unfinished": 2,
+      "project_threshold_pass": 70,
+      "nodes": {
+        "1": 97,
+        "2": 29,
+        "3": 2
+      }
+    },
+    "groups": {
+      "difficulty": {
+        "difficult": {
+          "n": 64,
+          "score": 23.208972810350016,
+          "raw": 25.78151874785002
+        },
+        "typical": {
+          "n": 64,
+          "score": 59.44117326075606,
+          "raw": 67.32120013575606
+        }
+      },
+      "use_case": {
+        "consult": {
+          "n": 56,
+          "score": 41.702217219765096,
+          "raw": 46.3296722197651
+        },
+        "research": {
+          "n": 39,
+          "score": 48.56222631964527,
+          "raw": 55.226527858106806
+        },
+        "writing": {
+          "n": 33,
+          "score": 32.13207144781145,
+          "raw": 36.67508417508417
+        }
+      },
+      "stratum": {
+        "red_teaming_difficult": {
+          "n": 45,
+          "score": 20.786015996942247,
+          "raw": 22.778159996942247
+        },
+        "good_faith_difficult": {
+          "n": 19,
+          "score": 28.947554736842104,
+          "raw": 32.89473684210526
+        },
+        "good_faith_typical": {
+          "n": 64,
+          "score": 59.44117326075606,
+          "raw": 67.32120013575606
+        }
+      },
+      "turns": {
+        "single": {
+          "n": 97,
+          "score": 43.8320404743413,
+          "raw": 50.577673464032024
+        },
+        "multi": {
+          "n": 31,
+          "score": 33.48069104966718,
+          "raw": 33.95289298515105
+        }
+      }
+    }
+  },
+  "delta_points": 10.866397476189036,
+  "raw_delta_points": 17.447932007439036,
+  "paired_bootstrap_95_ci_points": [
+    3.7924076155927335,
+    17.80002671634742
+  ],
+  "paired_raw_bootstrap_95_ci_points": [
+    10.522030467035695,
+    24.423903626868135
+  ],
+  "raw_improved": 34,
+  "raw_declined": 6,
+  "raw_unchanged": 88,
+  "rubric_transitions": {
+    "positive_0_to_0": 75,
+    "negative_0_to_0": 24,
+    "positive_1_to_0": 5,
+    "positive_1_to_1": 87,
+    "negative_1_to_1": 16,
+    "positive_0_to_1": 47,
+    "negative_1_to_0": 1,
+    "negative_0_to_1": 3
+  },
+  "same_student_judge_subset": {
+    "n": 127,
+    "excluded_task": "healthbench_professional:test:21b7e2c4ac5982729923429bc25c780d:replica-00",
+    "baseline": {
+      "n": 127,
+      "means": {
+        "score": 29.95907205983143,
+        "raw": 28.545186705500726,
+        "positive_credit": 39.593394495316474,
+        "negative_penalty": -11.048207789815747,
+        "answer_chars": 1519.0866141732283,
+        "summary_chars": 537.6377952755905,
+        "token_cost": 5999.708661417323,
+        "duration_s": 150.4358739886968,
+        "length_adjustment": 1.4138853543307057
+      },
+      "counts": {
+        "positive_criteria_met": 91,
+        "negative_criteria_triggered": 17,
+        "raw_zero": 55,
+        "raw_negative": 12,
+        "answer_under_300_chars": 46,
+        "summary_longer_than_answer": 54,
+        "director_unfinished": 4,
+        "project_threshold_pass": 50,
+        "nodes": {
+          "1": 103,
+          "2": 20,
+          "3": 4
+        }
+      },
+      "groups": {
+        "difficulty": {
+          "difficult": {
+            "n": 63,
+            "score": 4.324209360968559,
+            "raw": 1.5226226943018923
+          },
+          "typical": {
+            "n": 64,
+            "score": 55.19339002902458,
+            "raw": 55.14552315402457
+          }
+        },
+        "use_case": {
+          "consult": {
+            "n": 56,
+            "score": 20.44914031633706,
+            "raw": 18.079080316337063
+          },
+          "research": {
+            "n": 39,
+            "score": 46.94385088694327,
+            "raw": 45.92352011771249
+          },
+          "writing": {
+            "n": 32,
+            "score": 25.90125341540404,
+            "raw": 25.68102904040404
+          }
+        },
+        "stratum": {
+          "red_teaming_difficult": {
+            "n": 44,
+            "score": 4.395028605225184,
+            "raw": 1.3594117870433662
+          },
+          "good_faith_difficult": {
+            "n": 19,
+            "score": 4.160206900584796,
+            "raw": 1.9005847953216375
+          },
+          "good_faith_typical": {
+            "n": 64,
+            "score": 55.19339002902458,
+            "raw": 55.14552315402457
+          }
+        },
+        "turns": {
+          "single": {
+            "n": 96,
+            "score": 35.91480891711496,
+            "raw": 35.30919954211496
+          },
+          "multi": {
+            "n": 31,
+            "score": 11.515499856630825,
+            "raw": 7.598566308243727
+          }
+        }
+      }
+    },
+    "candidate": {
+      "n": 127,
+      "means": {
+        "score": 40.942422587014086,
+        "raw": 46.13050400433692,
+        "positive_credit": 58.74754142574283,
+        "negative_penalty": -12.617037421405916,
+        "answer_chars": 3764.6535433070867,
+        "summary_chars": 303.755905511811,
+        "token_cost": 6657.055118110236,
+        "duration_s": 190.11124093986416,
+        "length_adjustment": -5.1880814173228345
+      },
+      "counts": {
+        "positive_criteria_met": 133,
+        "negative_criteria_triggered": 19,
+        "raw_zero": 37,
+        "raw_negative": 13,
+        "answer_under_300_chars": 8,
+        "summary_longer_than_answer": 3,
+        "director_unfinished": 2,
+        "project_threshold_pass": 69,
+        "nodes": {
+          "1": 96,
+          "2": 29,
+          "3": 2
+        }
+      },
+      "groups": {
+        "difficulty": {
+          "difficult": {
+            "n": 63,
+            "score": 22.150040950196843,
+            "raw": 24.60344761686351
+          },
+          "typical": {
+            "n": 64,
+            "score": 59.44117326075606,
+            "raw": 67.32120013575606
+          }
+        },
+        "use_case": {
+          "consult": {
+            "n": 56,
+            "score": 41.702217219765096,
+            "raw": 46.3296722197651
+          },
+          "research": {
+            "n": 39,
+            "score": 48.56222631964527,
+            "raw": 55.226527858106806
+          },
+          "writing": {
+            "n": 32,
+            "score": 30.326146180555554,
+            "raw": 34.69618055555556
+          }
+        },
+        "stratum": {
+          "red_teaming_difficult": {
+            "n": 44,
+            "score": 19.214750905963662,
+            "raw": 21.023118178690932
+          },
+          "good_faith_difficult": {
+            "n": 19,
+            "score": 28.947554736842104,
+            "raw": 32.89473684210526
+          },
+          "good_faith_typical": {
+            "n": 64,
+            "score": 59.44117326075606,
+            "raw": 67.32120013575606
+          }
+        },
+        "turns": {
+          "single": {
+            "n": 96,
+            "score": 43.35194006261569,
+            "raw": 50.06285756261569
+          },
+          "multi": {
+            "n": 31,
+            "score": 33.48069104966718,
+            "raw": 33.95289298515105
+          }
+        }
+      }
+    },
+    "delta_points": 10.983350527182653,
+    "raw_delta_points": 17.5853172988362,
+    "paired_bootstrap_95_ci_points": [
+      4.067837097150396,
+      18.25295111936791
+    ],
+    "paired_raw_bootstrap_95_ci_points": [
+      10.71637224104375,
+      24.806159257740614
+    ]
+  },
+  "interpretation": "Single paired rerun with the same route pool; bootstrap covers sampled-case variation, not endpoint drift or repeated-run randomness. Effects include downstream changes in Director decisions caused by changed worker artifacts. One incomplete task was regenerated with unchanged worker settings and graded via gpt_eco after student errors; use the separate 127-case student-only comparison to exclude this recovery.",
+  "run_directory": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-full-answer-gpt-low-128-20260924-231723",
+  "baseline_directory": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-qwen-thinking-gpt-low-128-20260924-220829",
+  "dataset_sha256": "991ed13ac248a3670e4caf7bdc83a770548c4209562c67a034631d4f0432042b",
+  "scored_examples": 128,
+  "rubric_audit_matches": 258,
+  "judge_request_counts_by_route": {
+    "gpt_student": 256,
+    "gpt_eco": 2
+  },
+  "recovery": {
+    "task_id": "healthbench_professional:test:21b7e2c4ac5982729923429bc25c780d:replica-00",
+    "completed_samples_preserved": 127,
+    "judge_route_before": "gpt_student",
+    "judge_route_after": "gpt_eco",
+    "worker_config_unchanged": true
+  },
+  "validation": {
+    "working_tree_tests": {
+      "command": ".venv/bin/python -m pytest -q tests/test_healthbench_answer_protocol.py tests/test_runtime.py tests/test_benchmark_runtime.py",
+      "passed": 69
+    },
+    "snapshot_protocol_tests": {
+      "passed": 4
+    },
+    "non_healthbench_prompt_parity": {
+      "checks": 72,
+      "result": "identical strings before and after, normal and recovery paths"
+    },
+    "scope": "Synthetic fixtures verify prompt contract, full answer transport and private-rubric isolation. Model compliance and scoring gains are evaluated by the separate 128-task run."
+  }
+}

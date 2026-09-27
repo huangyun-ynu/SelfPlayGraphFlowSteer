@@ -21,6 +21,13 @@ _PROCEDURAL_SOLUTION_RE = re.compile(
     r"(?:derive|calculate|compute|prove|solve|obtain)\b",
     flags=re.IGNORECASE,
 )
+_TERMINAL_MODULO_DELIVERABLE_RE = re.compile(
+    r",?\s*\bthen\s+(?:compute|calculate|find|determine)\s+"
+    r"(?:(?:(?:this|that|the|its)\s+)?(?:remainder|count|value|number|result)|"
+    r"(?P<variable>[a-z][a-z0-9_]*))\s+"
+    r"(?:modulo|mod)\s+(?P<divisor>\d+)\s*[.!]?$",
+    flags=re.IGNORECASE,
+)
 _ROUTING_RE = re.compile(
     r"\b(?:mace|runtime|model)\s*(?:router|routing|selection)\b|"
     r"\b(?:select|choose|rank|evaluate)\b.{0,24}\b(?:candidate\s+)?models?\b",
@@ -664,6 +671,7 @@ def delegation_safety_issue(
     *,
     action_names: Iterable[str] = (),
     field: str | None = None,
+    public_task: str = "",
 ) -> DelegationIssue | None:
     """Return a deterministic responsibility issue, or ``None`` when safe.
 
@@ -678,7 +686,28 @@ def delegation_safety_issue(
             "SET_PROMPT contains an answer clue or solution content",
             field,
         )
-    if _PROCEDURAL_SOLUTION_RE.search(delegation):
+    procedure_text = delegation
+    # A final modulo representation explicitly requested by the public task
+    # is an output requirement, not a Director-supplied solution method. Match
+    # the requested divisor; never consult reference answers or strip methods
+    # elsewhere in the delegation. Without public grounding the guard remains
+    # conservative. This applies to any task, not a dataset/id/constant list.
+    terminal = _TERMINAL_MODULO_DELIVERABLE_RE.search(delegation)
+    if terminal and field in {"objective", "expected_output"} and public_task:
+        public_text = re.sub(r"[$]", "", public_task)
+        requested = re.search(
+            r"\b(?:find|determine|compute|calculate|what\s+is)\s+(?:the\s+)?remainder\b"
+            r"(?P<subject>[^.!?]{0,180}?)\b(?:divided\s+by|modulo|mod)\s+"
+            + re.escape(terminal.group("divisor")) + r"\b",
+            public_text, flags=re.IGNORECASE,
+        )
+        variable = terminal.group("variable")
+        if requested and (
+            variable is None
+            or re.search(r"\b" + re.escape(variable) + r"\b", requested.group("subject"), re.I)
+        ):
+            procedure_text = delegation[:terminal.start()]
+    if _PROCEDURAL_SOLUTION_RE.search(procedure_text):
         return DelegationIssue(
             "concrete_solution_procedure",
             "SET_PROMPT prescribes a concrete solution procedure",
@@ -743,6 +772,11 @@ def _webshop_public_word(token: str, public_tokens: set[str]) -> str:
     if token in public_tokens or token in {"news", "means", "series", "species", "clothes"}:
         return token
     candidates: list[str] = []
+    # Placement grammar is not a new product constraint: a public request to
+    # "mount on a wall" may be delegated as "wall-mounted". Keep this narrow;
+    # general -ed stemming would conflate e.g. "use" with a "used" product.
+    if token in {"mounted", "mounting"}:
+        candidates.append("mount")
     if len(token) > 4 and token.endswith("ies"):
         candidates.append(token[:-3] + "y")
     if token.endswith("es") and token[:-2].endswith(("s", "x", "z", "ch", "sh")):
@@ -834,6 +868,7 @@ def compile_delegation(
     dataset: str = "",
     action_names: Iterable[str] = (),
     webshop_native: bool = False,
+    public_task: str = "",
 ) -> tuple[DelegationCompilation | None, DelegationIssue | None]:
     """Validate, locally compact, and deterministically compile a responsibility.
 
@@ -867,6 +902,7 @@ def compile_delegation(
             one_line,
             action_names=action_names,
             field=name,
+            public_task=public_task,
         )
         if semantic_issue is not None:
             return None, semantic_issue

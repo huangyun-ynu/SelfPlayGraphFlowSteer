@@ -65,11 +65,11 @@ from .observability import (
     NumericVerifier,
     TaskSpec,
     TokenF1Verifier,
-    VerificationResult,
     Verifier,
     task_requires_reference,
     task_to_public_dict,
 )
+from .output_contract import OUTPUT_CONTRACT_VERSION
 from .pats import PatsConfig
 from .protocol_reward import LEGACY_REWARD_VERSION, DirectorRewardConfig
 from .rollouts import Tokenizer
@@ -110,9 +110,9 @@ from .webshop import (
 )
 from .webshop_budget import budget_partition
 from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
-from .webshop_history import WEBSHOP_WORKER_MEMORY_POLICIES
 from .webshop_native import NativeWebShopLifecycle
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
+from .webshop_profiles import M02_PROFILE, section_memory_limit
 
 
 class GraphEvaluationIncompleteError(RuntimeError):
@@ -130,7 +130,8 @@ class GraphEvaluationBackendError(RuntimeError):
 
 REMOTE_RUNTIME_MAX_CONCURRENCY = 16
 _REMOTE_RUNTIME_20_CONCURRENCY_MODELS = frozenset({"gpt-6-astra"})
-_REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES = ("deepseek", "minimax")
+_REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES = ("minimax",)
+_REMOTE_RUNTIME_40_CONCURRENCY_PREFIXES = ("deepseek",)
 
 
 def _allowed_physical_gpu_ids() -> set[int]:
@@ -157,6 +158,7 @@ class RoleModelConfig:
     api_key: str = "EMPTY"
     timeout_s: float = 120.0
     trainable: bool = True
+    enable_thinking: bool | None = None
 
     def validate(self, name: str) -> None:
         if not self.base_url.strip():
@@ -165,6 +167,8 @@ class RoleModelConfig:
             raise ValueError(f"models.{name}.served_model cannot be empty")
         if self.timeout_s <= 0:
             raise ValueError(f"models.{name}.timeout_s must be positive")
+        if self.enable_thinking is not None and not isinstance(self.enable_thinking, bool):
+            raise ValueError(f"models.{name}.enable_thinking must be a boolean")
 
     def identity(self) -> tuple[str, str]:
         return self.base_url.rstrip("/"), self.served_model
@@ -176,6 +180,7 @@ class RoleModelConfig:
             "base_model_path": str(self.base_model_path),
             "checkpoint_path": str(self.checkpoint_path),
             "trainable": self.trainable,
+            "enable_thinking": self.enable_thinking,
         }
 
 
@@ -228,7 +233,9 @@ class FixedRuntimeConfig:
             raise ValueError("runtime dataset concurrency overrides must be positive")
         model_name = self.served_model.casefold()
         remote_limit = (
-            30
+            40
+            if model_name.startswith(_REMOTE_RUNTIME_40_CONCURRENCY_PREFIXES)
+            else 30
             if model_name.startswith(_REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES)
             else (
                 20
@@ -307,8 +314,16 @@ class RetrievalConfig:
     top_k: int = 3
     timeout_s: float = 120.0
     max_tool_rounds: int = 3
+    # The 09-18 HotpotQA baseline could search in addition to supplied context.
+    hotpotqa_search_enabled: bool = False
+    # Nonzero requires precomputed inline NQ evidence, prepared before rollouts.
+    nq_frozen_top_k: int = 0
 
     def validate(self) -> None:
+        if self.nq_frozen_top_k < 0:
+            raise ValueError("retrieval.nq_frozen_top_k must be non-negative")
+        if self.hotpotqa_search_enabled and not self.enabled:
+            raise ValueError("HotpotQA search requires retrieval.enabled")
         if not self.enabled:
             return
         if not self.service_url.startswith(("http://", "https://")):
@@ -359,8 +374,22 @@ class WebShopConfig:
     worker_guidance_policy: str = "baseline"
     worker_memory_policy: str = "factual_memory_v1"
     worker_execution_policy: str = "graph_tools_v1"
+    native_conversation_history: bool = False
+    compatibility_profile: str = "current"
 
     def validate(self) -> None:
+        section_memory_limit(self.compatibility_profile)
+        if self.compatibility_profile == M02_PROFILE and (
+            self.worker_execution_policy != "graph_tools_v1"
+            or self.worker_memory_policy != "factual_memory_v1"
+            or self.worker_guidance_policy != "merged_checklist_v1"
+            or self.search_observation_mode != "legacy"
+            or self.max_observation_chars != 0
+            or not self.staged_commit_enabled
+            or self.env_feedback_enabled
+            or self.native_conversation_history
+        ):
+            raise ValueError("M02 requires graph tools, factual memory, merged guidance, legacy unlimited observations and staged commit")
         if self.worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
             raise ValueError("unknown webshop.worker_execution_policy")
         if (
@@ -377,13 +406,14 @@ class WebShopConfig:
             raise ValueError(
                 "skillflow_native_v1 requires legacy, unlimited observations, staged commit, baseline guidance and feedback off"
             )
-        if self.worker_memory_policy not in WEBSHOP_WORKER_MEMORY_POLICIES:
+        if self.worker_memory_policy != "factual_memory_v1":
             raise ValueError(
-                "webshop.worker_memory_policy must be factual_memory_v1 or skillflow_history_v1"
+                "webshop.worker_memory_policy must be factual_memory_v1"
             )
         if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
             raise ValueError(
-                "webshop.worker_guidance_policy must be baseline or laser_checklist_v1"
+                "webshop.worker_guidance_policy must be baseline, laser_checklist_v1, "
+                "or merged_checklist_v1"
             )
         if not self.enabled:
             return
@@ -418,13 +448,6 @@ class WebShopConfig:
             raise ValueError(
                 "webshop.search_observation_mode must be legacy, retain_page_text, "
                 "or structured_only"
-            )
-        if self.worker_memory_policy == "skillflow_history_v1" and (
-            self.search_observation_mode == "structured_only" or self.max_observation_chars != 0
-        ):
-            raise ValueError(
-                "webshop.worker_memory_policy=skillflow_history_v1 requires legacy or "
-                "retain_page_text observations and max_observation_chars=0"
             )
 
 
@@ -502,8 +525,11 @@ class SWEConfig:
     connect_timeout_s: float = 10.0
     request_timeout_s: float = 720.0
     local_test_timeout_s: float = 60.0
+    public_test_environment_root: Path | None = None
+    public_test_setup_timeout_s: float = 300.0
     max_output_chars: int = 12_000
     max_file_chars: int = 200_000
+    max_file_bytes: int = 10 * 1024 * 1024
     max_patch_bytes: int = 2_000_000
     max_initial_calls: int = 20
     max_revision_calls: int = 12
@@ -555,8 +581,10 @@ class SWEConfig:
                 self.connect_timeout_s,
                 self.request_timeout_s,
                 self.local_test_timeout_s,
+                self.public_test_setup_timeout_s,
                 self.max_output_chars,
                 self.max_file_chars,
+                self.max_file_bytes,
                 self.max_patch_bytes,
             )
             <= 0
@@ -603,6 +631,8 @@ class AdaptiveApplicationConfig:
     runtime_name: str = "default"
     additional_runtimes: dict[str, FixedRuntimeConfig] = field(default_factory=dict)
     worker_runtime_routes: tuple[str, ...] = ("default",)
+    # Logical model choices; physical endpoint selection stays inside each pool.
+    dataset_worker_routes: dict[str, tuple[str, ...]] = field(default_factory=dict)
     # Optional dataset-scoped remapping applied after the Director selects a
     # Worker route.  This is deliberately narrow: routes not listed here keep
     # the exact Director selection.
@@ -670,6 +700,7 @@ class AdaptiveApplicationConfig:
     answer_submission: AnswerSubmissionConfig = field(default_factory=AnswerSubmissionConfig)
     director_reward: DirectorRewardConfig = field(default_factory=DirectorRewardConfig)
     director_prompt_variant: str = "v2.1"
+    director_thinking_by_dataset: dict[str, bool] = field(default_factory=dict)
 
     @property
     def skillbank_context_enabled(self) -> bool:
@@ -706,22 +737,30 @@ class AdaptiveApplicationConfig:
         self.webshop.validate()
         self.alfworld.validate()
         self.swe.validate()
-        self.answer_submission.validate()
         self.director_reward.validate()
-        if self.director_prompt_variant not in {"v2", "v2.1"}:
-            raise ValueError("director.prompt_variant must be 'v2' or 'v2.1'")
+        from .director import DIRECTOR_PROMPT_VARIANTS
+        if self.director_prompt_variant not in DIRECTOR_PROMPT_VARIANTS:
+            raise ValueError("director.prompt_variant must be 'v2', 'v2.1', 'v2.2', or 'v3'")
+        if any(
+            not canonical_dataset_name(dataset) or not isinstance(enabled, bool)
+            for dataset, enabled in self.director_thinking_by_dataset.items()
+        ):
+            raise ValueError("director.thinking_by_dataset must map datasets to booleans")
         if not self.worker_runtime_routes:
             raise ValueError("runtime_routing.worker_routes cannot be empty")
         if self.route_health_cooldown_s <= 0:
             raise ValueError("runtime_routing.health_cooldown_s must be positive")
-        unknown_routes = set(self.worker_runtime_routes) - set(runtime_pool)
+        for dataset, routes in self.dataset_worker_routes.items():
+            if not canonical_dataset_name(dataset) or not routes or len(set(routes)) != len(routes):
+                raise ValueError("dataset Worker routes must be nonempty and unique")
+        unknown_routes = set(self.all_worker_routes()) - set(runtime_pool)
         if unknown_routes:
             raise ValueError("unknown worker runtime routes: " + ", ".join(sorted(unknown_routes)))
         for dataset, overrides in self.dataset_route_overrides.items():
             dataset_key = canonical_dataset_name(dataset)
             if not dataset_key or not isinstance(overrides, dict):
                 raise ValueError("invalid dataset route override: " + str(dataset))
-            unknown_selected = set(overrides) - set(self.worker_runtime_routes)
+            unknown_selected = set(overrides) - set(self.worker_routes_for(dataset_key))
             if unknown_selected:
                 raise ValueError(
                     "dataset route override selects unavailable Worker routes: "
@@ -765,14 +804,6 @@ class AdaptiveApplicationConfig:
         if self.skill_distiller_runtime not in runtime_pool:
             raise ValueError(
                 f"unknown skill distiller runtime route: {self.skill_distiller_runtime}"
-            )
-        if (
-            self.answer_submission.enabled
-            and self.answer_submission.qa_model_enabled
-            and self.answer_submission.runtime_route not in runtime_pool
-        ):
-            raise ValueError(
-                f"unknown answer submission runtime route: {self.answer_submission.runtime_route}"
             )
         if any(runtime.managed_locally for runtime in self.additional_runtimes.values()):
             raise ValueError("additional runtimes must be externally managed")
@@ -962,9 +993,23 @@ class AdaptiveApplicationConfig:
         if any(gpu not in self.allocated_gpu_ids for gpu in assigned):
             raise ValueError("all service GPUs must be included in resources.allocated_gpu_ids")
 
+    def __post_init__(self) -> None:
+        # PATS audits/refines the actual Director variant, including dataclass
+        # replacements made by async collection. It has no independent override.
+        object.__setattr__(self, "pats", replace(
+            self.pats, director_prompt_variant="v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant
+        ))
+
     def model_manifest(self) -> dict[str, Any]:
         runtime_pool = self.runtime_pool()
+        from .execution_contract import execution_semantics
+
         return {
+            "execution_semantics": execution_semantics(
+                "v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
+                admission_config={"canvas": asdict(self.canvas),
+                                  "answer_submission": asdict(self.answer_submission)},
+            ),
             "policies": {
                 "proposer": self.proposer_model.to_dict(),
                 "solver": self.solver_model.to_dict(),
@@ -977,8 +1022,12 @@ class AdaptiveApplicationConfig:
                 "peer_selection_policy": "removed_direct_neighbors_v1",
                 "model_selection_policy": "director_set_model_v1",
                 "action_protocol": "director_model_v1",
+                "output_contract_version": OUTPUT_CONTRACT_VERSION,
                 "counterfactual_execution": "full_graph_v1",
                 "worker_routes": list(self.worker_runtime_routes),
+                "dataset_worker_routes": {
+                    dataset: list(routes) for dataset, routes in self.dataset_worker_routes.items()
+                },
                 "dataset_route_overrides": {
                     canonical_dataset_name(dataset): dict(sorted(overrides.items()))
                     for dataset, overrides in sorted(self.dataset_route_overrides.items())
@@ -1024,11 +1073,20 @@ class AdaptiveApplicationConfig:
                 "max_revision_calls": self.swe.max_revision_calls,
                 "max_total_calls": self.swe.max_total_calls,
                 "duplicate_responsibility_policy": (self.swe.duplicate_responsibility_policy),
-                "test_profiles": sorted(self.swe.test_profiles),
+                "test_profiles": sorted(set(self.swe.test_profiles) | (
+                    {"public_tests", "public_smoke"} if self.swe.public_test_environment_root else set()
+                )),
+                "public_test_environment_root": (
+                    str(self.swe.public_test_environment_root) if self.swe.public_test_environment_root else None
+                ),
+                "public_test_setup_timeout_s": self.swe.public_test_setup_timeout_s,
             },
             "answer_submission": asdict(self.answer_submission),
             "director_reward": asdict(self.director_reward),
-            "director_prompt": {"variant": self.director_prompt_variant},
+            "director_prompt": {
+                "variant": "v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
+                "thinking_by_dataset": dict(self.director_thinking_by_dataset),
+            },
             "healthbench_judge_audit": {
                 "runtime_route": self.healthbench_judge_runtime_route,
                 "path": str(self.healthbench_judge_audit_path),
@@ -1038,6 +1096,15 @@ class AdaptiveApplicationConfig:
                 "output_cost_per_million": (self.healthbench_judge_output_cost_per_million),
             },
         }
+
+    def worker_routes_for(self, dataset: str) -> tuple[str, ...]:
+        return self.dataset_worker_routes.get(canonical_dataset_name(dataset), self.worker_runtime_routes)
+
+    def all_worker_routes(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((
+            *self.worker_runtime_routes,
+            *(route for routes in self.dataset_worker_routes.values() for route in routes),
+        )))
 
     def runtime_pool(self) -> dict[str, FixedRuntimeConfig]:
         name = self.runtime_name.strip()
@@ -1135,6 +1202,10 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         worker_runtime_routes=tuple(
             str(value) for value in runtime_routing.get("worker_routes", [runtime_name])
         ),
+        dataset_worker_routes={
+            canonical_dataset_name(dataset): tuple(str(route) for route in routes)
+            for dataset, routes in runtime_routing.get("dataset_worker_routes", {}).items()
+        },
         dataset_route_overrides={
             canonical_dataset_name(dataset): {
                 str(selected): str(target) for selected, target in overrides.items()
@@ -1156,8 +1227,15 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         ),
         route_health_cooldown_s=float(runtime_routing.get("health_cooldown_s", 600.0)),
         canvas=CanvasConfig(
+            submission_protocol=str(canvas.get("submission_protocol", "legacy")),
+            submission_journal_dir=str(_path(canvas.get("submission_journal_dir"), root, "state/submissions")),
+            max_recovery_executions=int(canvas.get("max_recovery_executions", 2)),
+            action_budget_policy=str(canvas.get("action_budget_policy", "phase_split_v1")),
             max_agents=int(canvas.get("max_agents", 8)),
             max_rounds=int(canvas.get("max_rounds", 20)),
+            director_budget_policy=str(canvas.get("director_budget_policy", "rounds_v1")),
+            max_director_edits=canvas.get("max_director_edits"),
+            max_director_edits_by_dataset=dict(canvas.get("max_director_edits_by_dataset", {})),
             max_total_tokens=int(canvas.get("max_total_tokens", 32_768)),
             max_total_tokens_by_dataset={
                 canonical_dataset_name(dataset): int(limit)
@@ -1188,6 +1266,9 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             },
             remaining_token_admission_enabled=bool(
                 canvas.get("remaining_token_admission_enabled", True)
+            ),
+            native_webshop_output_materialization=bool(
+                canvas.get("native_webshop_output_materialization", False)
             ),
             worker_token_quantile=float(canvas.get("worker_token_quantile", 0.95)),
             worker_token_window=int(canvas.get("worker_token_window", 64)),
@@ -1284,6 +1365,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             top_k=int(retrieval.get("top_k", 3)),
             timeout_s=float(retrieval.get("timeout_s", 120.0)),
             max_tool_rounds=int(retrieval.get("max_tool_rounds", 3)),
+            hotpotqa_search_enabled=bool(retrieval.get("hotpotqa_search_enabled", False)),
+            nq_frozen_top_k=int(retrieval.get("nq_frozen_top_k", 0)),
         ),
         aime_actions=AIMEActionConfig(
             enabled=bool(aime_actions.get("enabled", False)),
@@ -1316,6 +1399,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             .strip()
             .casefold(),
             worker_execution_policy=str(webshop.get("worker_execution_policy", "graph_tools_v1")),
+            native_conversation_history=bool(webshop.get("native_conversation_history", False)),
+            compatibility_profile=str(webshop.get("compatibility_profile", "current")),
         ),
         alfworld=ALFWorldConfig(
             enabled=bool(alfworld.get("enabled", False)),
@@ -1381,8 +1466,14 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             connect_timeout_s=float(swe.get("connect_timeout_s", 10.0)),
             request_timeout_s=float(swe.get("request_timeout_s", 720.0)),
             local_test_timeout_s=float(swe.get("local_test_timeout_s", 60.0)),
+            public_test_environment_root=(
+                _path(swe["public_test_environment_root"], root, "state/swe/public-test-envs")
+                if swe.get("public_test_environment_root") else None
+            ),
+            public_test_setup_timeout_s=float(swe.get("public_test_setup_timeout_s", 300.0)),
             max_output_chars=int(swe.get("max_output_chars", 12_000)),
             max_file_chars=int(swe.get("max_file_chars", 200_000)),
+            max_file_bytes=int(swe.get("max_file_bytes", 10 * 1024 * 1024)),
             max_patch_bytes=int(swe.get("max_patch_bytes", 2_000_000)),
             max_initial_calls=int(swe.get("max_initial_calls", 20)),
             max_revision_calls=int(swe.get("max_revision_calls", 12)),
@@ -1399,10 +1490,6 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         ),
         answer_submission=AnswerSubmissionConfig(
             enabled=bool(answer_submission.get("enabled", False)),
-            qa_model_enabled=bool(answer_submission.get("qa_model_enabled", False)),
-            runtime_route=str(answer_submission.get("runtime_route", "")),
-            max_tokens=int(answer_submission.get("max_tokens", 128)),
-            require_source_span=bool(answer_submission.get("require_source_span", True)),
         ),
         # Config files created before protocol_gate_v1 remain replayable. New
         # experiment configs must opt in explicitly so a resumed rollout group
@@ -1411,6 +1498,10 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             version=str((director_reward or {}).get("version", LEGACY_REWARD_VERSION))
         ),
         director_prompt_variant=str(director.get("prompt_variant", "v2.1")).strip().casefold(),
+        director_thinking_by_dataset={
+            canonical_dataset_name(dataset): enabled
+            for dataset, enabled in director.get("thinking_by_dataset", {}).items()
+        },
     )
     if validate:
         config.validate()
@@ -1435,6 +1526,7 @@ def _role_model(
         checkpoint_path=_path(payload.get("checkpoint_path"), root, f"state/checkpoints/{name}"),
         timeout_s=float(payload.get("timeout_s", 120.0)),
         trainable=bool(payload.get("trainable", trainable)),
+        enable_thinking=payload.get("enable_thinking"),
     )
 
 
@@ -1588,6 +1680,11 @@ class AdaptiveApplicationResult:
                 else self.solver_result.director_run.output
             ),
             "raw_answer": self.solver_result.director_run.output,
+            "candidate_output": self.solver_result.director_run.candidate_output,
+            "submission_receipt": result["submission_receipt"],
+            "submission_contract_version": result["submission_contract_version"],
+            "outcome_decision": result["outcome_decision"],
+            "submission_status": self.task.metadata.get("submission_status", "adapter_owned"),
             "answer_submission": submission.to_dict() if submission else None,
             "finished": self.solver_result.director_run.finished,
             "verification": result["verification"],
@@ -1597,20 +1694,21 @@ class AdaptiveApplicationResult:
             "trace_run_id": self.solver_result.trace.run_id,
             "trace_store_path": self.trace_store_path,
             "mace_statistics_path": self.mace_statistics_path,
-            "token_in": worker_token_in + (submission.formatter_token_in if submission else 0),
-            "token_out": worker_token_out + (submission.formatter_token_out if submission else 0),
+            "token_in": worker_token_in,
+            "token_out": worker_token_out,
             "model_roles": self.task.metadata.get("model_roles", {}),
         }
 
 
 def _unique_worker_token_totals(trace_events: list[Any], *, run_id: str) -> tuple[int, int]:
-    """Sum each executed Worker artifact once, even if a final Canvas event reuses it.
+    """Sum each Worker execution once, including overwritten peer initial artifacts.
 
     Canvas emits the latest ExecutionReport with a final event so downstream
     audit can see the selected artifact. That event may contain no new Worker
-    execution. Artifact identity, scoped by run, is the accounting boundary;
-    report-level token fields are intentionally not used because they include
-    the reused artifact again.
+    execution. The per-execution ledger retains initial and revision usage even
+    when the report's latest-artifact map has replaced the initial artifact.
+    Artifact identity, scoped by run, deduplicates final-event replay and caches.
+    Older traces without this ledger retain the legacy artifact fallback.
     """
 
     seen_artifacts: set[str] = set()
@@ -1621,6 +1719,22 @@ def _unique_worker_token_totals(trace_events: list[Any], *, run_id: str) -> tupl
             continue
         execution = payload.get("execution")
         if not isinstance(execution, dict):
+            continue
+        usage_events = [
+            item for item in execution.get("execution_events", [])
+            if isinstance(item, dict) and item.get("usage_schema") == "worker_execution_usage_v1"
+        ]
+        if usage_events or execution.get("worker_usage_schema") == "worker_execution_usage_v1":
+            for item in usage_events:
+                identity = f"{run_id}:{item['artifact_id']}"
+                if item.get("cache_hit"):
+                    seen_artifacts.add(identity)
+                    continue
+                if identity in seen_artifacts:
+                    continue
+                seen_artifacts.add(identity)
+                token_in += int(item.get("token_in", 0) or 0)
+                token_out += int(item.get("token_out", 0) or 0)
             continue
         artifacts = execution.get("artifacts", {})
         if not isinstance(artifacts, dict) or not artifacts:
@@ -1706,7 +1820,7 @@ class AdaptiveSolverApplication:
             cooldown_s=self.config.route_health_cooldown_s,
         )
         available, blocked = store.available_scoped_routes(
-            self.config.worker_runtime_routes,
+            self.config.worker_routes_for(dataset_key),
             dataset=dataset_key,
             request_role=request_role,
         )
@@ -1762,6 +1876,8 @@ class AdaptiveSolverApplication:
         if needs_reference and reference is None:
             raise ValueError(f"{self.config.verifier} verifier requires a reference answer")
         self.runtime.reset()
+        if self.config.dataset_worker_routes:
+            self.configure_scoped_worker_routes(dataset=str((metadata or {}).get("dataset", task_type)))
 
         task = TaskSpec(
             task_id,
@@ -1773,6 +1889,7 @@ class AdaptiveSolverApplication:
                 "model_roles": self.config.model_manifest(),
                 "skills_enabled": self.config.skillbank_enabled,
                 "action_protocol": "director_model_v1",
+                "output_contract_version": OUTPUT_CONTRACT_VERSION,
             },
             private_verifier_payload=dict(private_verifier_payload or {}),
         )
@@ -2128,18 +2245,7 @@ class AdaptiveSolverApplication:
                 else None
             )
             prediction = submission.submitted_answer if submission else output
-            verification = (
-                VerificationResult(
-                    0.0,
-                    False,
-                    self.solver.verifier.name,
-                    f"invalid_answer_submission:{submission.detail}",
-                )
-                if submission is not None
-                and not submission.valid
-                and submission.method == "aime_strict_submission_v1"
-                else self.solver.verifier.verify(task, prediction)
-            )
+            verification = self.solver.verifier.verify(task, prediction)
             task_score = float(verification.score)
             if (
                 canonical_dataset_name(task.metadata.get("dataset", ""))
@@ -2188,7 +2294,7 @@ def create_adaptive_application(
     route_health = RouteHealthStore(
         config.route_health_path, cooldown_s=config.route_health_cooldown_s
     )
-    active_routes, blocked_routes = route_health.available_routes(config.worker_runtime_routes)
+    active_routes, blocked_routes = route_health.available_routes(config.all_worker_routes())
     if not active_routes:
         blocked_summary = ", ".join(
             f"{route}({state['block_reason']})" for route, state in sorted(blocked_routes.items())
@@ -2196,8 +2302,15 @@ def create_adaptive_application(
         raise PersistentRouteCircuitOpenError(
             "all configured Worker routes are blocked by persisted health state: " + blocked_summary
         )
-    if active_routes != config.worker_runtime_routes:
-        config = replace(config, worker_runtime_routes=active_routes)
+    if active_routes != config.all_worker_routes():
+        defaults = tuple(route for route in config.worker_runtime_routes if route in active_routes)
+        scoped = {
+            dataset: tuple(route for route in routes if route in active_routes)
+            for dataset, routes in config.dataset_worker_routes.items()
+        }
+        if not defaults or any(not routes for routes in scoped.values()):
+            raise PersistentRouteCircuitOpenError("all Worker routes blocked for a configured dataset")
+        config = replace(config, worker_runtime_routes=defaults, dataset_worker_routes=scoped)
     if config.healthbench_judge_runtime_route is not None:
         judge_routes, blocked_judge_routes = route_health.available_routes(
             (config.healthbench_judge_runtime_route,)
@@ -2237,7 +2350,7 @@ def create_adaptive_application(
     if config.webshop.enabled:
         lifecycle_type = (
             NativeWebShopLifecycle
-            if config.webshop.worker_execution_policy == NATIVE_POLICY
+            if config.webshop.worker_execution_policy == NATIVE_POLICY or config.canvas.submission_protocol == "unified_task_result_v1"
             else WebShopSessionLifecycle
         )
         webshop_lifecycle = lifecycle_type(
@@ -2251,7 +2364,10 @@ def create_adaptive_application(
             stage_purchases=config.webshop.staged_commit_enabled,
             search_observation_mode=config.webshop.search_observation_mode,
             env_feedback_enabled=config.webshop.env_feedback_enabled,
+            compatibility_profile=config.webshop.compatibility_profile,
         )
+        if isinstance(webshop_lifecycle, NativeWebShopLifecycle):
+            webshop_lifecycle.require_native_actions = config.webshop.worker_execution_policy == NATIVE_POLICY
         tools["webshop_search"] = WebShopSearchTool(
             webshop_lifecycle,
             max_query_chars=config.webshop.max_query_chars,
@@ -2296,9 +2412,12 @@ def create_adaptive_application(
             artifact_store=CodeArtifactStore(config.swe.artifact_store_root),
             log_path=config.swe.lifecycle_log_path,
             test_profiles=config.swe.test_profiles,
+            public_test_environment_root=config.swe.public_test_environment_root,
+            public_test_setup_timeout_s=config.swe.public_test_setup_timeout_s,
             test_timeout_s=config.swe.local_test_timeout_s,
             max_output_chars=config.swe.max_output_chars,
             max_file_chars=config.swe.max_file_chars,
+            max_file_bytes=config.swe.max_file_bytes,
             harness_backend=SSHSWEHarnessBackend(
                 host=config.swe.verifier_host,
                 user=config.swe.verifier_user,
@@ -2317,6 +2436,7 @@ def create_adaptive_application(
         tools.update(swe_tools(swe_lifecycle))
     action_registry = default_dataset_action_registry(
         tools,
+        hotpotqa_search_enabled=config.retrieval.hotpotqa_search_enabled,
         aime_budgets=(
             config.aime_actions.max_initial_calls,
             config.aime_actions.max_revision_calls,
@@ -2329,7 +2449,8 @@ def create_adaptive_application(
             config.webshop.max_total_calls,
         ),
         webshop_staged_commit=config.webshop.staged_commit_enabled,
-        webshop_commit_on_finish=config.webshop.worker_execution_policy == NATIVE_POLICY,
+        action_budget_policy=config.canvas.action_budget_policy,
+        webshop_commit_on_finish=(config.webshop.worker_execution_policy == NATIVE_POLICY or config.canvas.submission_protocol == "unified_task_result_v1"),
         alfworld_budgets=(
             config.alfworld.max_initial_calls,
             config.alfworld.max_revision_calls,
@@ -2360,6 +2481,8 @@ def create_adaptive_application(
             webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
             webshop_worker_memory_policy=config.webshop.worker_memory_policy,
             webshop_worker_execution_policy=config.webshop.worker_execution_policy,
+            webshop_native_conversation_history=config.webshop.native_conversation_history,
+            webshop_compatibility_profile=config.webshop.compatibility_profile,
         )
     else:
         if director_backend is None:
@@ -2396,7 +2519,7 @@ def create_adaptive_application(
         if worker_backend is None:
             worker_executor = RoutedModelAgentExecutor(
                 runtime_backends,
-                config.worker_runtime_routes,
+                config.all_worker_routes(),
                 dataset_route_overrides=config.dataset_route_overrides,
                 tools=tools,
                 action_registry=action_registry,
@@ -2405,6 +2528,8 @@ def create_adaptive_application(
                 webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
                 webshop_worker_memory_policy=config.webshop.worker_memory_policy,
                 webshop_worker_execution_policy=config.webshop.worker_execution_policy,
+                webshop_native_conversation_history=config.webshop.native_conversation_history,
+                webshop_compatibility_profile=config.webshop.compatibility_profile,
             )
         else:
             worker_executor = ModelAgentExecutor(
@@ -2416,6 +2541,8 @@ def create_adaptive_application(
                 webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
                 webshop_worker_memory_policy=config.webshop.worker_memory_policy,
                 webshop_worker_execution_policy=config.webshop.worker_execution_policy,
+                webshop_native_conversation_history=config.webshop.native_conversation_history,
+                webshop_compatibility_profile=config.webshop.compatibility_profile,
             )
         if distiller_backend is None:
             distiller_backend = runtime_backends[config.skill_distiller_runtime]
@@ -2524,24 +2651,9 @@ def create_adaptive_application(
             else None
         ),
     )
-    answer_finalizer = None
-    if config.answer_submission.enabled:
-        formatter_backend = None
-        if config.answer_submission.qa_model_enabled:
-            formatter_backend = (
-                distiller_backend
-                if mock
-                else runtime_backends.get(config.answer_submission.runtime_route)
-            )
-            if (
-                formatter_backend is None
-                and config.answer_submission.runtime_route == config.skill_distiller_runtime
-            ):
-                formatter_backend = distiller_backend
-        answer_finalizer = AnswerFinalizer(
-            config.answer_submission,
-            qa_backend=formatter_backend,
-        )
+    answer_finalizer = (
+        AnswerFinalizer(config.answer_submission) if config.answer_submission.enabled else None
+    )
     solver = AdaptiveWorkflowSolver(
         director_backend=director_backend,
         runtime=runtime,
@@ -2554,7 +2666,15 @@ def create_adaptive_application(
         action_registry=action_registry,
         answer_finalizer=answer_finalizer,
         swe_duplicate_responsibility_policy=(config.swe.duplicate_responsibility_policy),
-        director_prompt_variant=config.director_prompt_variant,
+        director_prompt_variant="v3" if config.canvas.submission_protocol == "unified_task_result_v1" else config.director_prompt_variant,
+        director_enable_thinking=(
+            config.solver_model.enable_thinking
+            if director_enable_thinking is None else director_enable_thinking
+        ),
+        director_thinking_by_dataset=(
+            config.director_thinking_by_dataset if director_enable_thinking is None else {}
+        ),
+        required_nq_frozen_top_k=config.retrieval.nq_frozen_top_k,
         director_tokenizer=director_tokenizer,
     )
     return AdaptiveSolverApplication(
@@ -2588,9 +2708,11 @@ def _gateway_config(
                 top_p=0.95 if role == "graph-director" else 1.0,
                 top_k=20 if role == "graph-director" else None,
                 enable_thinking=(
-                    role == "graph-director"
-                    if director_enable_thinking is None
-                    else role == "graph-director" and director_enable_thinking
+                    director_enable_thinking
+                    if role == "graph-director" and director_enable_thinking is not None
+                    else model.enable_thinking
+                    if model.enable_thinking is not None
+                    else role == "graph-director"
                 ),
             )
             for role, temperature in temperatures.items()
@@ -2643,7 +2765,6 @@ def _create_runtime_backend(runtime: FixedRuntimeConfig, *, route_name: str = ""
             "worker": 0.0,
             "healthbench-grader": 0.0,
             "healthbench-grader-chat": 0.0,
-            "answer-formatter": 0.0,
         },
         route_name=route_name,
     )

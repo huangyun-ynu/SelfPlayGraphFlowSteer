@@ -2,11 +2,39 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
 
 from .contracts import RelationType, StructuralOperator
+
+DIRECTOR_ACTION_PROTOCOL_VERSION = "director_action_json_v2"
+POLICY_PARSE_ERROR_CODES = frozenset({
+    "director_json_syntax_error", "director_json_object_missing",
+    "director_multiple_action_objects", "director_action_schema_error",
+})
+
+# Wire fields, not suggested actions or graph edits. SET_PROMPT uses the
+# structured form advertised to Director; legacy parse() still accepts prompt.
+ACTION_FIELDS = {
+    "add_agent": ("action",),
+    "set_prompt": ("action", "target", "role", "objective", "scope", "expected_output"),
+    "set_model": ("action", "target", "runtime_route"),
+    "set_layer": ("action", "target", "layer"),
+    "consider_relation": ("action", "source", "target"),
+    "set_relation": ("action", "source", "target", "relation"),
+    "remove_relation": ("action", "source", "target", "relation"),
+    "delete_agent": ("action", "target"),
+    "set_output": ("action", "target"),
+    "finish": ("action",),
+    "run_agent": ("action", "target"),
+}
+
+UNIFIED_ACTION_FIELDS = {
+    **{key: value for key, value in ACTION_FIELDS.items() if key != "set_output"},
+    "set_prompt": (*ACTION_FIELDS["set_prompt"], "result_scope"),
+    "finish": ("action", "target"),
+}
 
 
 class ActionType(StrEnum):
@@ -20,6 +48,7 @@ class ActionType(StrEnum):
     DELETE_AGENT = "delete_agent"
     SET_OUTPUT = "set_output"
     FINISH = "finish"
+    RUN_AGENT = "run_agent"
     INVALID = "invalid"
 
 
@@ -46,6 +75,7 @@ class CanvasAction:
     objective: str | None = None
     scope: str | None = None
     expected_output: str | None = None
+    result_scope: str | None = None
     revision_basis: PromptRevisionBasis | None = None
     evidence_agent_ids: tuple[str, ...] = ()
     structural_operator: StructuralOperator | None = None
@@ -56,6 +86,8 @@ class CanvasAction:
     expected_version: int | None = None
     raw_text: str = ""
     parse_error: str | None = None
+    parse_error_code: str | None = None
+    parse_error_details: dict[str, Any] = field(default_factory=dict)
 
     @property
     def valid(self) -> bool:
@@ -83,6 +115,9 @@ class ParsedPolicyAction:
 class ActionParser:
     """Parse a single JSON action, with FlowSteer-style XML as a compatibility fallback."""
 
+    def __init__(self, *, unified: bool = False):
+        self.unified = unified
+
     def parse(self, text: str) -> CanvasAction:
         if not text or not text.strip():
             return self._invalid(text or "", "empty action")
@@ -103,26 +138,80 @@ class ActionParser:
         raw = str(text or "")
         candidates = list(_top_level_json_objects(raw))
         if len(candidates) != 1:
+            # A partial object is a syntax error, not an invented empty action.
+            # Diagnose the original bytes/characters; never fix or execute them.
+            start = raw.find("{")
+            if not candidates and start >= 0:
+                try:
+                    json.loads(raw[start:])
+                except json.JSONDecodeError as exc:
+                    return self._policy_json_error(raw, exc, start, None, 0)
             invalid = self._invalid(
                 raw, f"expected exactly one JSON action; found {len(candidates)}"
             )
+            invalid.parse_error_code = (
+                "director_multiple_action_objects" if candidates else "director_json_object_missing"
+            )
+            invalid.parse_error_details = {
+                "object_count": len(candidates),
+                "message": "The action channel must contain one JSON object, without examples or extra actions.",
+            }
             return ParsedPolicyAction(invalid, None, None, len(candidates))
         start, end, candidate = candidates[0]
         try:
             payload = json.loads(candidate)
-        except (TypeError, ValueError):
-            invalid = self._invalid(raw, "the single JSON action is malformed")
-            return ParsedPolicyAction(invalid, None, (start, end), 1)
+        except json.JSONDecodeError as exc:
+            return self._policy_json_error(raw, exc, start, (start, end), 1)
         if not isinstance(payload, dict):
             invalid = self._invalid(raw, "the single JSON action must be an object")
             return ParsedPolicyAction(invalid, None, (start, end), 1)
         action = self._from_payload(payload, candidate)
+        if not action.valid:
+            name = str(payload.get("action", payload.get("action_type", ""))).lower()
+            action.parse_error_code = "director_action_schema_error"
+            action.parse_error_details = {
+                "action": name, "message": action.parse_error,
+                "received_fields": sorted(payload),
+                    "structured_action_fields": list((UNIFIED_ACTION_FIELDS if self.unified else ACTION_FIELDS).get(name, ("action",))),
+            }
+            if "relations" in payload and name in {
+                "consider_relation", "set_relation", "remove_relation",
+            }:
+                action.parse_error_details["message"] = (
+                    "relations is a Canvas candidate list, not an action field. "
+                    "A single relation action uses top-level source and target; "
+                    "set_relation/remove_relation also require top-level relation. "
+                    "The action must still appear in allowed_actions."
+                )
         return ParsedPolicyAction(
             action,
             candidate if action.valid else None,
             (start, end),
             1,
         )
+
+    @staticmethod
+    def _policy_json_error(raw, exc, start, span, count) -> ParsedPolicyAction:
+        offset = start + exc.pos
+        details = {
+            "message": exc.msg,
+            "line": raw.count("\n", 0, offset) + 1,
+            "column": offset - raw.rfind("\n", 0, offset),
+            "raw_action_offset": offset,
+            "fragment": raw[max(0, offset - 24):offset + 48],
+            "object_count": count,
+        }
+        if exc.msg.startswith("Invalid \\escape"):
+            details["hint"] = (
+                r'Inside JSON string values, a literal backslash needs two backslashes: '
+                r'"Use \\omega". Plain words such as "omega" also avoid LaTeX escaping.'
+            )
+        invalid = CanvasAction(
+            action_type=ActionType.INVALID, raw_text=raw,
+            parse_error=f"JSON syntax error at line {details['line']}, column {details['column']}: {exc.msg}",
+            parse_error_code="director_json_syntax_error", parse_error_details=details,
+        )
+        return ParsedPolicyAction(invalid, None, span, count)
 
     def _from_payload(self, payload: dict[str, Any], raw_text: str) -> CanvasAction:
         action_name = str(payload.get("action", payload.get("action_type", ""))).lower()
@@ -187,6 +276,7 @@ class ActionParser:
             objective=_clean(payload.get("objective")),
             scope=_clean(payload.get("scope")),
             expected_output=_clean(payload.get("expected_output")),
+            result_scope=_clean(payload.get("result_scope")),
             revision_basis=revision_basis,
             evidence_agent_ids=evidence_agent_ids,
             structural_operator=structural_operator,
@@ -200,6 +290,15 @@ class ActionParser:
             raw_text=raw_text,
         )
         error = self._required_field_error(action)
+        if self.unified:
+            if action.action_type is ActionType.SET_OUTPUT:
+                error = "set_output is not part of the unified protocol; configure result_scope and finish(target)"
+            elif action.action_type in {ActionType.FINISH, ActionType.RUN_AGENT} and not action.target:
+                error = f"{action.action_type.value} requires target"
+            elif action.action_type is ActionType.SET_PROMPT and action.result_scope not in {"subtask", "task_result"}:
+                error = "set_prompt requires result_scope=subtask or task_result"
+        elif action.action_type is ActionType.RUN_AGENT or action.result_scope is not None:
+            error = "result_scope and run_agent require the unified protocol"
         if error:
             return self._invalid(raw_text, error, reasoning=action.reasoning)
         return action

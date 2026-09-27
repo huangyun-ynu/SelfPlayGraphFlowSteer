@@ -23,6 +23,7 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
     """Isolated per-Agent sessions; selected candidate commits only on FINISH."""
 
     execution_policy: str = field(default=NATIVE_POLICY, init=False)
+    require_native_actions: bool = True
     _episodes: dict[str, WebShopSessionLifecycle] = field(default_factory=dict)
     _native_active: str | None = None
     _native_committed: str | None = None
@@ -54,8 +55,11 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
         if child is None:
             child = WebShopSessionLifecycle(
                 self.client,
-                max_observation_chars=0,
-                search_observation_mode="legacy",
+                max_observation_chars=0 if self.require_native_actions else self.max_observation_chars,
+                search_observation_mode="legacy" if self.require_native_actions else self.search_observation_mode,
+                env_feedback_enabled=self.env_feedback_enabled,
+                compatibility_profile=self.compatibility_profile,
+                freeze_unknown_mutations=self.freeze_unknown_mutations,
                 stage_purchases=True,
                 pending_ttl_s=self.pending_ttl_s,
                 max_pending_sessions=self.max_pending_sessions,
@@ -72,13 +76,35 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
             child._active_session = pending.session_id
             child._active_agent = agent_id
             child._active_pending_target = None
-            child._results[agent_id].update(commit_pending=False, commit_ready=False)
+            child._results[agent_id].update(
+                commit_pending=False, commit_ready=False, purchase_executed=False,
+                termination_reason="active", environment_completed=False,
+            )
         state = child.begin_execution(agent_id=agent_id, seed=seed, revision=revision)
-        if not isinstance(state.get("raw_available_actions"), list):
+        if self.require_native_actions and not isinstance(state.get("raw_available_actions"), list):
             child.end_execution()
             raise ValueError("native WebShop sidecar capability raw_available_actions is missing")
         self._native_active = agent_id
         return state
+
+    def search(self, query: str) -> dict:
+        if self._native_active is None:
+            raise RuntimeError("shopping action outside an Agent execution")
+        return self._episodes[self._native_active].search(query)
+
+    def click(self, target_id: str, *, purchase_evidence=None, state_version=None) -> dict:
+        if self._native_active is None:
+            raise RuntimeError("shopping action outside an Agent execution")
+        return self._episodes[self._native_active].click(
+            target_id, purchase_evidence=purchase_evidence, state_version=state_version
+        )
+
+    def preflight_click(self, target_id: object, *, state_version: object = None) -> dict | None:
+        if self._native_active is None:
+            raise RuntimeError("shopping action outside an Agent execution")
+        return self._episodes[self._native_active].preflight_click(
+            target_id, state_version=state_version
+        )
 
     def end_execution(self) -> None:
         if self._native_active is not None:

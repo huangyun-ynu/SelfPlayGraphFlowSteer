@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -59,8 +59,11 @@ class DatasetActionAdapter:
     commit_policy: CommitPolicy | str = CommitPolicy.NONE
     commit_activation: CommitActivation | str = CommitActivation.NONE
     supports_parallel_reads: bool = True
+    action_budget_policy: str = "phase_split_v1"
 
     def __post_init__(self) -> None:
+        if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
+            raise ValueError("unknown dataset action budget policy")
         adapter_id = self.adapter_id.strip().casefold()
         datasets = tuple(dict.fromkeys(value.strip().casefold() for value in self.datasets))
         actions = tuple(dict.fromkeys(value.strip() for value in self.action_names))
@@ -125,6 +128,8 @@ class DatasetActionAdapter:
             "commit_policy": self.commit_policy.value,
             "commit_activation": self.commit_activation.value,
             "supports_parallel_reads": bool(self.supports_parallel_reads),
+            **({"action_budget_policy": self.action_budget_policy}
+               if self.action_budget_policy != "phase_split_v1" else {}),
         }
 
 
@@ -181,9 +186,11 @@ def default_dataset_action_registry(
     *,
     aime_budgets: tuple[int, int, int] = (3, 1, 4),
     retrieval_initial_budget: int = 3,
+    hotpotqa_search_enabled: bool = False,
     webshop_budgets: tuple[int, int, int] = (12, 4, 16),
     webshop_staged_commit: bool = True,
     webshop_commit_on_finish: bool = False,
+    action_budget_policy: str = "phase_split_v1",
     alfworld_budgets: tuple[int, int, int] = (50, 50, 100),
     swe_budgets: tuple[int, int, int] = (28, 12, 40),
 ) -> DatasetActionRegistry:
@@ -191,6 +198,8 @@ def default_dataset_action_registry(
 
     available = tuple(dict.fromkeys(str(value) for value in available_actions))
     available_set = set(available)
+    if hotpotqa_search_enabled and "search" not in available_set:
+        raise ValueError("HotpotQA search baseline requires the search Action")
     adapters: list[DatasetActionAdapter] = [
         DatasetActionAdapter(
             adapter_id="healthbench_professional",
@@ -208,7 +217,7 @@ def default_dataset_action_registry(
         ),
         DatasetActionAdapter(
             adapter_id="hotpotqa_context",
-            datasets=("hotpotqa",),
+            datasets=("hotpotqa_context",) if hotpotqa_search_enabled else ("hotpotqa",),
             action_names=(),
             initial_action_budget=0,
             revision_action_budget=0,
@@ -251,7 +260,7 @@ def default_dataset_action_registry(
         adapters.append(
             DatasetActionAdapter(
                 adapter_id="retrieval_qa",
-                datasets=("nq_open",),
+                datasets=("nq_open", "hotpotqa") if hotpotqa_search_enabled else ("nq_open",),
                 action_names=("search",),
                 initial_action_budget=retrieval_initial_budget,
                 revision_action_budget=1,
@@ -322,4 +331,7 @@ def default_dataset_action_registry(
                 supports_parallel_reads=False,
             )
         )
-    return DatasetActionRegistry(adapters, available_actions=available)
+    return DatasetActionRegistry(
+        [replace(adapter, action_budget_policy=action_budget_policy) for adapter in adapters],
+        available_actions=available,
+    )

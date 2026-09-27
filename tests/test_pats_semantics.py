@@ -119,7 +119,7 @@ def test_approval_is_bound_to_content_version_scope_and_contract(tmp_path, monke
     assert filter_semantic_cards(store, "scope", [changed, versioned]) == []
     assert filter_semantic_cards(store, "different-scope", [original]) == []
     monkeypatch.setattr(
-        "selfplay_graph_flowsteer.pats_semantics.contract_hash", lambda: "changed-contract"
+        "selfplay_graph_flowsteer.pats_semantics.contract_hash", lambda *args: "changed-contract"
     )
     assert filter_semantic_cards(store, "scope", [original]) == []
     seed = dict(original, provenance="human_seed")

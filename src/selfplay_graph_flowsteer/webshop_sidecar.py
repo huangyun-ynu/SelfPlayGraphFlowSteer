@@ -47,6 +47,7 @@ class OfficialWorker:
     seed: int
     timeout_s: float
     java_home: Path | None = None
+    observation_mode: str = "text"
     _process: subprocess.Popen[bytes] = field(init=False, repr=False)
     _response_fd: int = field(init=False, repr=False)
     _request_id: int = field(default=0, init=False)
@@ -54,6 +55,8 @@ class OfficialWorker:
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.observation_mode not in {"text", "text_rich"}:
+            raise ValueError("unsupported WebShop observation mode")
         read_fd, write_fd = os.pipe()
         environment = dict(os.environ)
         environment.pop("PYTHONPATH", None)
@@ -61,8 +64,18 @@ class OfficialWorker:
             environment["JAVA_HOME"] = str(self.java_home)
             environment["JVM_PATH"] = str(self.java_home / "lib/server/libjvm.so")
             environment["PATH"] = f"{self.java_home / 'bin'}:{environment.get('PATH', '')}"
+        command = [str(self.interpreter), str(self.worker_script)]
+        if self.observation_mode != "text":
+            command = [
+                str(self.interpreter),
+                str(Path(__file__).with_name("webshop_worker_bridge.py")),
+                "--worker-script",
+                str(self.worker_script),
+                "--observation-mode",
+                self.observation_mode,
+            ]
         self._process = subprocess.Popen(  # noqa: S603
-            (str(self.interpreter), str(self.worker_script), "--response-fd", str(write_fd)),
+            [*command, "--response-fd", str(write_fd)],
             cwd=self.source_root,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
@@ -471,7 +484,13 @@ def _public_price_fields(product: dict[str, Any]) -> dict[str, Any]:
 
 
 def _search_products(text: str) -> dict[str, dict[str, Any]]:
-    parts = [part.strip() for part in text.split("[SEP]") if part.strip()]
+    segments = text.split("[SEP]") if "[SEP]" in text else text.splitlines()
+    parts = [part.strip() for part in segments if part.strip()]
+    # The official text_rich renderer wraps clickable ASINs in public UI tags.
+    parts = [
+        re.sub(r"^\[(?:clicked )?button\]\s*(.*?)\s*\[(?:clicked )?button_\]$", r"\1", part)
+        for part in parts
+    ]
     output: dict[str, dict[str, Any]] = {}
     for index, part in enumerate(parts):
         if not _ASIN.fullmatch(part):
@@ -529,6 +548,7 @@ class SidecarState:
                 seed=self.args.seed,
                 timeout_s=self.args.worker_timeout,
                 java_home=self.args.java_home,
+                observation_mode=self.args.observation_mode,
             )
             session_id = uuid.uuid4().hex
             session = WebShopSession(session_id, worker, self.products, goal_id)
@@ -591,6 +611,7 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
                 "index_path": str(state.args.index.resolve()),
                 "idempotency_protocol": _IDEMPOTENCY_PROTOCOL,
                 "raw_action_protocol": "webshop-raw-actions-v1",
+                "observation_mode": state.args.observation_mode,
                 "request_epoch": state.epoch,
                 "session_count": session_count,
                 "status": "ok",
@@ -707,6 +728,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--java-home", type=Path)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--worker-timeout", type=float, default=180.0)
+    parser.add_argument("--observation-mode", choices=("text", "text_rich"), default="text")
     parser.add_argument("--max-sessions", type=int, default=48)
     parser.add_argument("--max-initializers", type=int, default=4)
     parser.add_argument("--idempotency-cache-size", type=int, default=8192)

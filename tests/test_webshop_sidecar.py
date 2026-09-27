@@ -86,7 +86,7 @@ def test_all_product_options_remain_executable(mode: str) -> None:
         {"target_id": f"select_option:size:{i}", "kind": "select_option", "label": str(i)}
         for i in range(150)
     ]
-    lifecycle = SimpleNamespace(search_observation_mode=mode, max_observation_chars=100)
+    lifecycle = WebShopSessionLifecycle(None, search_observation_mode=mode, max_observation_chars=100)
     result = WebShopSessionLifecycle._bounded(
         lifecycle, {"page_type": "product", "valid_subactions": actions}
     )

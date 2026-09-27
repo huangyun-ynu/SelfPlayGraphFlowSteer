@@ -11,8 +11,6 @@ import pytest
 from selfplay_graph_flowsteer.canvas import CanvasState
 from selfplay_graph_flowsteer.contracts import RelationType
 from selfplay_graph_flowsteer.director import GraphDirector
-from selfplay_graph_flowsteer.director_snapshot_delta import SnapshotCodec
-from selfplay_graph_flowsteer.director_snapshot_delta import apply as apply_delta
 from selfplay_graph_flowsteer.graph import MultiAgentGraph
 from selfplay_graph_flowsteer.llm import BinaryChoiceResponse, MockBackend
 from selfplay_graph_flowsteer.runtime import MultiAgentRuntime
@@ -32,7 +30,7 @@ def stage(asin=ASIN1):
     return ["search[product]", f"click[{asin}]", "click[buy now]", report()]
 
 
-@pytest.mark.parametrize("mode", ["snapshot_dedup", "append_only", "delta_timeline"])
+@pytest.mark.parametrize("mode", ["snapshot_dedup", "append_only"])
 def test_real_director_driver_creates_two_agents_with_binary_relation_and_keeps_history(
     monkeypatch, mode, tokenizer
 ):
@@ -104,15 +102,14 @@ def test_real_director_driver_creates_two_agents_with_binary_relation_and_keeps_
     assert len(worker.calls) == 7
     assert any(call.get("binary_choices") == ["off", "on"] for call in backend.calls)
     assert "isolated" in backend.calls[0]["messages"][0]["content"]
-    if mode in {"append_only", "delta_timeline"}:
+    if mode == "append_only":
         assert "Finding A" in str(backend.calls[-1]["messages"])
         for index, turn in enumerate(run.turns):
             audit = turn.action_diagnostics["timeline_prefix_audit"]
             assert audit["timeline_merge_candidate"]
             if index:
-                assert audit["previous_policy_is_exact_prefix"]
-    if mode == "delta_timeline":
-        assert '"delta"' in str(backend.calls[-1]["messages"])
+                assert audit["previous_policy_is_exact_prefix"] is True
+        assert "simulated reasoning" in str(backend.calls[-1]["messages"])
 
 
 def test_prompt_edit_revises_same_session_and_does_not_retain_stale_candidate():
@@ -317,34 +314,6 @@ def test_backend_failure_after_action_keeps_attempt_and_releases_execution_guard
     assert len(client.sessions) == 1
 
 
-def test_delta_snapshots_reconstruct_every_canvas_edit_and_reject_replay():
-    c, b, life, client = canvas_build([report("A"), report("B"), report("layer"), report("edge")])
-    codec = SnapshotCodec()
-    decoded = None
-    seq = -1
-    commands = [
-        dict(action="add_agent", agent_id="a"),
-        dict(
-            action="set_prompt",
-            target="a",
-            role="Analyst",
-            objective="Assess public evidence",
-            scope="Public task",
-            expected_output="A finding",
-        ),
-        dict(action="delete_agent", target="a"),
-        dict(action="add_agent", agent_id="b"),
-    ]
-    for command in commands:
-        step(c, **command)
-        snapshot = c.control_snapshot()
-        packet = json.loads(codec.encode(snapshot))
-        decoded, seq = apply_delta(decoded, seq, packet)
-        assert decoded == snapshot
-        with pytest.raises(ValueError):
-            apply_delta(decoded, seq, packet)
-
-
 def test_native_flag_does_not_change_other_dataset_output_capabilities_or_canvas_hint():
     from selfplay_graph_flowsteer.actions import ActionType, CanvasAction
     from selfplay_graph_flowsteer.dataset_actions import DatasetActionAdapter
@@ -368,6 +337,7 @@ def test_native_flag_does_not_change_other_dataset_output_capabilities_or_canvas
     c._apply(c.graph, CanvasAction(ActionType.SET_OUTPUT, target="a"))
     assert c.graph.nodes["a"].metadata.get("exclusive_capabilities") == ["code_commit"]
     assert c.control_snapshot()["environment_commit_resolution"] is None
+    assert "environment_task_status" not in c.control_snapshot()
 
 
 @pytest.mark.parametrize(

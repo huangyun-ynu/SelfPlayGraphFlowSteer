@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -228,9 +227,18 @@ def test_failover_cannot_extend_request_budget(tmp_path, monkeypatch):
     a, b = SlowFailure("a"), SlowFailure("b")
     a.config.timeout_s = b.config.timeout_s = 5
     pool = EndpointPoolBackend("gpt", {"a": a, "b": b}, tmp_path)
-    with pytest.raises(type(_transient_failure())):
+    with pytest.raises(type(_transient_failure())) as captured:
         pool.generate([{"content": "same"}], role="worker")
     assert calls == ["https://a"]
+    error = captured.value
+    assert not error.classification.disable_route
+    assert not error.classification.retryable  # No unbounded extension of this request.
+    assert "1 of 2 endpoints attempted" in error.classification.message
+    assert error.request_events[0]["endpoint_pool_members_attempted"] == ["a"]
+    assert error.request_events[0]["request_budget_exhausted"] is True
+    # A new independent request may still use the untried healthy endpoint.
+    b.generate = lambda messages, **kwargs: SimpleNamespace(metadata={}, text="healthy")
+    assert pool.generate([{"content": "new request"}], role="worker").text == "healthy"
 
 
 def test_failover_scope_disables_nested_retries_and_restores_context():

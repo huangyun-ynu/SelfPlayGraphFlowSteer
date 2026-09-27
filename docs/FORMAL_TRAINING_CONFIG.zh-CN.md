@@ -14,14 +14,23 @@ scripts/formal/bootstrap_remote.sh
 scripts/formal/run_experiment.sh
 ```
 
+Director 正式入口默认采用 `SPGFS_DIRECTOR_CONTEXT_MODE=append_only`，增量保留历史 thinking、动作和反馈；关系概率审计明细只存离线。训练默认 `--raw-policy-backward-mode timeline`，按真实 token 前缀检查合并，失败时回退逐调用。可通过 `SPGFS_DIRECTOR_CONTEXT_MODE`、`SPGFS_RAW_POLICY_BACKWARD_MODE` 显式覆盖。详见 [Director 增量式上下文说明](DIRECTOR_INCREMENTAL_CONTEXT_20260927.zh-CN.md)。
+
 本配置包含：本地 Qwen3.5-9B Proposer/Solver、GPT 路由池、Skill Refiner、Grok、Gemini、
 DeepSeek、MiniMax、Search-R1 检索、WebShop sidecar、ALFWorld，以及远程 SWE verifier。
 正式启动还要求新鲜的 `state/formal-training/route_report.json`；报告超过 1,800 秒会被拒绝。
 
-WebShop 正式页面模式为 `legacy`。选定的无 skill 基线是 2026-09-18 的
-62/128 严格成功（48.4375%）运行；专用配置、启动入口及 58/128 历史版本归档见
-[WebShop 正式基线](WEBSHOP_BASELINE.zh-CN.md)。通用训练的 Worker 路由与 skill
-开关独立于这项基线选择，不能将基线成绩直接归给其它模型或训练配置。
+正式训练的**轨迹并发为 24**：入口 `--workers 24` 与课程配置 `rollout_workers=24` 一致。
+DeepSeek 路由的请求并发上限也为 24；它与轨迹并发分别控制模型请求和 rollout 调度。
+
+单条题目轨迹的 Worker 累计 token 上限：AIME、NQ、HotpotQA、HealthBench Professional
+均为 **240,000**；ALFWorld、WebShop、SWE-bench 均为 **350,000**。额度累计所有
+Worker 的输入与输出，包括修订和重跑，不包含 Director tokens，也不是单次请求的输出上限。
+该设置同步至当前训练/评测配置及源码默认值；已完成实验的配置快照保留原值。
+
+WebShop正式训练采用M02（合并提示＋身份修复，历史62/128、EM48.4375%、平均分73.5221），
+启用`m02_merged_identity_v1`。Director选择逻辑模型，物理接口由程序轮换；Qwen thinking开启。
+固定DeepSeek无Skill仅用于历史参考评测。详见[WebShop正式版本](WEBSHOP_BASELINE.zh-CN.md)。
 
 本工作区当前已恢复的私密配置状态如下（只记录状态，不在文档中复制密钥正文）：
 
@@ -76,8 +85,9 @@ git check-ignore -q .env && echo '.env is ignored'
 ## 3. 路由、模型和密钥变量
 
 以下表格与 `configs/formal_training.toml` 一致。`gpt` 池包含 `gpt`、`gpt_eco` 和
-`gpt_student`；HealthBench 的 Worker 路由覆盖会把 Director 选择的 `gpt` 定向到
-`gpt_student`，而其它选择保持原路由。HealthBench Judge 也固定使用 `gpt_student`；
+`gpt_student`。正式 HealthBench 的 Worker 由 Director 在正式候选模型中自主选择；
+测试用的 GPT-only 限制及固定路由不进入正式配置。经用户确认，HealthBench Judge
+沿用 `gpt_student`，该端点并发恢复为 5；
 `gpt_judge`/`gpt_judge_eco` 保留为兼容配置但不参与本正式训练。`skill_refiner` 仅用于
 周期之间的 Skill Distiller，不属于 Worker 选择池。
 
@@ -85,7 +95,7 @@ git check-ignore -q .env && echo '.env is ignored'
 |---|---|---|---|---:|
 | `gpt` | `https://nexus.itssx.com/api/codex/codex/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 10 |
 | `gpt_eco` | `https://nexus.itssx.com/api/codex_eco/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 10 |
-| `gpt_student` | `https://flowsteer.org:2087/v1` | `lab-gpt-5.5-2` | `~/.config/student-api/flowsteer.key` | 5 |
+| `gpt_student` | `https://flowsteer.org:2087/v1` | `lab-gpt-5.5-2` | `FLOWSTEER_API_KEY` | 5 |
 | `gpt_judge` | `https://nexus.itssx.com/api/codex/codex/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 16 |
 | `gpt_judge_eco` | `https://nexus.itssx.com/api/codex_eco/v1` | `gpt-5.5` | `NEXUS_API_KEY` | 16 |
 | `skill_refiner` | `https://nexus.itssx.com/api/codex/codex_pro/v1` | `gpt-6-astra` | `NEXUS_PRO_API_KEY` | 20 |
@@ -96,11 +106,24 @@ git check-ignore -q .env && echo '.env is ignored'
 | `deepseek` | `https://api.deepseek.com/v1` | `deepseek-flash` | `DEEPSEEK_API_KEY` | 20 |
 | `minimax` | `https://api.minimaxi.com/v1` | `MiniMax-M2.7` | `MINIMAX_API_KEY` | 30 |
 
-当前 `runtime_routing.worker_routes = ["gpt"]`，池为 `gpt,gpt_eco,gpt_student`；三者共用同一套
-排队、健康冷却、重试和轮换机制，但 HealthBench 的 `gpt` 选择会按
-`runtime_routing.dataset_route_overrides` 固定走 `gpt_student`。正式脚本用
-`--minimum-selected-routes 1`，因此至少要有一个 Worker 池成员可用，但 route report 仍须
+正式 `runtime_routing.worker_routes = ["gpt", "grok", "gemini", "deepseek", "minimax"]`，
+Director 从通过探测的候选中自主选择每个 Worker 的模型，QA 不强制路由到 DeepSeek。
+GPT endpoint 池为 `gpt,gpt_eco,gpt_student`，共用排队、健康冷却、重试和轮换机制。
+正式 Qwen Proposer 与 Solver 均显式开启 thinking，包括 HotpotQA 和 NQ。
+固定路由及历史 NQ thinking 关闭设置仅用于[独立 QA 对照测试](QA_FORMAL_BASELINE.zh-CN.md)。
+正式脚本用 `--minimum-selected-routes 1`，因此至少要有一个 Worker 路由可用，但 route report 仍须
 覆盖所有配置候选路由和池成员。HealthBench 启用时还必须成功探测 Judge 路由。
+
+2026-09-25 经用户确认，正式 HealthBench 采用调整分 46.96 的统一答案协议版本：
+保留完整公开对话输入、完整 answer 协议及统一 submission contract，
+不包含后来调整分 41.90 的完整正文传递改动。正式采集入口优先加载当前 checkout 的
+`src`；未显式设置 `SPGFS_VENV` 且共享训练环境不存在时，使用项目 `.venv`。
+同步范围、实验基线及节点传递策略见
+[HealthBench 正式同步记录](HEALTHBENCH_FORMAL_PROMOTION_2026-09-25.zh-CN.md)。
+
+完整正文传递代码、固定测试路由、20 题并发及测试 Judge 并发 10 均保留在独立实验中。
+其 128 题重跑、逐项评分与正文哈希审计见
+[完整正文传递实验](HEALTHBENCH_FULL_RELAY_128_C20_2026-09-25.zh-CN.md)。
 
 ## 4. 本地模型与服务资产
 
@@ -235,3 +258,6 @@ SPGFS_SWE_CVM_AUTO_STOP=1
 
 若 API key 曾被提交、粘贴到公开日志或发送到不受信任位置，应先在供应商控制台撤销并重新
 生成，再更新 `.env`；不要试图在文档中“遮罩后继续使用”旧凭据。
+
+
+2026-09-25 WebShop M02同步时，正式GPT池保留3个成员，Grok池补齐`grok,grok45`，Gemini池补齐`gemini,gemini2`。Director仅看逻辑模型，不看池成员或URL。现有0.5秒快速切换针对本地排队，不是已发出HTTP请求的超时上限。见[同步记录](WEBSHOP_FORMAL_PROMOTION_2026-09-25.zh-CN.md)。

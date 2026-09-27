@@ -208,7 +208,12 @@ def run_review(tmp_path, backend):
     return receipt, controller.snapshot()
 
 
-def test_short_ids_change_only_request_identifiers_and_resolve_exactly():
+def test_short_ids_change_only_request_identifiers_and_resolve_exactly(monkeypatch):
+    # Identifier fidelity must not depend on real prompt length measured in
+    # characters by this fixture. Packing limits have separate coverage above.
+    monkeypatch.setattr(
+        "selfplay_graph_flowsteer.pats_refiner.review_system_prompt", lambda *_: "Review"
+    )
     original = evidence(2)
     messages, admitted, audit = build(PatsConfig(enabled=True), original)
     wire = json.loads(messages[-1]["content"])

@@ -64,7 +64,7 @@ SPGFS_WEBSHOP_EVAL_DATASET=state/experiments/webshop-skillflow-native-v1-2026092
 
 ## Director/Canvas 场景检查与修复
 
-使用脚本化 Director、可控 Worker 和独立模拟 WebShop 会话，经过真实 GraphDirector → Canvas → Runtime → NativeLifecycle 调用链。三种 Director 上下文模式均覆盖：snapshot_dedup、append_only、delta_timeline；后两种使用本地真实 Qwen tokenizer 验证逐轮 token 前缀保持。
+使用脚本化 Director、可控 Worker 和独立模拟 WebShop 会话，经过真实 GraphDirector → Canvas → Runtime → NativeLifecycle 调用链。当时覆盖三种 Director 上下文模式：snapshot_dedup、append_only、delta_timeline，并使用本地真实 Qwen tokenizer 验证后两种的逐轮 token 前缀。当前已删除 delta_timeline；按用户最新要求恢复历史 thinking，回归覆盖剩余两种模式，并用本地真实 tokenizer 验证 append_only 的逐轮前缀保持。概率审计明细继续只保存在离线记录中。
 
 覆盖节点增删、职责修订、层次/关系变更、关系 off/on、旧双向连通分量和下游失效、无关分支缓存、独立会话、删除重建身份、切换输出、无候选结束、重复 FINISH、提交失败、后端中断后恢复、报告格式失败、过期 Canvas 版本、增量快照重建及完整图反事实重放。
 
@@ -82,3 +82,7 @@ SPGFS_WEBSHOP_EVAL_DATASET=state/experiments/webshop-skillflow-native-v1-2026092
 ## 用户停止时的状态（2026-09-23 22:58）
 
 按用户要求停止后续工作。首轮 10 题已完成（1/10，平均 37.17）；四类问题修复后的专项验证共 46 项通过（45 项合并运行，加 1 项完整图反事实集成测试）。扩大回归被中断，不能标记为全部通过；修复后同组 10 题复测尚未启动。Qwen 与显存占位按此前要求保留，未改动正式基线。详见实验目录 `user_stop.json`。
+
+## 2026-09-24 后续迭代
+
+以上为 09-23 的历史停止状态。09-24 已继续进行修复后代码的前 10 题对照、购买完成状态反馈及规格/详情证据提示改进，记录见 [Native 完成状态迭代](WEBSHOP_NATIVE_COMPLETION_EXPERIMENT_2026-09-24.zh-CN.md)。后续结果单独保存，不覆盖首轮历史成绩。

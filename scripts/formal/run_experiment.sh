@@ -11,11 +11,13 @@ set -a
 source .env
 set +a
 source scripts/formal/environment.sh
+# Always collect with the current checkout, including promoted dataset fixes.
+export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 mkdir -p "$TMPDIR"
 mkdir -p \
-  state/formal-training/swe/repo-cache \
-  state/formal-training/swe/workspaces \
-  state/formal-training/private/swe/artifacts
+  state/formal-training-output-contract-v2/swe/repo-cache \
+  state/formal-training-output-contract-v2/swe/workspaces \
+  state/formal-training-output-contract-v2/private/swe/artifacts
 
 : "${SPGFS_FORMAL_TASK_POOL:?Set SPGFS_FORMAL_TASK_POOL to the validated seven-dataset JSONL pool}"
 if [[ ! -f "$SPGFS_FORMAL_TASK_POOL" ]]; then
@@ -56,10 +58,10 @@ retrieval_healthy() {
   python scripts/formal/check_retrieval_service.py
 }
 
-if [[ "${SPGFS_ENABLE_LOCAL_RETRIEVAL:-1}" == "1" ]] && ! retrieval_healthy; then
-  mkdir -p state/formal-training/retrieval
+if [[ "${SPGFS_ENABLE_LOCAL_RETRIEVAL:-0}" == "1" ]] && ! retrieval_healthy; then
+  mkdir -p state/formal-training-output-contract-v2/retrieval
   scripts/formal/run_retrieval_service.sh \
-    >state/formal-training/retrieval/service.log 2>&1 &
+    >state/formal-training-output-contract-v2/retrieval/service.log 2>&1 &
   RETRIEVAL_PID=$!
   for _ in $(seq 1 "${SPGFS_RETRIEVAL_STARTUP_SECONDS:-1800}"); do
     retrieval_healthy && break
@@ -95,7 +97,7 @@ PY
 }
 
 if ! webshop_healthy; then
-  mkdir -p state/formal-training/webshop_sidecar
+  mkdir -p state/formal-training-output-contract-v2/webshop_sidecar
   python -m selfplay_graph_flowsteer.webshop_sidecar \
     --host 127.0.0.1 --port "$SPGFS_WEBSHOP_PORT" \
     --interpreter "$SPGFS_WEBSHOP_INTERPRETER" \
@@ -107,7 +109,7 @@ if ! webshop_healthy; then
     --index "$SPGFS_WEBSHOP_INDEX" \
     --java-home "$SPGFS_WEBSHOP_JAVA_HOME" \
     --worker-timeout 180 --max-sessions 48 --max-initializers 4 \
-    >state/formal-training/webshop_sidecar/service.log 2>&1 &
+    >state/formal-training-output-contract-v2/webshop_sidecar/service.log 2>&1 &
   WEBSHOP_PID=$!
   for _ in $(seq 1 120); do
     if webshop_healthy; then
@@ -125,16 +127,24 @@ if ! webshop_healthy; then
   fi
 fi
 
+# Freeze NQ evidence once per public question, before Proposer/Solver collection.
+# All other rows and their train/eval identities are preserved by the preparer.
+FORMAL_QA_TASK_POOL="state/formal-training-output-contract-v2/qa-baseline/task_pool.jsonl"
+python -m selfplay_graph_flowsteer.nq_frozen_context \
+  --config configs/formal_training.toml \
+  --input "$SPGFS_FORMAL_TASK_POOL" \
+  --output "$FORMAL_QA_TASK_POOL"
+
 python scripts/formal/wandb_direct_exec.py -- \
 python -m selfplay_graph_flowsteer selfplay-experiment \
   --config configs/formal_training.toml \
-  --task-pool "$SPGFS_FORMAL_TASK_POOL" \
+  --task-pool "$FORMAL_QA_TASK_POOL" \
   --curriculum-profile configs/curriculum/formal_3500.toml \
-  --output state/formal-training/experiment \
-  --route-report state/formal-training/route_report.json \
+  --output state/formal-training-output-contract-v2/experiment \
+  --route-report state/formal-training-output-contract-v2/route_report.json \
   --minimum-selected-routes 1 \
   --cycles "${SPGFS_FORMAL_CYCLES:-256}" --final-cycle-evaluation-only \
-  --workers 35 --pipeline-counterfactuals --historical-duration-priority \
+  --workers 24 --pipeline-counterfactuals --historical-duration-priority \
   --enable-swe \
   --frontier-reverify-workers 8 \
   --pipeline-frontier-by-dataset \
@@ -142,7 +152,7 @@ python -m selfplay_graph_flowsteer selfplay-experiment \
   --parallel-role-training --max-sequence-length 32768 \
   --proposer-gpu-id "$PROPOSER_GPU_ID" --solver-gpu-id "$SOLVER_GPU_ID" \
   --max-micro-batch-tokens 32768 --micro-batch-size 1 \
-  --raw-policy-backward-mode call \
+  --raw-policy-backward-mode "${SPGFS_RAW_POLICY_BACKWARD_MODE:-timeline}" \
   --activation-cpu-offload --activation-cpu-offload-min-tokens 4096 \
-  --manage-services --service-state-dir state/formal-training/policy_services \
+  --manage-services --service-state-dir state/formal-training-output-contract-v2/policy_services \
   "$@"

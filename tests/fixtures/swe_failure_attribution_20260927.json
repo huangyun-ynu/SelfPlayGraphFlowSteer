@@ -1,0 +1,1622 @@
+[
+  {
+    "id": "swe_bench_verified_test:pydata__xarray-7229",
+    "sample_sha256": "77291e946c67e3f90b9373b6669d85f6c7f702b283e27d7780bb44114d23c8a0",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:pydata__xarray-7229-0:canvas:17",
+        "round_index": 18,
+        "node_ids": [
+          "agent_3"
+        ],
+        "token_budget": {
+          "used": 322409,
+          "max": 350000,
+          "remaining": 27591
+        },
+        "execution": {
+          "artifacts": {
+            "agent_3": {
+              "artifact_id": "artifact_7",
+              "agent_id": "agent_3",
+              "failed": true,
+              "token_in": 11864,
+              "token_out": 859,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 40314,
+                  "spent_tokens": 7741,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 22762,
+                    "output_bound": 16384,
+                    "required_tokens": 39146,
+                    "credit": 18295,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 39146,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_7",
+              "agent_id": "agent_3",
+              "failed": true,
+              "token_in": 11864,
+              "token_out": 859,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 40314,
+                  "spent_tokens": 7741,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 22762,
+                    "output_bound": 16384,
+                    "required_tokens": 39146,
+                    "credit": 18295,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 39146,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_7",
+              "agent_id": "agent_3",
+              "cache_hit": false,
+              "token_in": 11864,
+              "token_out": 859
+            }
+          ],
+          "token_in": 11864,
+          "token_out": 859
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:sympy__sympy-12096",
+    "sample_sha256": "934ce30a7917ae5d92d08abe058dcdf3f9b20e1c0a272e4d9eeb97fd5e8094fd",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:sympy__sympy-12096-0:canvas:7",
+        "round_index": 8,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 120004,
+          "max": 350000,
+          "remaining": 229996
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 11595,
+              "token_out": 316,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 63450,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 57833,
+                    "output_bound": 16384,
+                    "required_tokens": 74217,
+                    "credit": 14018,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 74217,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": false,
+              "token_in": 11604,
+              "token_out": 289,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 63450,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 57241,
+                    "output_bound": 16384,
+                    "required_tokens": 73625,
+                    "credit": 14009,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 73625,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 11595,
+              "token_out": 316,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 63450,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 57833,
+                    "output_bound": 16384,
+                    "required_tokens": 74217,
+                    "credit": 14018,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 74217,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": false,
+              "token_in": 11604,
+              "token_out": 289,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 63450,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 57241,
+                    "output_bound": 16384,
+                    "required_tokens": 73625,
+                    "credit": 14009,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 73625,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_2",
+              "agent_id": "agent_2",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "cache_hit": false,
+              "token_in": 11595,
+              "token_out": 316
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 11604,
+              "token_out": 289
+            }
+          ],
+          "token_in": 23199,
+          "token_out": 605
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:matplotlib__matplotlib-20488",
+    "sample_sha256": "043b0c405d8daf966828ea1467c95b2240ba83d673b8b748359ca9361e87e609",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:matplotlib__matplotlib-20488-0:canvas:7",
+        "round_index": 8,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 259086,
+          "max": 350000,
+          "remaining": 90914
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 22728,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 46995,
+                    "output_bound": 16384,
+                    "required_tokens": 63379,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 63379,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 35066,
+                    "output_bound": 4096,
+                    "required_tokens": 39162,
+                    "credit": 22728,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 39162,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 22728,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 46924,
+                    "output_bound": 16384,
+                    "required_tokens": 63308,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 63308,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 34995,
+                    "output_bound": 4096,
+                    "required_tokens": 39091,
+                    "credit": 22728,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 39091,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 22728,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 46995,
+                    "output_bound": 16384,
+                    "required_tokens": 63379,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 63379,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 35066,
+                    "output_bound": 4096,
+                    "required_tokens": 39162,
+                    "credit": 22728,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 39162,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 22728,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 46924,
+                    "output_bound": 16384,
+                    "required_tokens": 63308,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 63308,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 34995,
+                    "output_bound": 4096,
+                    "required_tokens": 39091,
+                    "credit": 22728,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 39091,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_2",
+              "agent_id": "agent_2",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "cache_hit": false,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 0,
+              "token_out": 0
+            }
+          ],
+          "token_in": 0,
+          "token_out": 0
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:scikit-learn__scikit-learn-25931",
+    "sample_sha256": "b8c5bde26e785aa8a32d85b1666d5da6acc27b3a027315c8d4ddd8b476b66bdc",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:scikit-learn__scikit-learn-25931-0:canvas:7",
+        "round_index": 8,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 101805,
+          "max": 350000,
+          "remaining": 248195
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 9180,
+              "token_out": 261,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 66757,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 52427,
+                    "output_bound": 16384,
+                    "required_tokens": 68811,
+                    "credit": 22782,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 68811,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": false,
+              "token_in": 9171,
+              "token_out": 223,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 66757,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 51784,
+                    "output_bound": 16384,
+                    "required_tokens": 68168,
+                    "credit": 22824,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 68168,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 9180,
+              "token_out": 261,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 66757,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 52427,
+                    "output_bound": 16384,
+                    "required_tokens": 68811,
+                    "credit": 22782,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 68811,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": false,
+              "token_in": 9171,
+              "token_out": 223,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 66757,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 51784,
+                    "output_bound": 16384,
+                    "required_tokens": 68168,
+                    "credit": 22824,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 68168,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_2",
+              "agent_id": "agent_2",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "cache_hit": false,
+              "token_in": 9180,
+              "token_out": 261
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 9171,
+              "token_out": 223
+            }
+          ],
+          "token_in": 18351,
+          "token_out": 484
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:sympy__sympy-20801",
+    "sample_sha256": "8e5a691d25fe04c11bae83d9cef18ad9e7a3a394675719e3e06341e609a6397e",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:sympy__sympy-20801-0:canvas:10",
+        "round_index": 11,
+        "node_ids": [
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 315438,
+          "max": 350000,
+          "remaining": 34562
+        },
+        "execution": {
+          "artifacts": {
+            "agent_2": {
+              "artifact_id": "artifact_5",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 20373,
+              "token_out": 1692,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 56627,
+                  "spent_tokens": 17175,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 34462,
+                    "output_bound": 16384,
+                    "required_tokens": 50846,
+                    "credit": 24868,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 50846,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_5",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 20373,
+              "token_out": 1692,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 56627,
+                  "spent_tokens": 17175,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 34462,
+                    "output_bound": 16384,
+                    "required_tokens": 50846,
+                    "credit": 24868,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 50846,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_5",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 20373,
+              "token_out": 1692
+            }
+          ],
+          "token_in": 20373,
+          "token_out": 1692
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:astropy__astropy-8872",
+    "sample_sha256": "edab971dc9fb75ba5f8688145f592d890922ffe2a1ac55d6cf3a7f1b65afd9b0",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:astropy__astropy-8872-0:canvas:7",
+        "round_index": 8,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 97165,
+          "max": 350000,
+          "remaining": 252835
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 39702,
+              "token_out": 2895,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 24105,
+              "token_out": 1223,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 69540,
+                  "spent_tokens": 18833,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 39016,
+                    "output_bound": 16384,
+                    "required_tokens": 55400,
+                    "credit": 33098,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 55400,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 24105,
+              "token_out": 1223,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 69540,
+                  "spent_tokens": 18833,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 39016,
+                    "output_bound": 16384,
+                    "required_tokens": 55400,
+                    "credit": 33098,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 55400,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 24105,
+              "token_out": 1223
+            }
+          ],
+          "token_in": 24105,
+          "token_out": 1223
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:django__django-13569",
+    "sample_sha256": "5a88c50c5c862a02a8e2da9be06da394979bd1eaca2e180276b19122c7c3c6ca",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:django__django-13569-0:canvas:7",
+        "round_index": 8,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 223529,
+          "max": 350000,
+          "remaining": 126471
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 31617,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 65439,
+                    "output_bound": 16384,
+                    "required_tokens": 81823,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 81823,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 52936,
+                    "output_bound": 4096,
+                    "required_tokens": 57032,
+                    "credit": 31617,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 57032,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 31617,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 65464,
+                    "output_bound": 16384,
+                    "required_tokens": 81848,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 81848,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 53661,
+                    "output_bound": 4096,
+                    "required_tokens": 57757,
+                    "credit": 31617,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 57757,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 31617,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 65439,
+                    "output_bound": 16384,
+                    "required_tokens": 81823,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 81823,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 52936,
+                    "output_bound": 4096,
+                    "required_tokens": 57032,
+                    "credit": 31617,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 57032,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 0,
+              "token_out": 0,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 31617,
+                  "spent_tokens": 0,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 65464,
+                    "output_bound": 16384,
+                    "required_tokens": 81848,
+                    "credit": 0,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 81848,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                },
+                {
+                  "stage": "swe_finalization_token_credit_exhausted",
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 53661,
+                    "output_bound": 4096,
+                    "required_tokens": 57757,
+                    "credit": 31617,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 57757,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_2",
+              "agent_id": "agent_2",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "cache_hit": false,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 0,
+              "token_out": 0
+            }
+          ],
+          "token_in": 0,
+          "token_out": 0
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:django__django-15037",
+    "sample_sha256": "61a9aa4e208fffc53102522b3e2a8ad9ac8b52f78c1930345afa0657306d1831",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:django__django-15037-0:canvas:7",
+        "round_index": 8,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 216593,
+          "max": 350000,
+          "remaining": 133407
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 172821,
+              "token_out": 4216,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 5684,
+              "token_out": 1061,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 35038,
+                  "spent_tokens": 4170,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 20906,
+                    "output_bound": 16384,
+                    "required_tokens": 37290,
+                    "credit": 20033,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 37290,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 5684,
+              "token_out": 1061,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 35038,
+                  "spent_tokens": 4170,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 20906,
+                    "output_bound": 16384,
+                    "required_tokens": 37290,
+                    "credit": 20033,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 37290,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "cache_hit": true,
+              "token_in": 0,
+              "token_out": 0
+            },
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 5684,
+              "token_out": 1061
+            }
+          ],
+          "token_in": 5684,
+          "token_out": 1061
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:django__django-14580",
+    "sample_sha256": "afcbbb6f56de57686cfb98c5b95328ed002dd7eb9788e9b0f684d21d6e5196bc",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:django__django-14580-0:canvas:4",
+        "round_index": 5,
+        "node_ids": [
+          "agent_1"
+        ],
+        "token_budget": {
+          "used": 271723,
+          "max": 350000,
+          "remaining": 78277
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": true,
+              "token_in": 46938,
+              "token_out": 1682,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 126897,
+                  "spent_tokens": 31800,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 56986,
+                    "output_bound": 16384,
+                    "required_tokens": 73370,
+                    "credit": 55503,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 73370,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "failed": true,
+              "token_in": 46938,
+              "token_out": 1682,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 126897,
+                  "spent_tokens": 31800,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 56986,
+                    "output_bound": 16384,
+                    "required_tokens": 73370,
+                    "credit": 55503,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 73370,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_3",
+              "agent_id": "agent_1",
+              "cache_hit": false,
+              "token_in": 46938,
+              "token_out": 1682
+            }
+          ],
+          "token_in": 46938,
+          "token_out": 1682
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  },
+  {
+    "id": "swe_bench_verified_test:astropy__astropy-14182",
+    "sample_sha256": "06c851e53eec8ca38d1cd5ce63a3e0f2f88d02b51eef8ff6272c73b0f4134388",
+    "worker_token_limit": 350000,
+    "history": [
+      {
+        "event_id": "benchmark-swe_bench_verified_test:astropy__astropy-14182-0:canvas:9",
+        "round_index": 10,
+        "node_ids": [
+          "agent_1",
+          "agent_2"
+        ],
+        "token_budget": {
+          "used": 116777,
+          "max": 350000,
+          "remaining": 233223
+        },
+        "execution": {
+          "artifacts": {
+            "agent_1": {
+              "artifact_id": "artifact_1",
+              "agent_id": "agent_1",
+              "failed": false,
+              "token_in": 14683,
+              "token_out": 1507,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "subtask"
+              },
+              "protocol_diagnostics": [],
+              "changed_workspace": false
+            },
+            "agent_2": {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 16212,
+              "token_out": 743,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 62544,
+                  "spent_tokens": 6861,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 32165,
+                    "output_bound": 16384,
+                    "required_tokens": 48549,
+                    "credit": 31290,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 48549,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          },
+          "attempt_artifacts": [
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "failed": true,
+              "token_in": 16212,
+              "token_out": 743,
+              "code_artifact_ref": null,
+              "swe_progress": {
+                "trusted": true,
+                "test_after_latest_edit": false,
+                "result_scope": "task_result"
+              },
+              "protocol_diagnostics": [
+                {
+                  "stage": "swe_request_token_credit_exhausted",
+                  "execution_credit": 62544,
+                  "spent_tokens": 6861,
+                  "request_token_budget": {
+                    "semantics": "utf8_request_upper_bound_v1",
+                    "input_bound": 32165,
+                    "output_bound": 16384,
+                    "required_tokens": 48549,
+                    "credit": 31290,
+                    "spent": 0,
+                    "pre_reserved_closure_tokens": null,
+                    "additional_closure_reserve": 0,
+                    "required_with_reserve": 48549,
+                    "admitted": false,
+                    "stop_reason": "insufficient_input_and_output_credit"
+                  }
+                }
+              ],
+              "changed_workspace": false
+            }
+          ],
+          "execution_events": [
+            {
+              "artifact_id": "artifact_4",
+              "agent_id": "agent_2",
+              "cache_hit": false,
+              "token_in": 16212,
+              "token_out": 743
+            }
+          ],
+          "token_in": 16212,
+          "token_out": 743
+        }
+      }
+    ],
+    "expected_codes": [
+      "swe_request_credit_allocation_blocked"
+    ]
+  }
+]

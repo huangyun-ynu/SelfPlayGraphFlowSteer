@@ -19,6 +19,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 from .backend_failures import EnvironmentServiceError
 from .observability import TaskSpec, VerificationResult
 from .webshop_identity import visible_product_asin
+from .webshop_profiles import M02_PROFILE
 
 _DIRECT_OPENER = build_opener(ProxyHandler({}))
 
@@ -232,6 +233,8 @@ class WebShopSessionLifecycle:
     stage_purchases: bool = True
     search_observation_mode: str = "structured_only"
     env_feedback_enabled: bool = False
+    compatibility_profile: str = "current"
+    freeze_unknown_mutations: bool = False
     _task: TaskSpec | None = None
     _owner_agent: str | None = None
     _active_agent: str | None = None
@@ -379,6 +382,8 @@ class WebShopSessionLifecycle:
                 raise RuntimeError("WebShop lifecycle has no bound task")
             self._cleanup_expired_pending()
             agent_id = str(agent_id)
+            if self._results.get(agent_id, {}).get("resource_status") == "unknown":
+                raise RuntimeError("WebShop session state is unknown after a failed mutation")
             owner = self.owner_agent
             if owner is not None and owner != agent_id:
                 raise PermissionError(
@@ -464,7 +469,7 @@ class WebShopSessionLifecycle:
                 return self._committed_result()
             session_id, agent_id = self._active()
             self._active_pending_target = None
-            result = self._bounded(self.client.search(session_id, query))
+            result = self._bounded(self._resource_request(agent_id, self.client.search, session_id, query))
             self._append_env_feedback(result, f"search[{query}]")
             self._results[agent_id] = result
             return result
@@ -561,7 +566,7 @@ class WebShopSessionLifecycle:
                 self._results[agent_id] = staged
                 return dict(staged)
             self._active_pending_target = None
-            result = self._bounded(self.client.click(session_id, target_id))
+            result = self._bounded(self._resource_request(agent_id, self.client.click, session_id, target_id))
             # Use the resolved public label, never opaque transport IDs or goal data.
             label = str(target.get("label", "")) if target else ""
             kind = str(target.get("kind", "")) if target else ""
@@ -775,9 +780,31 @@ class WebShopSessionLifecycle:
             result["env_feedback"] = "[WEBSHOP ENV FEEDBACK] " + note
         history.append(action)
 
+    def set_submission_protocol(self, protocol: str) -> None:
+        self.freeze_unknown_mutations = protocol == "unified_task_result_v1"
+        for child in getattr(self, "_episodes", {}).values():
+            child.set_submission_protocol(protocol)
+
+    def _resource_request(self, agent_id, operation, *args):
+        try:
+            return operation(*args)
+        except Exception:
+            if self.freeze_unknown_mutations:
+                self._results[agent_id] = {
+                    **self._results.get(agent_id, {}),
+                    "resource_status": "unknown",
+                    "termination_reason": "environment_step_failed",
+                    "environment_completed": False,
+                    "commit_pending": False,
+                    "commit_ready": False,
+                }
+            raise
+
     def _active(self) -> tuple[str, str]:
         if not self._execution_open or not self._active_session or not self._active_agent:
             raise RuntimeError("WebShop Action called outside an active Worker execution")
+        if self._results.get(self._active_agent, {}).get("resource_status") == "unknown":
+            raise RuntimeError("WebShop session state is unknown after a failed mutation")
         return self._active_session, self._active_agent
 
     def _close_active(self) -> None:
@@ -843,6 +870,15 @@ class WebShopSessionLifecycle:
     def _bounded(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = dict(payload)
         result.pop("session_id", None)
+        if self.compatibility_profile == M02_PROFILE:
+            # The newer sidecar adds Native protocol metadata; M02 never saw it.
+            result.pop("raw_available_actions", None)
+            if isinstance(result.get("valid_subactions"), list):
+                result["valid_subactions"] = [
+                    {key: value for key, value in item.items() if key != "raw_action"}
+                    if isinstance(item, dict) else item
+                    for item in result["valid_subactions"]
+                ]
         subactions = result.get("valid_subactions", [])
         if not isinstance(subactions, list):
             raise RuntimeError("WebShop valid_subactions must be a list")

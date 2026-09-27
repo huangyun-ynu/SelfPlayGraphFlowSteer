@@ -1,0 +1,30 @@
+{
+  "package": "webshop-trajectory-orchestration-v1",
+  "skill_count": 12,
+  "snapshot_id": "webshop-trajectory-orchestration-v1-f9565df1906fdf49",
+  "files": {
+    "configs/director_skills/webshop_trajectory_v1/CATALOG.zh-CN.md": "887ee17054a9b0c11bc53c9334fea5e5bebaaa47d84b8c4e5af3f63b19dfa04a",
+    "configs/director_skills/webshop_trajectory_v1/VALIDATION.zh-CN.md": "cbde8a72e9fb1deb7f28a7248857104d8542b0cabdee53493616647b68b28958",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-bounded-review/SKILL.md": "f6d30e0d4583fcf7d6406de353c09794cdad422988b4e2529e66809e06142a90",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-candidate-comparison/SKILL.md": "37ac0e7bc8b7fe9ee48be7c518e8ca3baf84d0a92108875246713467da7ea53f",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-completion-budget/SKILL.md": "a9e95bef00aa14ae041e934d884683e655102dd30e989dfced695296409a4657",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-evidence-recovery/SKILL.md": "6cf98c779315f63d8c6a9d21fd86c9ef14bf4c1ea2d0646f2b6c24042b69c131",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-live-options/SKILL.md": "483fa6de39ccf9d8559a16899123a816ddbf7f64f7a95539ce5526c029cd0c1e",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-local-revision/SKILL.md": "984a358b2c901ecdeb9f706c35c02ea56696570546d8922efb59aa409f6af389",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-public-constraints/SKILL.md": "e542e72081bfdc58dc0a26ea43aed0836348679fe3244d96ab73f482ca7fb061",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-search-revision/SKILL.md": "191cac9a818d465b230ff8b7c345c3a323f8d040077b9511ce5b5c4b0d429e11",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-session-owner/SKILL.md": "942134d428a094e89dfc7b918836bfa02cd4b69978ef7233792e9ef8ad237c41",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-targeted-evidence/SKILL.md": "0c120ba2c47b12690bed37787205d12cda1e7ae0207cc1eb3f01fe52fd87b138",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-transaction-closure/SKILL.md": "9414c1dc5265a7805e79facddcdaf9ac54a868469a985ff6a62fa2fb871c154d",
+    "configs/director_skills/webshop_trajectory_v1/cards/ws-variant-capability/SKILL.md": "58ee707ad97c3c4b3712cc7598c8c64efba239491d1c4d2861559bb6b4cce8ad",
+    "configs/director_skills/webshop_trajectory_v1/provenance.json": "79078d82fa6cd97e0d902e74c4321bc6fc91aa446a6a43c064adfad18a3194d6",
+    "configs/director_skills/webshop_trajectory_v1/skills.source.json": "f9565df1906fdf493366e351fbaff980a8a23bfc7984551414ddcc633169ff17",
+    "configs/director_skills/webshop_trajectory_v1/snapshot.v2.json": "329d31a2731b1b695f8af2e7e599242c7d0997375cf1b5eced7e29151db60b68",
+    "configs/director_skills/webshop_trajectory_v1/solver_skillbank.fragment.toml": "2cda298cb1e46e5b608b96c6f1435cd53decaaa15bbccb07cdd40791abbc10b8",
+    "configs/director_skills/webshop_trajectory_v1/validation.json": "a2b43829dd6e6bbea9ac15671e6956284eb75bd523c309c08f2f9421595416b4",
+    "scripts/formal/build_webshop_director_skills_v1.py": "e21670e6adf92b7d47540d149df9a8a2c45878570f8240aa50bf9f1f413ead51",
+    "scripts/formal/validate_webshop_director_skills_v1.py": "df0d4a7182a17371c317e43dc571833ffa995360bca141658e7dbb5c8d43cf3a"
+  },
+  "effect_evaluation": "not_run",
+  "resident_director_preserved": true
+}

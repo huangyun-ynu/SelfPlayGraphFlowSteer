@@ -1,0 +1,14 @@
+# Merge these settings into an isolated evaluation config under configs/.
+# This is a fragment, not a complete runtime configuration.
+# Keep the frozen source, models, reasoning effort and budgets of the control.
+[solver_skillbank]
+enabled = true
+usage = "always"
+mode = "director_skill_v2"
+path = "configs/director_skills/webshop_trajectory_v1/snapshot.v2.json"
+prompt_token_budget = 1024
+retrieve_top_k = 3
+embedding_model_path = "models/e5-base-v2"
+
+[solver_skillbank.pats]
+enabled = false

@@ -26,6 +26,7 @@ from selfplay_graph_flowsteer.counterfactual import (
     evaluate_relation_decision,
     schedule_relation_decisions,
 )
+from selfplay_graph_flowsteer.director_timeline import persist_context_policy
 from selfplay_graph_flowsteer.distributed import ThreadRolloutPool
 from selfplay_graph_flowsteer.evaluation import from_adaptive_result, from_flowsteer_trajectory
 from selfplay_graph_flowsteer.execution_audit import audit_cross_agent_read_overlap
@@ -445,29 +446,9 @@ def test_adaptive_result_becomes_masked_solver_trajectory(tmp_path) -> None:
 
 
 def test_aime_model_tool_policy_failure_is_trainable_negative(tmp_path) -> None:
-    config = load_adaptive_config(write_config(tmp_path))
-    result = create_adaptive_application(config, mock=True).solve(
-        "Return the integer 484", task_id="aime-policy-failure"
-    )
-    result.task.metadata["dataset"] = "aime"
-    result.task.metadata["worker_artifact_integrity"] = {
-        "solver": {
-            "runtime_tool_evidence": {
-                "attempted_count": 1,
-                "successful_count": 0,
-                "failure_codes": ["SyntaxError"],
-            }
-        }
-    }
-    result.task.metadata["worker_artifact_integrity_failure"] = {
-        "output_agent": "solver",
-        "risks": [
-            "all_tool_actions_failed",
-            "terminal_tool_failure",
-            "unsupported_tool_verification_claim",
-        ],
-    }
-    result.solver_result.verification = VerificationResult(0.0, False, "numeric")
+    from .test_finish_submission_contract import TerminalFailureExecutor, solve
+
+    result, _, _, _ = solve(executor=TerminalFailureExecutor())
 
     rollout = adaptive_result_to_rollout(result, ByteTokenizer(), rollout_index=0, seed=42)
     metadata = rollout.trajectory.metadata
@@ -484,31 +465,9 @@ def test_aime_model_tool_policy_failure_is_trainable_negative(tmp_path) -> None:
 def test_aime_model_tool_failure_with_prior_success_is_not_retried(tmp_path) -> None:
     """A failed final Action does not erase earlier successful Worker Actions."""
 
-    config = load_adaptive_config(write_config(tmp_path))
-    result = create_adaptive_application(config, mock=True).solve(
-        "Return the integer 484", task_id="aime-terminal-tool-policy-failure"
-    )
-    result.task.metadata.update(
-        {
-            "dataset": "aime",
-            "worker_artifact_integrity": {
-                "solver": {
-                    "runtime_tool_evidence": {
-                        "attempted_count": 3,
-                        "successful_count": 2,
-                        "failed_count": 1,
-                        "failure_codes": ["ImportError", "SecurityError"],
-                        "terminal_failure": True,
-                    }
-                }
-            },
-            "worker_artifact_integrity_failure": {
-                "output_agent": "solver",
-                "risks": ["terminal_tool_failure"],
-            },
-        }
-    )
-    result.solver_result.verification = VerificationResult(0.0, False, "numeric")
+    from .test_finish_submission_contract import TerminalFailureExecutor, solve
+
+    result, _, _, _ = solve(executor=TerminalFailureExecutor(prior_success=True))
 
     rollout = adaptive_result_to_rollout(result, ByteTokenizer(), rollout_index=0, seed=42)
 
@@ -585,26 +544,9 @@ def test_output_tool_evidence_aggregates_across_revisions() -> None:
 
 
 def test_aime_terminal_worker_protocol_failure_is_trainable_negative(tmp_path) -> None:
-    config = load_adaptive_config(write_config(tmp_path))
-    result = create_adaptive_application(config, mock=True).solve(
-        "Return the integer 484", task_id="aime-terminal-protocol-policy-failure"
-    )
-    result.task.metadata.update(
-        {
-            "dataset": "aime",
-            "worker_artifact_integrity": {
-                "solver": {
-                    "runtime_tool_evidence": {"attempted_count": 1},
-                    "integrity_risks": ["terminal_protocol_failure"],
-                }
-            },
-        }
-    )
-    result.solver_result.verification = VerificationResult(0.0, False, "numeric")
-    result.solver_result.director_run.finished = False
-    # This is the live failure shape: Worker exhausted finalization without a
-    # valid artifact, so Director cannot legally select an output agent.
-    result.solver_result.director_run.graph["output_agent"] = None
+    from .test_finish_submission_contract import TerminalFailureExecutor, solve
+
+    result, _, _, _ = solve(executor=TerminalFailureExecutor(protocol=True))
 
     rollout = adaptive_result_to_rollout(result, ByteTokenizer(), rollout_index=0, seed=42)
 
@@ -1325,6 +1267,7 @@ def test_resume_cannot_bypass_a_persisted_structural_collapse_stop(tmp_path) -> 
     config = load_adaptive_config(write_config(tmp_path))
     output = tmp_path / "collapsed"
     output.mkdir()
+    persist_context_policy(output, resume=False)
     (output / "collapse_monitor.jsonl").write_text(
         json.dumps(
             {
@@ -1357,6 +1300,7 @@ def test_policy_off_reclassifies_persisted_legacy_only_collapse_stop(tmp_path) -
     config = load_adaptive_config(write_config(tmp_path))
     output = tmp_path / "legacy-collapse-off"
     output.mkdir()
+    persist_context_policy(output, resume=False)
     (output / "collapse_monitor.jsonl").write_text(
         json.dumps(
             {
@@ -2161,11 +2105,11 @@ def test_stateful_missing_terminal_result_is_an_infrastructure_incident() -> Non
     assert decision.infrastructure_incident is True
 
 
-def test_aime_terminal_tool_failure_gets_one_full_same_slot_fallback(tmp_path, monkeypatch) -> None:
-    from .helpers import install_numeric_mock_worker
+def test_aime_unknown_tool_failure_stays_excluded_without_candidate_reward(tmp_path, monkeypatch) -> None:
+    from .helpers import NumericRecordingExecutor, install_numeric_mock_worker
 
     install_numeric_mock_worker(monkeypatch)
-    config = load_adaptive_config(write_config(tmp_path))
+    config = replace(load_adaptive_config(write_config(tmp_path)), verifier="numeric")
     factory_seeds: list[int] = []
     attempts_by_seed: dict[int, int] = {}
 
@@ -2182,6 +2126,15 @@ def test_aime_terminal_tool_failure_gets_one_full_same_slot_fallback(tmp_path, m
                 response='{"prompt":"Return the integer 20","reference":"20"}',
             )
 
+    class UnavailableToolExecutor(NumericRecordingExecutor):
+        def execute(self, **kwargs):
+            artifact = super().execute(**kwargs)
+            artifact.react_trace = [{
+                "action": {"name": "python_exec", "call_id": "unavailable-tool"},
+                "observation": {"status": "error", "error": {"code": "ConnectionError"}},
+            }]
+            return artifact
+
     class InvalidThenFreshApplication:
         def __init__(self, seed: int) -> None:
             factory_seeds.append(seed)
@@ -2189,18 +2142,15 @@ def test_aime_terminal_tool_failure_gets_one_full_same_slot_fallback(tmp_path, m
             self.seed = seed
             self.attempt = attempts_by_seed[seed]
             self.delegate = create_adaptive_application(config, mock=True)
+            if self.seed == 0 and self.attempt == 1:
+                self.delegate.runtime.executor = UnavailableToolExecutor()
 
         @property
         def solver(self):
             return self.delegate.solver
 
         def solve(self, *args, **kwargs):
-            result = self.delegate.solve(*args, **kwargs)
-            result.solver_result.verification = VerificationResult(1.0, True, "mock_numeric")
-            if self.seed == 0 and self.attempt == 1:
-                result.task.metadata["worker_artifact_integrity_failure"] = {"agents": ["solver"]}
-                result.task.metadata["worker_output_integrity_risks"] = ["terminal_tool_failure"]
-            return result
+            return self.delegate.solve(*args, **kwargs)
 
         def close(self) -> None:
             self.delegate.close()
@@ -2212,23 +2162,28 @@ def test_aime_terminal_tool_failure_gets_one_full_same_slot_fallback(tmp_path, m
         tokenizer=ByteTokenizer(),
         snapshots=create_selfplay_snapshots(config),
         output_dir=output,
-        config=SelfPlayRunConfig(2, allow_legacy_whole_rollout_recovery=True),
+        config=SelfPlayRunConfig(2, rollout_group_policy="eligible_subset", allow_legacy_whole_rollout_recovery=True),
     ).run(["seed"])
 
-    assert len(result.solver_batch.samples) == 2
-    assert sorted(factory_seeds)[:2] == [0, 1]
-    assert len(factory_seeds) == 3
-    assert max(factory_seeds) not in {0, 1}
+    # These MockBackend calls intentionally have no behavior logprobs; the
+    # strict partial-group learner cannot optimize either slot from this fixture.
+    assert len(result.solver_batch.samples) == 0
+    assert sorted(factory_seeds) == [0, 1]
     attempts = [
         json.loads(line) for line in (output / "rollout_attempts.jsonl").read_text().splitlines()
     ]
-    assert [item["success"] for item in attempts] == [False, True]
-    assert attempts[0]["recovery_scope"] == "full_primary"
-    assert attempts[0]["recovery_reason"] == ("aime_selected_output_recovery_exhausted")
-    assert attempts[0]["seed"] == 0
-    assert attempts[1]["seed"] != 0
-    assert attempts[1]["policy_resampled_on_replacement"] is True
-    assert all(item["same_slot_executor_seed_preserved"] is True for item in attempts)
+    assert len(attempts) == 1 and not attempts[0]["success"]
+    assert attempts[0]["accepted_as_primary"]
+    assert attempts[0]["recovery_reason"] == "bounded_director_terminal_no_recollection"
+    rows = [json.loads(line) for line in (output / "solver_rollouts.jsonl").read_text().splitlines()]
+    failed = next(row for row in rows if row["rollout_id"].endswith("r0"))
+    assert failed["metadata"]["task_reward"] is None
+    assert not failed["metadata"]["reward_known"]
+    assert not failed["metadata"]["training_eligible"]
+    assert not failed["metadata"]["answer_reward_released"]
+    valid = next(row for row in rows if row["rollout_id"].endswith("r1"))
+    assert valid["metadata"]["reward_known"]
+    assert valid["metadata"]["training_eligible"]
 
 
 def test_swe_non_trainable_attempt_recovers_same_slot_seed_before_primary(
@@ -5397,6 +5352,7 @@ def test_staged_webshop_purchase_is_trainable_zero_without_recollection(tmp_path
 
 def test_relation_replay_preserves_terminal_runtime_credit_but_rejects_policy_drift():
     from dataclasses import replace
+
     from selfplay_graph_flowsteer.counterfactual import RelationDecision, _replay_relation_branch
 
     graph = MultiAgentGraph()
@@ -5420,8 +5376,9 @@ def test_relation_replay_preserves_terminal_runtime_credit_but_rejects_policy_dr
         _replay_relation_branch(replace(d, expected_final_graph=expected.to_dict()), present=True)
 
 
-def test_relation_replay_preserves_recorded_output_pruning_on_both_branches():
+def test_relation_replay_requires_explicit_deletion_on_both_branches():
     from dataclasses import replace
+
     from selfplay_graph_flowsteer.counterfactual import RelationDecision, _replay_relation_branch
 
     prefix = MultiAgentGraph()
@@ -5455,7 +5412,18 @@ def test_relation_replay_preserves_recorded_output_pruning_on_both_branches():
         expected_final_graph=after.to_dict(),
     )
     for present in (False, True):
-        branch, _, _ = _replay_relation_branch(decision, present=present)
+        with pytest.raises(ValueError, match="implicit Agent deletion"):
+            _replay_relation_branch(decision, present=present)
+    # The same deletion is legal when it is an actual sampled DELETE_AGENT.
+    deleted = before.clone()
+    deleted.delete_agent("c")
+    explicit = replace(decision, suffix_events=(
+        {"raw_action": '{"action":"delete_agent","target":"c"}',
+         "graph_before": before.to_dict(), "graph": deleted.to_dict()},
+        {**event, "graph_before": deleted.to_dict()},
+    ))
+    for present in (False, True):
+        branch, _, _ = _replay_relation_branch(explicit, present=present)
         assert set(branch.nodes) == {"a", "b"}
         assert bool(branch.bidirectional_edges) == present
         assert branch.output_agent == "a"
@@ -5463,7 +5431,7 @@ def test_relation_replay_preserves_recorded_output_pruning_on_both_branches():
         assert branch.nodes["a"].metadata["_runtime_budget_phase"] == "closure"
     forged = after.clone()
     forged.delete_agent("b")
-    with pytest.raises(ValueError, match="deterministic cleanup"):
+    with pytest.raises(ValueError, match="implicit Agent deletion"):
         _replay_relation_branch(
             replace(decision, suffix_events=({**event, "graph": forged.to_dict()},)), present=True
         )

@@ -19,21 +19,35 @@ from .learning import FixedDatasetExample
 class BenchmarkSummary:
     system: str
     examples: int
-    mean_score: float
-    pass_rate: float
-    score_std: float
+    mean_score: float | None
+    pass_rate: float | None
+    score_std: float | None
     mean_token_cost: float
     mean_duration_s: float
-    unclipped_mean_score: float = 0.0
+    unclipped_mean_score: float | None = 0.0
+    known_examples: int = 0
+    unknown_examples: int = 0
+    submitted_examples: int = 0
+    policy_failure_examples: int = 0
+    known_coverage: float = 0.0
+    submission_rate: float = 0.0
+    successful_submission_rate_all: float = 0.0
+    submitted_answer_pass_rate: float | None = None
+    answer_em: float | None = None
+    answer_f1: float | None = None
+    answer_metric_examples: int = 0
 
 
 @dataclass(frozen=True)
 class PairedSummary:
     pairs: int
-    mean_score_delta: float
+    mean_score_delta: float | None
     wins: int
     ties: int
     losses: int
+    matched_pairs: int = 0
+    candidate_unknown: int = 0
+    baseline_unknown: int = 0
 
 
 class BenchmarkRunner:
@@ -162,19 +176,36 @@ def summarize(records: Iterable[EvaluationRecord]) -> BenchmarkSummary:
     items = list(records)
     if not items:
         raise ValueError("cannot summarize an empty benchmark")
-    scores = [item.score for item in items]
-    raw_mean = sum(scores) / len(scores)
-    mean = max(0.0, min(1.0, raw_mean))
-    variance = sum((score - raw_mean) ** 2 for score in scores) / len(scores)
+    known = [item for item in items if item.score is not None and math.isfinite(item.score)]
+    submitted = [item for item in items if item.submission_status == "submitted"]
+    scored_submitted = [item for item in submitted if item.score is not None]
+    scores = [item.score for item in known]
+    raw_mean = sum(scores) / len(scores) if scores else None
+    mean = max(0.0, min(1.0, raw_mean)) if raw_mean is not None else None
+    variance = sum((score - raw_mean) ** 2 for score in scores) / len(scores) if scores else None
+    em = [item.answer_metrics.get("answer_em", item.answer_metrics.get("em")) for item in items]
+    f1 = [item.answer_metrics.get("answer_f1", item.answer_metrics.get("f1")) for item in items]
+    em = [float(value) for value in em if isinstance(value, (int, float)) and math.isfinite(value)]
+    f1 = [float(value) for value in f1 if isinstance(value, (int, float)) and math.isfinite(value)]
     return BenchmarkSummary(
         system=items[0].system,
         examples=len(items),
         mean_score=mean,
-        pass_rate=sum(item.passed for item in items) / len(items),
-        score_std=math.sqrt(variance),
+        pass_rate=sum(item.passed is True for item in known) / len(known) if known else None,
+        score_std=math.sqrt(variance) if variance is not None else None,
         mean_token_cost=sum(item.token_cost for item in items) / len(items),
         mean_duration_s=sum(item.duration_s for item in items) / len(items),
         unclipped_mean_score=raw_mean,
+        known_examples=len(known), unknown_examples=len(items) - len(known),
+        submitted_examples=len(submitted),
+        policy_failure_examples=sum(item.outcome_status == "policy_failure" for item in items),
+        known_coverage=len(known) / len(items), submission_rate=len(submitted) / len(items),
+        successful_submission_rate_all=sum(item.passed is True for item in submitted) / len(items),
+        submitted_answer_pass_rate=(sum(item.passed is True for item in scored_submitted)
+                                    / len(scored_submitted) if scored_submitted else None),
+        answer_em=sum(em) / len(em) if em else None,
+        answer_f1=sum(f1) / len(f1) if f1 else None,
+        answer_metric_examples=len(em),
     )
 
 
@@ -186,10 +217,13 @@ def paired_summary(
     keys = sorted(left.keys() & right.keys())
     if not keys:
         raise ValueError("candidate and baseline have no matching task_id/seed pairs")
-    deltas = [left[key].score - right[key].score for key in keys]
+    valid_keys = [key for key in keys if left[key].score is not None and right[key].score is not None]
+    deltas = [left[key].score - right[key].score for key in valid_keys]
     return PairedSummary(
-        pairs=len(keys),
-        mean_score_delta=sum(deltas) / len(deltas),
+        pairs=len(valid_keys), matched_pairs=len(keys),
+        candidate_unknown=sum(left[key].score is None for key in keys),
+        baseline_unknown=sum(right[key].score is None for key in keys),
+        mean_score_delta=sum(deltas) / len(deltas) if deltas else None,
         wins=sum(delta > 0 for delta in deltas),
         ties=sum(delta == 0 for delta in deltas),
         losses=sum(delta < 0 for delta in deltas),

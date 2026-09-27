@@ -54,7 +54,8 @@ class MultiAgentGraph:
     edges connect agents in the same layer and form one bounded synchronous block.
     """
 
-    def __init__(self, *, max_agents: int = 8, runtime_routes: tuple[str, ...] = ()) -> None:
+    def __init__(self, *, max_agents: int = 8, runtime_routes: tuple[str, ...] = (), submission_protocol: str = "legacy") -> None:
+        self.submission_protocol = submission_protocol
         self.max_agents = int(max_agents)
         self.runtime_routes = tuple(runtime_routes)
         self.nodes: dict[str, AgentNode] = {}
@@ -587,7 +588,8 @@ class MultiAgentGraph:
             "version": self.version,
             "max_agents": self.max_agents,
             "runtime_routes": list(self.runtime_routes),
-            "action_protocol": "director_model_v1" if self.runtime_routes else "legacy_readonly",
+            "action_protocol": ("director_action_json_v3" if self.submission_protocol == "unified_task_result_v1" else "director_model_v1" if self.runtime_routes else "legacy_readonly"),
+            **({"submission_protocol": self.submission_protocol} if self.submission_protocol != "legacy" else {}),
             "nodes": [self.nodes[key].to_dict() for key in sorted(self.nodes)],
             "relations": [
                 Relation(source, target, RelationType.DIRECTED).to_dict()
@@ -605,6 +607,7 @@ class MultiAgentGraph:
         graph = cls(
             max_agents=int(payload.get("max_agents", 8)),
             runtime_routes=tuple(payload.get("runtime_routes", ())),
+            submission_protocol=payload.get("submission_protocol", "legacy"),
         )
         for raw_node in payload.get("nodes", []):
             agent_id = str(raw_node["agent_id"])
@@ -658,7 +661,10 @@ class MultiAgentGraph:
                     lines.append("  bidirectional: " + " <-> ".join(component))
         for source, target in sorted(self.directed_edges):
             lines.append(f"  {source} -> {target}")
-        lines.append(f"Output: {self.output_agent or 'not set'}")
+        if self.submission_protocol == "unified_task_result_v1":
+            lines.append(f"Submission target: {self.output_agent or 'chosen only by FINISH(target)'}")
+        else:
+            lines.append(f"Output: {self.output_agent or 'not set'}")
         return "\n".join(lines)
 
     def relation_pairs(self) -> set[tuple[str, str]]:

@@ -1,0 +1,358 @@
+{
+  "experiment": "webshop-w08-merged-128-20260924-run1",
+  "status": "completed_and_audited",
+  "dataset_sha256": "35fbda3aef098050f649ca569a8c8e1c8f3a4dbf0e8c800ba3fade74f7335328",
+  "protocol": {
+    "seed": 0,
+    "workers": 24,
+    "skill_context": "off",
+    "director_thinking": true,
+    "worker_route": "deepseek",
+    "reasoning_effort": "low",
+    "order": [
+      "baseline",
+      "candidate"
+    ],
+    "analysis": "All 128 tasks in each arm; failures retained; no per-task selection or substitution."
+  },
+  "baseline_source_version": "webshop-budget-off-128",
+  "candidate_policy": "merged_checklist_v1",
+  "candidate_patch_sha256": "af7450eb36cb52bf01960c6aed5e293c49ff62ad7f5ab6258168d8b136423184",
+  "shared_relocations": {
+    "webshop.service_url": "http://127.0.0.1:18022",
+    "runtimes.gpt_student.api_key_file": "Replaced unavailable file with unused FLOWSTEER_API_KEY environment lookup",
+    "director_cli_endpoint": "http://127.0.0.1:18603/v1"
+  },
+  "historical_reference": {
+    "strict_successes": 63,
+    "examples": 128,
+    "mean_reward": 0.7102213541666668
+  },
+  "paired": {
+    "paired_transitions": {
+      "0->0": 55,
+      "1->1": 51,
+      "1->0": 7,
+      "0->1": 15
+    },
+    "mcnemar_exact_two_sided_p": 0.13380050659179688,
+    "mean_reward_delta": 0.066328125,
+    "success_rate_delta": 0.0625,
+    "paired_bootstrap_reward_delta_95_ci": [
+      0.0149609375,
+      0.12056022135416666
+    ],
+    "paired_bootstrap_success_rate_delta_95_ci": [
+      -0.0078125,
+      0.1328125
+    ],
+    "bootstrap_seed": 20260924,
+    "bootstrap_samples": 10000,
+    "identical_initial_director_requests": 128,
+    "different_or_missing_initial_director_requests": []
+  },
+  "audit_issues": [],
+  "interpretation_limit": "Two fresh sequential runs, one seed, same 128 development tasks. Sampling, provider version/cache, and service conditions can vary. Paired intervals are exploratory, not independent held-out generalization evidence. The interrupted setup attempt is excluded in full and retained.",
+  "token_accounting": "Execution-ledger token counts and raw HTTP provider token counts are separate measurements, never added to one another. Missing provider reasoning/cache usage remains unreported; it is not assumed zero. No monetary billing estimate. HTTP timings include recorder overhead but exclude pre-dispatch concurrency queue wait.",
+  "artifact_root": "state/experiments/webshop-w08-merged-128-20260924-run1",
+  "arms": {
+    "baseline": {
+      "metrics": {
+        "examples": 128,
+        "strict_successes": 58,
+        "strict_success_rate": 0.453125,
+        "mean_score_100": 65.703125,
+        "mean_reported_worker_tokens": 71626.4140625,
+        "total_reported_worker_tokens": 9168181,
+        "mean_worker_input_tokens": 65883.4296875,
+        "total_worker_input_tokens": 8433079,
+        "mean_worker_output_tokens": 5742.984375,
+        "total_worker_output_tokens": 735102,
+        "mean_worker_tokens": 71626.4140625,
+        "total_worker_tokens": 9168181,
+        "mean_director_input_tokens": 17971.5703125,
+        "total_director_input_tokens": 2300361,
+        "mean_director_output_tokens": 1437.0546875,
+        "total_director_output_tokens": 183943,
+        "mean_director_tokens": 19408.625,
+        "total_director_tokens": 2484304,
+        "mean_combined_tokens": 91035.0390625,
+        "total_combined_tokens": 11652485,
+        "mean_duration_s": 86.63144444052523,
+        "mean_action_count": 8.25,
+        "request_budget_blocks": 0,
+        "artifacts_with_active_credit": 0,
+        "artifacts_with_disabled_credit": 186,
+        "requests_with_budget_quotes": 0,
+        "director_successes_without_usage": 0,
+        "tasks_with_request_budget_blocks": 0,
+        "mean_reward": 0.65703125,
+        "strict_success_rate_wilson_95_ci": [
+          0.36950795637281275,
+          0.5394736332778287
+        ],
+        "purchased_tasks": 119,
+        "partial_reward_tasks": 58,
+        "zero_reward_tasks": 12,
+        "no_purchase_tasks": 9,
+        "wall_time_s": 602.5742230415344,
+        "process_exit_code": 0,
+        "duration_s_distribution": {
+          "total": 11088.82488838723,
+          "mean": 86.63144444052523,
+          "median": 65.23966995766386,
+          "p95": 198.7194614702137,
+          "min": 38.060746380127966,
+          "max": 349.00455801701173
+        },
+        "action_count_distribution": {
+          "total": 1056,
+          "mean": 8.25,
+          "median": 7.0,
+          "p95": 16.0,
+          "min": 3,
+          "max": 16
+        },
+        "worker_tokens_distribution": {
+          "total": 9168181,
+          "mean": 71626.4140625,
+          "median": 54904.5,
+          "p95": 158022.9,
+          "min": 20466,
+          "max": 264863
+        },
+        "director_tokens_distribution": {
+          "total": 2484304,
+          "mean": 19408.625,
+          "median": 15918.5,
+          "p95": 42576.54999999999,
+          "min": 11766,
+          "max": 88739
+        },
+        "combined_tokens_distribution": {
+          "total": 11652485,
+          "mean": 91035.0390625,
+          "median": 70679.0,
+          "p95": 199596.5,
+          "min": 32826,
+          "max": 280716
+        },
+        "tasks_at_action_limit_16": 16,
+        "tasks_over_worker_token_limit_350000": 0,
+        "director_turns_distribution": {
+          "total": 713,
+          "mean": 5.5703125,
+          "median": 5.0,
+          "p95": 10.0,
+          "min": 4,
+          "max": 17
+        },
+        "worker_gateway_failures": {},
+        "termination_reasons": {
+          "purchase_completed": 119,
+          "active": 9
+        },
+        "protocol_diagnostic_stages": {
+          "finalization_1": 154,
+          "webshop_active_protocol_recovery": 2,
+          "initial_nonfinal": 1
+        },
+        "f1": null,
+        "f1_applicability": "Not defined by the official WebShop evaluator; mean reward is not F1."
+      },
+      "provider_usage": {
+        "director": {
+          "attempts": 714,
+          "http_successes": 714,
+          "input_tokens_reported_sum": 2300361,
+          "input_tokens_reported_responses": 714,
+          "output_tokens_reported_sum": 183943,
+          "output_tokens_reported_responses": 714,
+          "total_tokens_reported_sum": 2484304,
+          "total_tokens_reported_responses": 714,
+          "cached_input_tokens_unreported_successes": 714,
+          "reasoning_tokens_unreported_successes": 714
+        },
+        "worker": {
+          "attempts": 1245,
+          "http_successes": 1245,
+          "input_tokens_reported_sum": 8433079,
+          "input_tokens_reported_responses": 1245,
+          "output_tokens_reported_sum": 735102,
+          "output_tokens_reported_responses": 1245,
+          "total_tokens_reported_sum": 9168181,
+          "total_tokens_reported_responses": 1245,
+          "cached_input_tokens_reported_sum": 3124082,
+          "cached_input_tokens_reported_responses": 1245,
+          "reasoning_tokens_reported_sum": 580966,
+          "reasoning_tokens_reported_responses": 1091,
+          "reasoning_tokens_unreported_successes": 154
+        }
+      },
+      "provider_statuses": {
+        "director:200": 714,
+        "worker:200": 1245
+      },
+      "provider_finish_reasons": {
+        "director:stop": 693,
+        "worker:tool_calls": 991,
+        "worker:stop": 254,
+        "director:length": 21
+      },
+      "token_reconciliation": {
+        "per_task_matches": true,
+        "differences": []
+      },
+      "run_id": "be443b35840340c7"
+    },
+    "candidate": {
+      "metrics": {
+        "examples": 128,
+        "strict_successes": 66,
+        "strict_success_rate": 0.515625,
+        "mean_score_100": 72.3359375,
+        "mean_reported_worker_tokens": 61383.421875,
+        "total_reported_worker_tokens": 7857078,
+        "mean_worker_input_tokens": 56029.6796875,
+        "total_worker_input_tokens": 7171799,
+        "mean_worker_output_tokens": 5384.6796875,
+        "total_worker_output_tokens": 689239,
+        "mean_worker_tokens": 61414.359375,
+        "total_worker_tokens": 7861038,
+        "mean_director_input_tokens": 16806.6953125,
+        "total_director_input_tokens": 2151257,
+        "mean_director_output_tokens": 1372.171875,
+        "total_director_output_tokens": 175638,
+        "mean_director_tokens": 18178.8671875,
+        "total_director_tokens": 2326895,
+        "mean_combined_tokens": 79593.2265625,
+        "total_combined_tokens": 10187933,
+        "mean_duration_s": 82.76070261115456,
+        "mean_action_count": 7.3984375,
+        "request_budget_blocks": 0,
+        "artifacts_with_active_credit": 0,
+        "artifacts_with_disabled_credit": 183,
+        "requests_with_budget_quotes": 0,
+        "director_successes_without_usage": 0,
+        "tasks_with_request_budget_blocks": 0,
+        "mean_reward": 0.723359375,
+        "strict_success_rate_wilson_95_ci": [
+          0.4298624503761484,
+          0.6004770197403044
+        ],
+        "purchased_tasks": 123,
+        "partial_reward_tasks": 56,
+        "zero_reward_tasks": 6,
+        "no_purchase_tasks": 5,
+        "wall_time_s": 602.4360840320587,
+        "process_exit_code": 0,
+        "duration_s_distribution": {
+          "total": 10593.369934227783,
+          "mean": 82.76070261115456,
+          "median": 59.48877813015133,
+          "p95": 225.57176141361697,
+          "min": 34.190988465212286,
+          "max": 297.13080810476094
+        },
+        "action_count_distribution": {
+          "total": 947,
+          "mean": 7.3984375,
+          "median": 6.0,
+          "p95": 16.0,
+          "min": 3,
+          "max": 16
+        },
+        "worker_tokens_distribution": {
+          "total": 7861038,
+          "mean": 61414.359375,
+          "median": 44001.0,
+          "p95": 149489.14999999997,
+          "min": 19569,
+          "max": 183124
+        },
+        "director_tokens_distribution": {
+          "total": 2326895,
+          "mean": 18178.8671875,
+          "median": 15799.0,
+          "p95": 41033.0,
+          "min": 11792,
+          "max": 78441
+        },
+        "combined_tokens_distribution": {
+          "total": 10187933,
+          "mean": 79593.2265625,
+          "median": 58773.0,
+          "p95": 189107.69999999995,
+          "min": 31361,
+          "max": 233299
+        },
+        "tasks_at_action_limit_16": 14,
+        "tasks_over_worker_token_limit_350000": 0,
+        "director_turns_distribution": {
+          "total": 679,
+          "mean": 5.3046875,
+          "median": 5.0,
+          "p95": 10.0,
+          "min": 4,
+          "max": 15
+        },
+        "worker_gateway_failures": {},
+        "termination_reasons": {
+          "purchase_completed": 123,
+          "active": 5
+        },
+        "protocol_diagnostic_stages": {
+          "finalization_1": 156,
+          "webshop_active_protocol_recovery": 2
+        },
+        "f1": null,
+        "f1_applicability": "Not defined by the official WebShop evaluator; mean reward is not F1."
+      },
+      "provider_usage": {
+        "director": {
+          "attempts": 680,
+          "http_successes": 680,
+          "input_tokens_reported_sum": 2151257,
+          "input_tokens_reported_responses": 680,
+          "output_tokens_reported_sum": 175638,
+          "output_tokens_reported_responses": 680,
+          "total_tokens_reported_sum": 2326895,
+          "total_tokens_reported_responses": 680,
+          "cached_input_tokens_unreported_successes": 680,
+          "reasoning_tokens_unreported_successes": 680
+        },
+        "worker": {
+          "attempts": 1135,
+          "http_successes": 1135,
+          "input_tokens_reported_sum": 7171799,
+          "input_tokens_reported_responses": 1135,
+          "output_tokens_reported_sum": 689239,
+          "output_tokens_reported_responses": 1135,
+          "total_tokens_reported_sum": 7861038,
+          "total_tokens_reported_responses": 1135,
+          "cached_input_tokens_reported_sum": 2533245,
+          "cached_input_tokens_reported_responses": 1135,
+          "reasoning_tokens_reported_sum": 548521,
+          "reasoning_tokens_reported_responses": 977,
+          "reasoning_tokens_unreported_successes": 158
+        }
+      },
+      "provider_statuses": {
+        "director:200": 680,
+        "worker:200": 1135
+      },
+      "provider_finish_reasons": {
+        "director:stop": 665,
+        "worker:tool_calls": 852,
+        "worker:stop": 282,
+        "director:length": 15,
+        "worker:length": 1
+      },
+      "token_reconciliation": {
+        "per_task_matches": true,
+        "differences": []
+      },
+      "run_id": "5930c62ef4db43b1"
+    }
+  }
+}

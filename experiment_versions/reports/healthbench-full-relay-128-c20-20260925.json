@@ -1,0 +1,842 @@
+{
+  "audit": {
+    "examples": 128,
+    "unique_tasks": 128,
+    "all_criteria_scored": true,
+    "total_criteria": 258,
+    "criteria_with_matching_prediction_receipts": 258,
+    "length_adjusted_score": 0.41895660525556316,
+    "unclipped_length_adjusted_mean": 0.41895660525556316,
+    "raw_rubric_score": 0.5212814677555632,
+    "unclipped_raw_rubric_mean": 0.5212814677555632,
+    "project_threshold_pass_count": 73,
+    "initial_director_context_verified": 128,
+    "multiturn_context_verified": 31,
+    "judge_models": {
+      "gpt-5.5-2": 128,
+      "gpt-5.5": 1
+    },
+    "qwen_thinking_evidence_count": 864,
+    "binary_relation_calls_without_thinking": 50,
+    "worker_request_counts_by_route": {
+      "gpt_eco": 85,
+      "gpt_student": 93,
+      "gpt": 89
+    },
+    "judge_request_counts_by_route": {
+      "gpt_student": 257,
+      "gpt": 1
+    },
+    "mean_token_cost": 9586.1328125,
+    "mean_duration_s": 215.95324462417557,
+    "dataset_sha256": "991ed13ac248a3670e4caf7bdc83a770548c4209562c67a034631d4f0432042b",
+    "trajectory_concurrency": 20,
+    "judge_concurrency": 10,
+    "gpu": 1,
+    "worker_requests_with_unified_contract": 284,
+    "worker_recovery_requests_with_unified_contract": 35,
+    "worker_tasks_with_unified_contract": 128,
+    "worker_requests_with_conflicting_contract": 0
+  },
+  "relay_audit": {
+    "relay_constructions": 118,
+    "construction_answer_mismatches": 0,
+    "worker_request_references_including_recoveries": 130,
+    "unique_packets_consumed_in_requests": 114,
+    "worker_input_answer_mismatches": 0,
+    "request_phases": {
+      "peer_proposal": 57,
+      "self_proposal": 56,
+      "upstream": 1
+    },
+    "tasks_with_actual_relay_requests": 27,
+    "successful_trajectory_source_refs": {
+      "source_refs": 110,
+      "self": 54,
+      "upstream_or_peer": 56,
+      "references_to_intermediate_artifacts_absent_from_snapshots": 2
+    },
+    "successful_trajectory_tasks_with_refs": 26,
+    "method": "Original artifact SHA-256 checked at RelayPacket construction, then matched to answer fields in actual Worker API requests, including recovery requests."
+  },
+  "comparison": {
+    "protocol": "healthbench_complete_relay_answer_v1",
+    "baseline": {
+      "n": 128,
+      "means": {
+        "score": 46.95926396327035,
+        "raw": 55.00278240077035,
+        "positive_credit": 66.24551757049613,
+        "negative_penalty": -11.242735169725785,
+        "answer_chars": 4735.890625,
+        "summary_chars": 271.4375,
+        "token_cost": 7128.1484375,
+        "duration_s": 198.45981324810055,
+        "length_adjustment": -8.043518437499998
+      },
+      "counts": {
+        "positive_criteria_met": 148,
+        "negative_criteria_triggered": 18,
+        "raw_zero": 29,
+        "raw_negative": 10,
+        "answer_under_300_chars": 4,
+        "summary_longer_than_answer": 0,
+        "director_unfinished": 2,
+        "project_threshold_pass": 75,
+        "nodes": {
+          "1": 108,
+          "2": 20
+        }
+      },
+      "groups": {
+        "difficulty": {
+          "difficult": {
+            "n": 64,
+            "score": 30.52159735400081,
+            "raw": 35.95016954150081
+          },
+          "typical": {
+            "n": 64,
+            "score": 63.39693057253989,
+            "raw": 74.05539526003989
+          }
+        },
+        "use_case": {
+          "consult": {
+            "n": 56,
+            "score": 43.88130858664518,
+            "raw": 51.33100608664518
+          },
+          "research": {
+            "n": 39,
+            "score": 54.52723070660476,
+            "raw": 62.54951070660476
+          },
+          "writing": {
+            "n": 33,
+            "score": 43.238500269360266,
+            "raw": 52.31481481481482
+          }
+        },
+        "stratum": {
+          "red_teaming_difficult": {
+            "n": 45,
+            "score": 31.686810290541167,
+            "raw": 35.81685695720783
+          },
+          "good_faith_difficult": {
+            "n": 19,
+            "score": 27.761882504299965,
+            "raw": 36.26590987272102
+          },
+          "good_faith_typical": {
+            "n": 64,
+            "score": 63.39693057253989,
+            "raw": 74.05539526003989
+          }
+        },
+        "turns": {
+          "single": {
+            "n": 97,
+            "score": 45.21137034813601,
+            "raw": 53.53914766772364
+          },
+          "multi": {
+            "n": 31,
+            "score": 52.4284794686907,
+            "raw": 59.58254269449716
+          }
+        }
+      }
+    },
+    "candidate": {
+      "n": 128,
+      "means": {
+        "score": 41.895660525556316,
+        "raw": 52.12814677555632,
+        "positive_credit": 61.5154131952821,
+        "negative_penalty": -9.387266419725785,
+        "answer_chars": 5480.4375,
+        "summary_chars": 290.796875,
+        "token_cost": 9586.1328125,
+        "duration_s": 215.95324462417557,
+        "length_adjustment": -10.232486250000001
+      },
+      "counts": {
+        "positive_criteria_met": 140,
+        "negative_criteria_triggered": 15,
+        "raw_zero": 31,
+        "raw_negative": 12,
+        "answer_under_300_chars": 2,
+        "summary_longer_than_answer": 0,
+        "director_unfinished": 3,
+        "project_threshold_pass": 73,
+        "nodes": {
+          "1": 100,
+          "2": 27,
+          "3": 1
+        }
+      },
+      "groups": {
+        "difficulty": {
+          "difficult": {
+            "n": 64,
+            "score": 24.440562309357954,
+            "raw": 31.374276684357955
+          },
+          "typical": {
+            "n": 64,
+            "score": 59.350758741754674,
+            "raw": 72.88201686675468
+          }
+        },
+        "use_case": {
+          "consult": {
+            "n": 56,
+            "score": 30.43577693698532,
+            "raw": 39.14563193698532
+          },
+          "research": {
+            "n": 39,
+            "score": 54.157917223828804,
+            "raw": 67.70965876229035
+          },
+          "writing": {
+            "n": 33,
+            "score": 46.850977790021425,
+            "raw": 55.74456688093052
+          }
+        },
+        "stratum": {
+          "red_teaming_difficult": {
+            "n": 45,
+            "score": 30.170067115937993,
+            "raw": 35.97558711593799
+          },
+          "good_faith_difficult": {
+            "n": 19,
+            "score": 10.870682504299966,
+            "raw": 20.47643618851049
+          },
+          "good_faith_typical": {
+            "n": 64,
+            "score": 59.350758741754674,
+            "raw": 72.88201686675468
+          }
+        },
+        "turns": {
+          "single": {
+            "n": 97,
+            "score": 44.14553354575129,
+            "raw": 54.835767566369846
+          },
+          "multi": {
+            "n": 31,
+            "score": 34.855735268817206,
+            "raw": 43.655913978494624
+          }
+        }
+      }
+    },
+    "delta_points": -5.063603437714036,
+    "paired_bootstrap_95_ci_points": [
+      -12.531228105436098,
+      2.678158483145185
+    ],
+    "raw_delta_points": -2.8746356252140357,
+    "paired_raw_bootstrap_95_ci_points": [
+      -10.498624419154417,
+      4.974148276939104
+    ],
+    "raw_improved": 14,
+    "raw_declined": 21,
+    "raw_unchanged": 93,
+    "rubric_transitions": {
+      "positive_0_to_0": 52,
+      "negative_0_to_0": 25,
+      "positive_1_to_1": 126,
+      "positive_1_to_0": 22,
+      "positive_0_to_1": 14,
+      "negative_1_to_1": 14,
+      "negative_1_to_0": 4,
+      "negative_0_to_1": 1
+    },
+    "interpretation": "Single paired rerun with the same route pool; bootstrap covers sampled-case variation, not endpoint drift or repeated-run randomness. Only HealthBench relay answer preservation changed; Director public context, trajectory concurrency (20), judge concurrency (10), worker pool and reasoning settings were retained. This single paired rerun does not isolate generation randomness or endpoint drift.",
+    "same_student_judge_subset": {
+      "n": 126,
+      "excluded_tasks": [
+        "healthbench_professional:test:21b7e2c4ac5982729923429bc25c780d:replica-00",
+        "healthbench_professional:test:ce29eda24c251d0cf569aa6cadea3a36:replica-00"
+      ],
+      "baseline": {
+        "n": 126,
+        "means": {
+          "score": 46.25564418490956,
+          "raw": 54.28854085157623,
+          "positive_credit": 65.70973213510719,
+          "negative_penalty": -11.421191283530955,
+          "answer_chars": 4732.277777777777,
+          "summary_chars": 272.14285714285717,
+          "token_cost": 7156.373015873016,
+          "duration_s": 199.3806817736883,
+          "length_adjustment": -8.032896666666666
+        },
+        "counts": {
+          "positive_criteria_met": 146,
+          "negative_criteria_triggered": 18,
+          "raw_zero": 29,
+          "raw_negative": 10,
+          "answer_under_300_chars": 4,
+          "summary_longer_than_answer": 0,
+          "director_unfinished": 2,
+          "project_threshold_pass": 73,
+          "nodes": {
+            "1": 106,
+            "2": 20
+          }
+        },
+        "groups": {
+          "difficulty": {
+            "difficult": {
+              "n": 62,
+              "score": 28.56141307509761,
+              "raw": 33.88404597832342
+            },
+            "typical": {
+              "n": 64,
+              "score": 63.39693057253989,
+              "raw": 74.05539526003989
+            }
+          },
+          "use_case": {
+            "consult": {
+              "n": 56,
+              "score": 43.88130858664518,
+              "raw": 51.33100608664518
+            },
+            "research": {
+              "n": 39,
+              "score": 54.52723070660476,
+              "raw": 62.54951070660476
+            },
+            "writing": {
+              "n": 31,
+              "score": 40.1385770609319,
+              "raw": 49.238351254480285
+            }
+          },
+          "stratum": {
+            "good_faith_difficult": {
+              "n": 19,
+              "score": 27.761882504299965,
+              "raw": 36.26590987272102
+            },
+            "good_faith_typical": {
+              "n": 64,
+              "score": 63.39693057253989,
+              "raw": 74.05539526003989
+            },
+            "red_teaming_difficult": {
+              "n": 43,
+              "score": 28.914694024984943,
+              "raw": 32.831594490101224
+            }
+          },
+          "turns": {
+            "single": {
+              "n": 96,
+              "score": 44.73819608092909,
+              "raw": 53.0551804559291
+            },
+            "multi": {
+              "n": 30,
+              "score": 51.11147811764706,
+              "raw": 58.23529411764706
+            }
+          }
+        }
+      },
+      "candidate": {
+        "n": 126,
+        "means": {
+          "score": 41.29212608945404,
+          "raw": 51.368276089454035,
+          "positive_credit": 60.904546738064354,
+          "negative_penalty": -9.536270648610321,
+          "answer_chars": 5427.261904761905,
+          "summary_chars": 290.5238095238095,
+          "token_cost": 9613.690476190477,
+          "duration_s": 216.8480128977736,
+          "length_adjustment": -10.076149999999998
+        },
+        "counts": {
+          "positive_criteria_met": 138,
+          "negative_criteria_triggered": 15,
+          "raw_zero": 31,
+          "raw_negative": 12,
+          "answer_under_300_chars": 2,
+          "summary_longer_than_answer": 0,
+          "director_unfinished": 3,
+          "project_threshold_pass": 71,
+          "nodes": {
+            "1": 98,
+            "2": 27,
+            "3": 1
+          }
+        },
+        "groups": {
+          "difficulty": {
+            "difficult": {
+              "n": 62,
+              "score": 22.650956899982404,
+              "raw": 29.16054367417595
+            },
+            "typical": {
+              "n": 64,
+              "score": 59.350758741754674,
+              "raw": 72.88201686675468
+            }
+          },
+          "use_case": {
+            "consult": {
+              "n": 56,
+              "score": 30.43577693698532,
+              "raw": 39.14563193698532
+            },
+            "research": {
+              "n": 39,
+              "score": 54.157917223828804,
+              "raw": 67.70965876229035
+            },
+            "writing": {
+              "n": 31,
+              "score": 44.71760022808733,
+              "raw": 52.88937764744216
+            }
+          },
+          "stratum": {
+            "good_faith_difficult": {
+              "n": 19,
+              "score": 10.870682504299966,
+              "raw": 20.47643618851049
+            },
+            "good_faith_typical": {
+              "n": 64,
+              "score": 59.350758741754674,
+              "raw": 72.88201686675468
+            },
+            "red_teaming_difficult": {
+              "n": 43,
+              "score": 27.85619442365604,
+              "raw": 32.99770744691185
+            }
+          },
+          "turns": {
+            "single": {
+              "n": 96,
+              "score": 43.94043431185286,
+              "raw": 54.36530681185286
+            },
+            "multi": {
+              "n": 30,
+              "score": 32.817539777777775,
+              "raw": 41.77777777777778
+            }
+          }
+        }
+      },
+      "delta_points": -4.9635180954555285,
+      "raw_delta_points": -2.9202647621221947
+    },
+    "baseline_relay_subgroups": {
+      "answer_dropped": {
+        "n": 21,
+        "baseline": {
+          "n": 21,
+          "means": {
+            "score": 47.07620547783865,
+            "raw": 63.35526547783864,
+            "positive_credit": 71.15949828207145,
+            "negative_penalty": -7.804232804232804,
+            "answer_chars": 7537.0952380952385,
+            "summary_chars": 387.04761904761904,
+            "token_cost": 19826.52380952381,
+            "duration_s": 460.6052232496662,
+            "length_adjustment": -16.279059999999994
+          },
+          "counts": {
+            "positive_criteria_met": 30,
+            "negative_criteria_triggered": 3,
+            "raw_zero": 4,
+            "raw_negative": 0,
+            "answer_under_300_chars": 0,
+            "summary_longer_than_answer": 0,
+            "director_unfinished": 2,
+            "project_threshold_pass": 12,
+            "nodes": {
+              "2": 20,
+              "1": 1
+            }
+          },
+          "groups": {
+            "difficulty": {
+              "typical": {
+                "n": 13,
+                "score": 57.71403260950004,
+                "raw": 76.48842030180772
+              },
+              "difficult": {
+                "n": 8,
+                "score": 29.78973638888889,
+                "raw": 42.013888888888886
+              }
+            },
+            "use_case": {
+              "research": {
+                "n": 9,
+                "score": 62.907600435944495,
+                "raw": 77.14994043594449
+              },
+              "consult": {
+                "n": 10,
+                "score": 41.57528111111112,
+                "raw": 58.611111111111114
+              },
+              "writing": {
+                "n": 2,
+                "score": 3.3395500000000027,
+                "raw": 25.0
+              }
+            },
+            "stratum": {
+              "good_faith_typical": {
+                "n": 13,
+                "score": 57.71403260950004,
+                "raw": 76.48842030180772
+              },
+              "red_teaming_difficult": {
+                "n": 3,
+                "score": 57.87900666666667,
+                "raw": 66.66666666666667
+              },
+              "good_faith_difficult": {
+                "n": 5,
+                "score": 12.936174222222222,
+                "raw": 27.22222222222222
+              }
+            },
+            "turns": {
+              "single": {
+                "n": 16,
+                "score": 56.76675399521878,
+                "raw": 76.20934149521878
+              },
+              "multi": {
+                "n": 5,
+                "score": 16.066450222222223,
+                "raw": 22.22222222222222
+              }
+            }
+          }
+        },
+        "candidate": {
+          "n": 21,
+          "means": {
+            "score": 37.37285726379441,
+            "raw": 55.12093726379441,
+            "positive_credit": 65.3061224489796,
+            "negative_penalty": -10.185185185185185,
+            "answer_chars": 8036.761904761905,
+            "summary_chars": 328.3333333333333,
+            "token_cost": 12093.52380952381,
+            "duration_s": 250.20670074661308,
+            "length_adjustment": -17.74808
+          },
+          "counts": {
+            "positive_criteria_met": 29,
+            "negative_criteria_triggered": 3,
+            "raw_zero": 5,
+            "raw_negative": 1,
+            "answer_under_300_chars": 0,
+            "summary_longer_than_answer": 0,
+            "director_unfinished": 1,
+            "project_threshold_pass": 12,
+            "nodes": {
+              "1": 13,
+              "2": 8
+            }
+          },
+          "groups": {
+            "difficulty": {
+              "typical": {
+                "n": 13,
+                "score": 55.73124703296703,
+                "raw": 78.57142857142857
+              },
+              "difficult": {
+                "n": 8,
+                "score": 7.540473888888889,
+                "raw": 17.01388888888889
+              }
+            },
+            "use_case": {
+              "research": {
+                "n": 9,
+                "score": 65.64192571428572,
+                "raw": 85.71428571428571
+              },
+              "consult": {
+                "n": 10,
+                "score": 33.75676111111111,
+                "raw": 48.611111111111114
+              },
+              "writing": {
+                "n": 2,
+                "score": -71.75747,
+                "raw": -50.0
+              }
+            },
+            "stratum": {
+              "good_faith_typical": {
+                "n": 13,
+                "score": 55.73124703296703,
+                "raw": 78.57142857142857
+              },
+              "red_teaming_difficult": {
+                "n": 3,
+                "score": -7.678299999999997,
+                "raw": 0.0
+              },
+              "good_faith_difficult": {
+                "n": 5,
+                "score": 16.67173822222222,
+                "raw": 27.22222222222222
+              }
+            },
+            "turns": {
+              "single": {
+                "n": 16,
+                "score": 50.839893214285716,
+                "raw": 71.65178571428571
+              },
+              "multi": {
+                "n": 5,
+                "score": -5.721657777777777,
+                "raw": 2.2222222222222223
+              }
+            }
+          }
+        },
+        "delta_points": -9.70334821404424,
+        "raw_delta_points": -8.234328214044238
+      },
+      "no_dropped_reference": {
+        "n": 107,
+        "baseline": {
+          "n": 107,
+          "means": {
+            "score": 46.936312824897136,
+            "raw": 53.36351002115882,
+            "positive_credit": 65.28109144953275,
+            "negative_penalty": -11.91758142837394,
+            "answer_chars": 4186.121495327103,
+            "summary_chars": 248.74766355140187,
+            "token_cost": 4635.943925233645,
+            "duration_s": 147.01071408891477,
+            "length_adjustment": -6.42719719626168
+          },
+          "counts": {
+            "positive_criteria_met": 118,
+            "negative_criteria_triggered": 15,
+            "raw_zero": 25,
+            "raw_negative": 10,
+            "answer_under_300_chars": 4,
+            "summary_longer_than_answer": 0,
+            "director_unfinished": 0,
+            "project_threshold_pass": 63,
+            "nodes": {
+              "1": 107
+            }
+          },
+          "groups": {
+            "difficulty": {
+              "difficult": {
+                "n": 56,
+                "score": 30.62614892044537,
+                "raw": 35.08392392044537
+              },
+              "typical": {
+                "n": 51,
+                "score": 64.84551240625593,
+                "raw": 73.43521240625593
+              }
+            },
+            "use_case": {
+              "consult": {
+                "n": 46,
+                "score": 44.38261890741346,
+                "raw": 49.748374559587376
+              },
+              "research": {
+                "n": 30,
+                "score": 52.01311978780284,
+                "raw": 58.16938178780284
+              },
+              "writing": {
+                "n": 31,
+                "score": 45.81262609318996,
+                "raw": 54.077060931899645
+              }
+            },
+            "stratum": {
+              "good_faith_difficult": {
+                "n": 14,
+                "score": 33.056778319327734,
+                "raw": 39.49579831932773
+              },
+              "good_faith_typical": {
+                "n": 51,
+                "score": 64.84551240625593,
+                "raw": 73.43521240625593
+              },
+              "red_teaming_difficult": {
+                "n": 42,
+                "score": 29.815939120817916,
+                "raw": 33.61329912081792
+              }
+            },
+            "turns": {
+              "single": {
+                "n": 81,
+                "score": 42.92882543019373,
+                "raw": 49.061084689453
+              },
+              "multi": {
+                "n": 26,
+                "score": 59.42117740070387,
+                "raw": 66.76721970839618
+              }
+            }
+          }
+        },
+        "candidate": {
+          "n": 107,
+          "means": {
+            "score": 42.78331350216379,
+            "raw": 51.54077667973389,
+            "positive_credit": 60.771442220257356,
+            "negative_penalty": -9.230665540523473,
+            "answer_chars": 4978.728971962617,
+            "summary_chars": 283.4299065420561,
+            "token_cost": 9094.028037383177,
+            "duration_s": 209.2306037029495,
+            "length_adjustment": -8.757463177570095
+          },
+          "counts": {
+            "positive_criteria_met": 111,
+            "negative_criteria_triggered": 12,
+            "raw_zero": 26,
+            "raw_negative": 11,
+            "answer_under_300_chars": 2,
+            "summary_longer_than_answer": 0,
+            "director_unfinished": 2,
+            "project_threshold_pass": 61,
+            "nodes": {
+              "1": 87,
+              "2": 19,
+              "3": 1
+            }
+          },
+          "groups": {
+            "difficulty": {
+              "difficult": {
+                "n": 56,
+                "score": 26.854860655139248,
+                "raw": 33.42576065513925
+              },
+              "typical": {
+                "n": 51,
+                "score": 60.27337937340643,
+                "raw": 71.43177466752408
+              }
+            },
+            "use_case": {
+              "consult": {
+                "n": 46,
+                "score": 29.713823855653626,
+                "raw": 37.08791907304493
+              },
+              "research": {
+                "n": 30,
+                "score": 50.71271467669173,
+                "raw": 62.30827067669173
+              },
+              "writing": {
+                "n": 31,
+                "score": 54.50313571195829,
+                "raw": 62.56679700228087
+              }
+            },
+            "stratum": {
+              "good_faith_difficult": {
+                "n": 14,
+                "score": 8.798876890756304,
+                "raw": 18.067226890756302
+              },
+              "good_faith_typical": {
+                "n": 51,
+                "score": 60.27337937340643,
+                "raw": 71.43177466752408
+              },
+              "red_teaming_difficult": {
+                "n": 42,
+                "score": 32.873521909933565,
+                "raw": 38.54527190993356
+              }
+            },
+            "turns": {
+              "single": {
+                "n": 81,
+                "score": 42.82319089517659,
+                "raw": 51.51408496925066
+              },
+              "multi": {
+                "n": 26,
+                "score": 42.65908008547009,
+                "raw": 51.623931623931625
+              }
+            }
+          }
+        },
+        "delta_points": -4.152999322733342,
+        "raw_delta_points": -1.8227333414249303
+      }
+    }
+  },
+  "experiment": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-full-relay-gpt-low-128-c20-20260925-173438",
+  "baseline": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-unified-contract-gpt-low-128-c20-20260925-164301",
+  "validation": {
+    "tests_passed": 216,
+    "production_tests_passed": 216,
+    "pre_fix_healthbench_test_failed": true,
+    "other_dataset_relay_test_passed_before_fix": true,
+    "frozen_snapshot_tested": true,
+    "final_production_healthbench_tests_passed": 14,
+    "final_production_multi_agent_runtime_ast_matches_snapshot": true
+  },
+  "retry_event_counts": {
+    "judge_route_failure": 2,
+    "inference_retry": 1,
+    "judge_fallback_success": 1,
+    "complete": 1
+  },
+  "final_service_check": {
+    "checked_at": 1790331196.4896708,
+    "pid": 14783,
+    "http_status": 200,
+    "model": "Qwen3.5-9B",
+    "gpu": 1,
+    "port": 18604,
+    "kept_running": true
+  }
+}

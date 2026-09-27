@@ -1,14 +1,19 @@
 {
-  "schema": "spgfs-webshop-baseline-v1",
-  "status": "official",
-  "selected_on": "2026-09-23",
-  "source_run": "state/formal-eval/webshop-legacy-page-only-reasoning-c24-20260918-172320",
+  "schema": "spgfs-webshop-baseline-v2",
+  "status": "official_training_implementation",
+  "selected_on": "2026-09-25",
+  "selected_version": "M02",
+  "selected_version_name": "合并＋身份修复",
+  "source_run": "state/experiments/webshop-merged-identity-128-20260924-run1/candidate",
+  "source_version_id": "webshop-merged-identity-128-20260924-run1",
   "metrics": {
     "examples": 128,
     "strict_successes": 62,
     "strict_success_rate": 0.484375,
-    "mean_reward": 0.6906249999999999
+    "mean_reward": 0.7352213541666667,
+    "mean_score_100": 73.52213541666667
   },
+  "metrics_scope": "Historical fixed-DeepSeek, no-skill, 128-example reference evaluation; not a new training result.",
   "webshop": {
     "enabled": true,
     "service_url": "http://127.0.0.1:18020",
@@ -21,7 +26,55 @@
     "staged_commit_enabled": true,
     "max_pending_sessions": 8,
     "pending_ttl_s": 900.0,
-    "search_observation_mode": "legacy"
+    "search_observation_mode": "legacy",
+    "compatibility_profile": "m02_merged_identity_v1",
+    "worker_guidance_policy": "merged_checklist_v1",
+    "worker_memory_policy": "factual_memory_v1",
+    "worker_execution_policy": "graph_tools_v1",
+    "native_conversation_history": false,
+    "env_feedback_enabled": false
+  },
+  "canvas": {
+    "remaining_token_admission_enabled": false,
+    "max_total_tokens_webshop": 350000
+  },
+  "formal_training": {
+    "configs": [
+      "configs/formal_training.toml",
+      "configs/formal_training_h200.local.toml",
+      "configs/formal_eval_h200.local.toml"
+    ],
+    "entrypoint": "scripts/formal/run_experiment.sh",
+    "model_selection": "Director selects logical model; program selects physical endpoint",
+    "director_models": [
+      "gpt",
+      "grok",
+      "gemini",
+      "deepseek",
+      "minimax"
+    ],
+    "endpoint_pools": {
+      "gpt": [
+        "gpt",
+        "gpt_eco",
+        "gpt_student"
+      ],
+      "grok": [
+        "grok",
+        "grok45"
+      ],
+      "gemini": [
+        "gemini",
+        "gemini2"
+      ]
+    },
+    "member_queue_wait_s": 0.5,
+    "http_failover_boundary": "Queue wait is capped at 0.5s; in-flight HTTP silence can still consume its request timeout. No hedged request added.",
+    "director_thinking": true,
+    "qwen_proposer_thinking": true,
+    "fixed_worker_override": false,
+    "skillbank": "Preserve formal PATS learning pipeline; do not import S01 handcrafted WebShop cards.",
+    "training_started_by_promotion": false
   },
   "evaluation": {
     "director_model": "Qwen3.5-9B",
@@ -46,23 +99,44 @@
     ],
     "dataset": "data/formal/eval/webshop_official_test_128.jsonl"
   },
+  "active_eval_config": "configs/webshop_official_eval.toml",
+  "historical_eval_config": "state/experiments/webshop-merged-identity-128-20260924-run1/effective.local.toml",
+  "entrypoint": "scripts/formal/run_webshop_official_eval.sh",
   "source_artifacts": {
-    "summary.json": {
-      "path": "state/formal-eval/webshop-legacy-page-only-reasoning-c24-20260918-172320/summary.json",
-      "sha256": "6ff2dff9f73107a39947dabf8bfa5ee3a30a42386ec229a64ac250545d610692"
+    "manifest.json": {
+      "path": "state/experiments/webshop-merged-identity-128-20260924-run1/manifest.json",
+      "sha256": "27dcec2a12ec14c5cedbafb92224f9776a37833e9cfca854d14111129dd27e61"
     },
-    "run_manifest.json": {
-      "path": "state/formal-eval/webshop-legacy-page-only-reasoning-c24-20260918-172320/run_manifest.json",
-      "sha256": "dd9ea2d55f2c8fc931895702c0c3ccc13d085c54f80ab0bb00eb9cac94b7d471"
+    "comparison/comparison.json": {
+      "path": "state/experiments/webshop-merged-identity-128-20260924-run1/comparison/comparison.json",
+      "sha256": "9b646c0b3f84b07811fc4f0c0ab6cd95f7165359b74fe0218ec9837e323644c8"
     },
-    "records.jsonl": {
-      "path": "state/formal-eval/webshop-legacy-page-only-reasoning-c24-20260918-172320/records.jsonl",
-      "sha256": "9bcc19289045f9c424980df7a52518605549d0f9144de780d95db1da14472ed8"
+    "effective.local.toml": {
+      "path": "state/experiments/webshop-merged-identity-128-20260924-run1/effective.local.toml",
+      "sha256": "cc281157df8fa7fea4326aa187baffe48f0a3398464428e002b4a160b233d80c"
     }
   },
   "dataset_sha256": "35fbda3aef098050f649ca569a8c8e1c8f3a4dbf0e8c800ba3fade74f7335328",
-  "provenance_note": "Metrics belong to the original run. This selection does not restore the complete historical source tree or constitute a new evaluation.",
-  "active_eval_config": "configs/webshop_official_eval.toml",
-  "entrypoint": "scripts/formal/run_webshop_official_eval.sh",
-  "supersedes": "configs/history/webshop_retain_page_text_20260918.json"
+  "frozen_source": "state/experiments/webshop-merged-identity-128-20260924-run1/snapshots/candidate/src",
+  "frozen_source_hashes": "state/formal-training/webshop-m02-promotion-20260925/frozen-source-sha256.json",
+  "frozen_source_python_files": 90,
+  "compatibility_notes": {
+    "section_memory_max_chars": 1400,
+    "max_inspected_products": 6,
+    "excluded_later_branches": [
+      "W10 detail-unlimited",
+      "W11 history",
+      "M03 memory-source change",
+      "S01 skill cards",
+      "Native",
+      "SkillFlow bridge"
+    ],
+    "new_sidecar_native_fields_removed": [
+      "raw_available_actions",
+      "valid_subactions[].raw_action"
+    ]
+  },
+  "supersedes": "configs/history/webshop_w08_budget_off_20260924.json",
+  "provenance_note": "User-selected M02 inference behavior promoted into the shared training code. Formal model choice and endpoint pools differ intentionally from the sealed fixed-DeepSeek reference; no new 128-example accuracy claim.",
+  "promotion_record": "docs/WEBSHOP_FORMAL_PROMOTION_2026-09-25.zh-CN.md"
 }

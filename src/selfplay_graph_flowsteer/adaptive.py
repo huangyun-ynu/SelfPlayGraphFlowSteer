@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -37,6 +38,14 @@ from .runtime import (
     artifact_integrity_failure_risks,
 )
 from .skills import SolverSkillBank
+from .submission_contract import (
+    SUBMISSION_CONTRACT_VERSION,
+    OutcomeDecision,
+    decide_text_outcome,
+    is_text_submission_dataset,
+    receipt_error,
+    snapshot_hash,
+)
 from .swebench import public_swe_evaluation, swe_lifecycles
 from .webshop import webshop_lifecycles
 
@@ -89,13 +98,14 @@ def _aggregate_output_agent_tool_evidence(
     ledger for terminal eligibility and reporting.
     """
 
-    if output_artifact is None:
+    if output_artifact is None or getattr(canvas, "unified", False):
         return
     output_agent = str(getattr(output_artifact, "agent_id", "")).strip()
     if not output_agent:
         return
 
     current_evidence = dict(getattr(output_artifact, "runtime_tool_evidence", {}) or {})
+    current_evidence = dict(current_evidence.get("current_artifact_evidence", current_evidence))
     seen_artifacts: set[str] = set()
     successful_call_ids: list[str] = []
     failed_call_ids: list[str] = []
@@ -116,6 +126,7 @@ def _aggregate_output_agent_tool_evidence(
                 continue
             seen_artifacts.add(identity)
             evidence = dict(getattr(artifact, "runtime_tool_evidence", {}) or {})
+            evidence = dict(evidence.get("current_artifact_evidence", evidence))
             successful_call_ids.extend(
                 f"{identity}:{value}"
                 for value in evidence.get("successful_call_ids", ())
@@ -160,6 +171,7 @@ def _aggregate_output_agent_tool_evidence(
     all_actions_failed = successful_count == 0
     updated_evidence = {
         **current_evidence,
+        "current_artifact_evidence": dict(current_evidence),
         "attempted_count": attempted_count,
         "successful_count": successful_count,
         "failed_count": failed_count,
@@ -281,10 +293,16 @@ class AdaptiveSolverResult:
     skills_used: tuple[str, ...] = ()
     skill_context: dict[str, Any] = field(default_factory=dict)
     answer_submission: AnswerSubmission | None = None
+    outcome_decision: OutcomeDecision | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
             "director_run": self.director_run.to_dict(),
+            "submission_contract_version": (self.director_run.submission_receipt.version if self.director_run.submission_receipt else SUBMISSION_CONTRACT_VERSION),
+            "outcome_decision": self.outcome_decision.to_dict() if self.outcome_decision else None,
+            "submission_receipt": (self.director_run.submission_receipt.to_dict()
+                                   if self.director_run.submission_receipt else None),
+            "candidate_output": self.director_run.candidate_output,
             "verification": (
                 {
                     "score": self.verification.score,
@@ -324,6 +342,9 @@ class AdaptiveWorkflowSolver:
         rollout_deadline: RolloutDeadline | None = None,
         swe_duplicate_responsibility_policy: str = "record_only",
         director_prompt_variant: str = "v2.1",
+        director_enable_thinking: bool | None = None,
+        director_thinking_by_dataset: dict[str, bool] | None = None,
+        required_nq_frozen_top_k: int = 0,
         director_tokenizer: Any | None = None,
         post_director_hook: Callable[[TaskSpec, GraphCanvas, DirectorRun], None] | None = None,
     ) -> None:
@@ -343,6 +364,12 @@ class AdaptiveWorkflowSolver:
             str(swe_duplicate_responsibility_policy).strip().casefold()
         )
         self.director_prompt_variant = str(director_prompt_variant).strip().casefold()
+        self.director_enable_thinking = director_enable_thinking
+        self.director_thinking_by_dataset = {
+            canonical_dataset_name(dataset): enabled
+            for dataset, enabled in (director_thinking_by_dataset or {}).items()
+        }
+        self.required_nq_frozen_top_k = required_nq_frozen_top_k
         self.director_tokenizer = director_tokenizer
         self.post_director_hook = post_director_hook
         self.active_canvas: GraphCanvas | None = None
@@ -353,7 +380,6 @@ class AdaptiveWorkflowSolver:
         raw_answer: str,
         *,
         raw_summary: str = "",
-        allow_model: bool = True,
     ) -> AnswerSubmission:
         if self.answer_finalizer is None and is_aime_dataset(task.metadata.get("dataset", "")):
             return AnswerFinalizer().finalize(task, raw_answer)
@@ -370,10 +396,54 @@ class AdaptiveWorkflowSolver:
             task,
             raw_answer,
             raw_summary=raw_summary,
-            allow_model=allow_model,
+        )
+
+    def _prepare_text_submission(self, task: TaskSpec, canvas: GraphCanvas) -> AnswerSubmission:
+        """Normalize/recover public output before FINISH is accepted; never inspect gold."""
+        artifact = self.runtime.artifacts.get(canvas.graph.output_agent)
+        _aggregate_output_agent_tool_evidence(canvas, artifact)
+        if (
+            is_aime_dataset(canvas.dataset) and artifact is not None
+            and "terminal_tool_failure" in artifact_integrity_failure_risks(artifact)
+            and not _is_model_attributed_terminal_tool_failure(artifact)
+            and not getattr(canvas, "_text_recovery_attempted", False)
+        ):
+            canvas._text_recovery_attempted = True
+            before_id = artifact.artifact_id
+            before_risks = artifact_integrity_failure_risks(artifact)
+            recovery = canvas.recover_selected_output_agent(reason_code="aime_terminal_tool_failure")
+            artifact = self.runtime.artifacts.get(canvas.graph.output_agent)
+            _aggregate_output_agent_tool_evidence(canvas, artifact)
+            after_risks = (artifact_integrity_failure_risks(artifact) if artifact else ["missing_output_artifact"])
+            if artifact is not None and not after_risks:
+                artifact.runtime_tool_evidence["recovered_failure"] = True
+                artifact.runtime_tool_evidence.setdefault("current_artifact_evidence", {})["recovered_failure"] = True
+            task.metadata["selected_output_recovery"] = {
+                "attempted": True, "dataset": "aime", "scope": "selected_output_agent",
+                "phase": "before_finish_acceptance", "reason": "terminal_tool_failure",
+                "output_agent": canvas.graph.output_agent,
+                "before_artifact_id": before_id,
+                "after_artifact_id": artifact.artifact_id if artifact else None,
+                "before_integrity_risks": before_risks, "after_integrity_risks": after_risks,
+                "recovered": not after_risks,
+                "worker_model_calls": recovery.execution.worker_model_calls_total if recovery.execution else 0,
+            }
+        return self.finalize_answer(
+            task, artifact.answer if artifact else "",
+            raw_summary=artifact.summary if artifact else "",
         )
 
     def solve(self, task: TaskSpec, *, run_id: str) -> AdaptiveSolverResult:
+        if (
+            self.required_nq_frozen_top_k
+            and canonical_dataset_name(task.metadata.get("dataset")) == "nq_open"
+        ):
+            from .nq_frozen_context import validate_frozen_context
+
+            validate_frozen_context(
+                {"id": task.task_id, "prompt": task.prompt, "metadata": task.metadata},
+                top_k=self.required_nq_frozen_top_k,
+            )
         task.metadata["judge_evaluation_scope"] = f"primary:{run_id}:{self.runtime.seed}"
 
         skill_manifest = {}
@@ -441,7 +511,14 @@ class AdaptiveWorkflowSolver:
                 task,
                 include_submission_contract=self.answer_finalizer is not None,
             ),
-            director_task=task.prompt,
+            # HealthBench evaluates the next reply in a public conversation;
+            # task.prompt may contain only a context-dependent follow-up.
+            director_task=(
+                solver_task_text(task)
+                if action_adapter is not None
+                and action_adapter.adapter_id == "healthbench_professional"
+                else task.prompt
+            ),
             runtime=self.runtime,
             config=replace(base_canvas_config, max_total_tokens=selected_token_budget),
             runtime_routes=self.runtime_routes,
@@ -461,6 +538,8 @@ class AdaptiveWorkflowSolver:
             ),
             binary_relation_policy=self.director_tokenizer is not None,
         )
+        canvas.run_id = run_id
+        canvas.prepare_text_submission = lambda active: self._prepare_text_submission(task, active)
         self.active_canvas = canvas
         try:
             run = GraphDirector(
@@ -468,6 +547,9 @@ class AdaptiveWorkflowSolver:
                 canvas=canvas,
                 solver_skill_context=skill_context,
                 prompt_variant=self.director_prompt_variant,
+                enable_thinking=self.director_thinking_by_dataset.get(
+                    dataset_key, self.director_enable_thinking
+                ),
                 tokenizer=self.director_tokenizer,
                 call_namespace=run_id,
             ).run()
@@ -479,53 +561,37 @@ class AdaptiveWorkflowSolver:
             ):
                 lifecycle.close_all()
             raise
+        receipt = canvas.submission_receipt
+        frozen_run = copy.deepcopy(run) if receipt is not None else None
         if self.post_director_hook is not None:
-            self.post_director_hook(task, canvas, run)
+            before_artifacts = snapshot_hash({key: value.to_dict() for key, value in self.runtime.artifacts.items()})
+            before_binding = (self.runtime.artifact_input_binding(receipt.output_agent_id)
+                              if receipt is not None else None)
+            try:
+                self.post_director_hook(task, canvas, run)
+            except Exception as exc:
+                if receipt is None:
+                    raise
+                task.metadata["post_submission_hook_error"] = type(exc).__name__
+                task.metadata["output_contract_failure"] = {"reason": "post_submission_hook_error"}
+            if receipt is not None:
+                artifact = self.runtime.artifacts.get(receipt.output_agent_id)
+                if (run.to_dict() != frozen_run.to_dict()
+                        or canvas.state.value != "finished"
+                        or snapshot_hash({key: value.to_dict() for key, value in self.runtime.artifacts.items()}) != before_artifacts
+                        or snapshot_hash(canvas.graph.to_dict()) != receipt.graph_snapshot_hash
+                        or canvas.submission_receipt is not receipt
+                        or artifact is None or artifact.answer != receipt.raw_answer_snapshot
+                        or artifact.artifact_id != receipt.artifact_id
+                        or self.runtime.artifact_input_binding(receipt.output_agent_id) != before_binding):
+                    task.metadata["output_contract_failure"] = {"reason": "post_submission_mutation"}
+                run = frozen_run
+                canvas.submission_receipt = receipt
         output_artifact = (
             self.runtime.artifacts.get(canvas.graph.output_agent)
             if canvas.graph.output_agent
             else None
         )
-        if (
-            run.finished
-            and action_adapter is not None
-            and action_adapter.adapter_id == "aime"
-            and output_artifact is not None
-            and "terminal_tool_failure" in artifact_integrity_failure_risks(output_artifact)
-            and not _is_model_attributed_terminal_tool_failure(output_artifact)
-        ):
-            before_artifact_id = output_artifact.artifact_id
-            before_risks = artifact_integrity_failure_risks(output_artifact)
-            recovery_step = canvas.recover_selected_output_agent(
-                reason_code="aime_terminal_tool_failure"
-            )
-            output_artifact = self.runtime.artifacts.get(canvas.graph.output_agent)
-            after_risks = (
-                artifact_integrity_failure_risks(output_artifact)
-                if output_artifact is not None
-                else ["missing_output_artifact"]
-            )
-            task.metadata["selected_output_recovery"] = {
-                "attempted": True,
-                "dataset": "aime",
-                "scope": "selected_output_agent",
-                "reason": "terminal_tool_failure",
-                "output_agent": canvas.graph.output_agent,
-                "before_artifact_id": before_artifact_id,
-                "after_artifact_id": (
-                    output_artifact.artifact_id if output_artifact is not None else None
-                ),
-                "before_integrity_risks": before_risks,
-                "after_integrity_risks": after_risks,
-                "recovered": not after_risks,
-                "worker_model_calls": (
-                    recovery_step.execution.worker_model_calls_total
-                    if recovery_step.execution is not None
-                    else 0
-                ),
-            }
-            if output_artifact is not None:
-                run.output = output_artifact.answer
         flowsteer_structure = canvas.evaluate_flowsteer_structure()
         output_artifact = (
             self.runtime.artifacts.get(canvas.graph.output_agent)
@@ -545,6 +611,19 @@ class AdaptiveWorkflowSolver:
             }
             for agent_id, artifact in self.runtime.artifacts.items()
         }
+        historical_integrity = {}
+        if canvas.unified:
+            for step in canvas.history:
+                if step.execution is None:
+                    continue
+                for artifact in [*step.execution.artifacts.values(),
+                                 *getattr(step.execution, 'attempt_artifacts', ())]:
+                    historical_integrity[artifact.artifact_id] = {
+                        'agent_id': artifact.agent_id,
+                        'backend_failure': artifact.answer == WORKER_BACKEND_FAILURE_SENTINEL,
+                        'runtime_tool_evidence': dict(artifact.runtime_tool_evidence),
+                    }
+            task.metadata['worker_artifact_history_integrity'] = historical_integrity
         output_integrity_failure_risks = (
             artifact_integrity_failure_risks(output_artifact) if output_artifact is not None else []
         )
@@ -577,8 +656,18 @@ class AdaptiveWorkflowSolver:
             if output_artifact is not None and output_integrity_failure_risks
             else None
         )
+        unified_binding_error = None
+        if canvas.unified:
+            unified_binding_error = receipt_error(receipt, run=run, events=canvas.history,
+                                                  run_id=run_id, dataset=dataset_key)
+            if unified_binding_error:
+                receipt = None
+                task.metadata["submission_binding_error"] = unified_binding_error
+            task.metadata["submission_status"] = "submitted" if receipt else "unsubmitted"
+            task.metadata["submission_receipt"] = receipt.to_dict() if receipt else None
+            task.metadata["submission_transaction"] = copy.deepcopy(canvas._unified_transaction)
         if action_adapter is not None and action_adapter.adapter_id == "webshop":
-            output_agent = canvas.graph.output_agent
+            output_agent = canvas.graph.output_agent if not canvas.unified or receipt else None
             environment_result = active_webshop_lifecycles[0].result_for(output_agent)
             task.metadata["webshop_environment_result"] = environment_result
             for lifecycle in active_webshop_lifecycles:
@@ -590,51 +679,26 @@ class AdaptiveWorkflowSolver:
                 if artifact.environment_result.get("environment_completed") is True
                 and artifact.environment_result.get("won") is True
             ]
-            preserved_winner = min(
-                winning_artifacts,
-                key=lambda artifact: (
-                    int(artifact.environment_result.get("attempt_index", 0) or 0),
-                    artifact.agent_id,
-                ),
-            ) if winning_artifacts else None
-            environment_result = (
+            selected_output = canvas.graph.output_agent
+            selected_result = (
                 dict(output_artifact.environment_result)
-                if output_artifact and output_artifact.environment_result
-                else active_alfworld_lifecycles[0].result_for(canvas.graph.output_agent)
+                if output_artifact is not None and output_artifact.environment_result
+                else active_alfworld_lifecycles[0].result_for(selected_output)
             )
-            if preserved_winner is not None and not bool(environment_result.get("won")):
-                environment_result = dict(preserved_winner.environment_result)
-                task.metadata["environment_result_preservation"] = {
-                    "source": "trusted_winning_episode",
-                    "agent_id": preserved_winner.agent_id,
-                    "selected_output_agent": canvas.graph.output_agent,
-                    "graph_mutated": False,
+            environment_result = dict(selected_result or {})
+            task.metadata["alfworld_unselected_winning_episodes"] = [
+                {
+                    "agent_id": artifact.agent_id,
+                    "environment_result": dict(artifact.environment_result),
                 }
-            if not canvas.graph.output_agent:
-                completed_artifacts = [
-                    artifact
-                    for artifact in self.runtime.artifacts.values()
-                    if artifact.environment_result
-                ]
-                if len(completed_artifacts) == 1:
-                    sole = completed_artifacts[0]
-                    if (
-                        sole.environment_result.get("environment_completed") is True
-                        and sole.environment_result.get("won") is True
-                    ):
-                        # Preserve a unique already-won episode, without setting
-                        # output or selecting the best of multiple Agent runs.
-                        environment_result = dict(sole.environment_result)
-                        task.metadata["environment_result_preservation"] = {
-                            "source": "sole_completed_episode",
-                            "agent_id": sole.agent_id,
-                            "graph_mutated": False,
-                        }
+                for artifact in sorted(winning_artifacts, key=lambda item: item.agent_id)
+                if artifact.agent_id != selected_output
+            ]
             task.metadata["alfworld_environment_result"] = environment_result
             for lifecycle in active_alfworld_lifecycles:
                 lifecycle.close_all()
         if action_adapter is not None and action_adapter.adapter_id == "swe_bench":
-            output_agent = canvas.graph.output_agent
+            output_agent = canvas.graph.output_agent if not canvas.unified or receipt else None
             environment_result = (
                 dict(output_artifact.environment_result)
                 if output_artifact and output_artifact.environment_result
@@ -691,48 +755,128 @@ class AdaptiveWorkflowSolver:
             for event in artifact.backend_request_events
         )
         task.metadata["backend_request_events"] = backend_request_events
-        answer_submission = self.finalize_answer(
-            task,
-            run.output,
-            raw_summary=output_artifact.summary if output_artifact else "",
-            allow_model=not backend_failures,
+        stale_output = bool(
+            output_artifact is not None
+            and output_artifact.answer not in {
+                WORKER_BACKEND_FAILURE_SENTINEL, WORKER_PROTOCOL_FAILURE_SENTINEL
+            }
+            and not canvas.selected_output_is_current()
         )
-        if run.output.strip() in {
-            WORKER_PROTOCOL_FAILURE_SENTINEL,
-            WORKER_BACKEND_FAILURE_SENTINEL,
-        }:
-            answer_submission = replace(
-                answer_submission,
-                submitted_answer="",
-                valid=False,
-                detail="runtime_failure_sentinel_not_an_answer",
+        task.metadata["output_artifact_binding"] = self.runtime.artifact_input_binding(
+            str(canvas.graph.output_agent or "")
+        )
+        if stale_output:
+            task.metadata["output_contract_failure"] = {
+                "reason": "stale_output_artifact", "output_agent": canvas.graph.output_agent,
+                "artifact_id": output_artifact.artifact_id,
+            }
+        text_primary = is_text_submission_dataset(dataset_key)
+        candidate_output = run.candidate_output
+        task.metadata["submission_contract_version"] = "unified_submission_v1" if canvas.unified else SUBMISSION_CONTRACT_VERSION
+        task.metadata["candidate_output"] = candidate_output
+        candidate_submission = self.finalize_answer(
+            task, candidate_output,
+            raw_summary=output_artifact.summary if output_artifact else "",
+        ) if text_primary else None
+        task.metadata["candidate_answer_submission"] = (
+            candidate_submission.to_dict() if candidate_submission else None
+        )
+        if text_primary:
+            binding_error = unified_binding_error or receipt_error(
+                receipt, run=run, events=canvas.history, run_id=run_id, dataset=dataset_key,
             )
+            if binding_error:
+                receipt = None
+                run.output = ""
+                answer_submission = AnswerSubmission(
+                    raw_answer="", submitted_answer="", method="runtime_submission_gate",
+                    changed=False, valid=False, detail=binding_error,
+                )
+            else:
+                answer_submission = AnswerSubmission(
+                    raw_answer=receipt.raw_answer_snapshot,
+                    submitted_answer=receipt.submitted_answer_snapshot,
+                    method=receipt.normalization_version,
+                    changed=receipt.raw_answer_snapshot != receipt.submitted_answer_snapshot,
+                    valid=True,
+                )
+            task.metadata["submission_status"] = "submitted" if receipt else "unsubmitted"
+            task.metadata["submission_receipt"] = receipt.to_dict() if receipt else None
+            task.metadata["diagnostic_qa_metrics"] = (
+                qa_official_metrics(dataset_key, candidate_submission.submitted_answer, task.reference)
+                if candidate_submission and candidate_submission.valid and not receipt else None
+            )
+            if dataset_key == "aime" and candidate_submission.valid and receipt is None:
+                diagnostic = NumericVerifier().verify(task, candidate_submission.submitted_answer)
+                task.metadata["diagnostic_qa_metrics"] = {
+                    "schema": "aime_candidate_answer_em_v2", "em": diagnostic.score,
+                }
+        elif stale_output:
+            run.output = ""
+            task.metadata["output_contract_failure"] = {
+                "reason": "stale_output_artifact", "output_agent": canvas.graph.output_agent,
+                "artifact_id": output_artifact.artifact_id,
+            }
+            task.metadata["outcome_exclusion_reason"] = "stale_output_artifact"
+            answer_submission = AnswerSubmission(
+                raw_answer="", submitted_answer="", method="runtime_output_gate",
+                changed=False, valid=False, detail="stale_output_artifact",
+            )
+        else:
+            answer_submission = self.finalize_answer(
+                task, run.output, raw_summary=output_artifact.summary if output_artifact else "",
+            )
+        if run.output.strip() in {WORKER_PROTOCOL_FAILURE_SENTINEL, WORKER_BACKEND_FAILURE_SENTINEL}:
+            answer_submission = replace(answer_submission, submitted_answer="", valid=False,
+                                        detail="runtime_failure_sentinel_not_an_answer")
         task.metadata["answer_submission"] = answer_submission.to_dict()
-        task.metadata["qa_token_f1"] = qa_token_f1(task, answer_submission.submitted_answer)
-        task.metadata["qa_official_metrics"] = qa_official_metrics(
-            task.metadata.get("dataset"),
-            answer_submission.submitted_answer,
-            task.reference,
+        scored_answer_available = bool(receipt) if text_primary else not stale_output
+        task.metadata["qa_token_f1"] = (
+            qa_token_f1(task, answer_submission.submitted_answer) if scored_answer_available else None
+        )
+        task.metadata["qa_official_metrics"] = (
+            qa_official_metrics(task.metadata.get("dataset"), answer_submission.submitted_answer,
+                                task.reference) if scored_answer_available else None
         )
         if (task.metadata["qa_official_metrics"] or {}).get("schema") == "hotpot_official_answer_v1":
             task.metadata["qa_official_metrics"]["evidence"] = hotpot_evidence_metrics(
-                run.output,
-                task.private_verifier_payload.get("supporting_facts"),
+                answer_submission.raw_answer, task.private_verifier_payload.get("supporting_facts"),
                 task.metadata["qa_official_metrics"],
             )
+        from .swe_failure_attribution import project_swe_step, swe_failure_attribution
+
+        runtime_failure_evidence = (
+            swe_failure_attribution(
+                (project_swe_step(step) for step in canvas.history),
+                worker_token_limit=canvas.config.max_total_tokens,
+            ) if dataset_key == "swe_bench" else None
+        )
+        # Always overwrite incoming task metadata; only the runtime history can
+        # establish these causes. They do not alter the Director's input/history.
+        task.metadata["swe_failure_attribution"] = runtime_failure_evidence
+        runtime_failure_reason = (
+            runtime_failure_evidence["reason_codes"][0]
+            if runtime_failure_evidence and runtime_failure_evidence["blocks_policy_failure"]
+            else ""
+        )
         terminal_failure = terminal_policy_failure(
             str(task.metadata.get("dataset", "")),
             terminal=not canvas.active,
             rejection_codes=[step.rejection_code for step in canvas.history if step.rejection_code],
             artifacts=artifact_integrity,
+            historical_artifacts=historical_integrity,
             output_agent=canvas.graph.output_agent,
             rounds=canvas.round_index,
-            max_rounds=canvas.config.max_rounds,
+            max_rounds=canvas.director_round_limit or 0,
+            director_edits=canvas.director_edits_used,
+            director_edit_limit=canvas.config.director_edit_limit(canvas.dataset) if canvas.unified else None,
             worker_tokens=canvas.total_tokens,
             worker_token_limit=canvas.config.max_total_tokens,
             infrastructure_failure=bool(
-                backend_failures or task.metadata.get("swe_infrastructure_failure")
+                stale_output or backend_failures or task.metadata.get("swe_infrastructure_failure")
+                or task.metadata.get("output_contract_failure")
             ),
+            runtime_failure_evidence=runtime_failure_evidence,
         )
         task.metadata["runtime_terminal_policy_failure"] = terminal_failure
         trusted_environment = any(
@@ -743,7 +887,43 @@ class AdaptiveWorkflowSolver:
                 ("swe_bench", "swe_environment_result"),
             )
         )
-        if backend_failures:
+        outcome_decision = None
+        if text_primary:
+            verification = None
+            scoring_error = ""
+            if receipt is not None and self.verifier is not None:
+                # Retry only the immutable submitted answer, never the Worker graph.
+                for attempt in range(2):
+                    try:
+                        verification = self.verifier.verify(task, receipt.submitted_answer_snapshot)
+                        break
+                    except Exception as exc:
+                        scoring_error = "scoring_exception:" + type(exc).__name__
+                        task.metadata.setdefault("submission_scoring_errors", []).append(
+                            {"attempt": attempt + 1, "error_type": type(exc).__name__,
+                             "receipt_ref": receipt.receipt_ref}
+                        )
+            outcome_decision = decide_text_outcome(
+                receipt=receipt, verification=verification,
+                terminal_failure=terminal_failure if receipt is None else None,
+                reason=scoring_error or (
+                    "execution_token_budget_overrun"
+                    if receipt is None and canvas.total_tokens > canvas.config.max_total_tokens
+                    else binding_error if receipt is None else ""
+                ),
+            )
+            task.metadata["outcome_decision"] = outcome_decision.to_dict()
+            if not outcome_decision.score_known:
+                self.runtime.discard_peer_rewards(outcome_decision.status)
+        elif canvas.unified and receipt is None:
+            verification = None
+            if terminal_failure is not None:
+                verification = VerificationResult(0.0, False, "runtime_policy_terminal",
+                    json.dumps(terminal_failure, ensure_ascii=False, sort_keys=True))
+            else:
+                task.metadata["outcome_exclusion_reason"] = runtime_failure_reason or unified_binding_error or "unsubmitted_unknown"
+            self.runtime.discard_peer_rewards("unsubmitted")
+        elif backend_failures:
             # Backend availability is not task correctness. Keep the trace for
             # diagnosis, but do not verify the sentinel or commit zero reward to
             # either MACE bandit. The rollout runner will leave this ID missing.
@@ -782,6 +962,9 @@ class AdaptiveWorkflowSolver:
                 else None
             )
 
+        elif stale_output:
+            verification = None
+            self.runtime.discard_peer_rewards("stale_output_artifact")
         elif (
             terminal_failure
             and not trusted_environment
@@ -832,6 +1015,13 @@ class AdaptiveWorkflowSolver:
                 if self.verifier
                 else None
             )
+        if canvas.unified and not text_primary:
+            outcome_decision = decide_text_outcome(
+                receipt=receipt, verification=verification,
+                terminal_failure=terminal_failure if receipt is None else None,
+                reason=(runtime_failure_reason if receipt is None else "") or unified_binding_error or "",
+            )
+            task.metadata["outcome_decision"] = outcome_decision.to_dict()
         # Model selection is a Director action trained from final graph reward.
         # Never score a local responsibility against the original task answer.
         trace = trace_from_canvas(
@@ -850,6 +1040,7 @@ class AdaptiveWorkflowSolver:
             skills_used=tuple(skill.skill_id for skill in selected_skills),
             skill_context=skill_manifest,
             answer_submission=answer_submission,
+            outcome_decision=outcome_decision,
         )
 
 

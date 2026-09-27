@@ -1,0 +1,62 @@
+{
+  "run": "/workspace/h200-lab-7f3c/SelfPlayGraphFlowSteer/state/experiments/healthbench-full-answer-gpt-low-128-20260924-231723",
+  "method": "Offline replay of frozen snapshot only; no new model requests or changed grades. Failure explanations are judge assessments, not independently validated medical advice.",
+  "counts": {
+    "rubric_audit_matches": 258,
+    "negative_triggers": 19,
+    "raw_nonpositive": 50,
+    "raw_negative": 13,
+    "raw_zero": 37,
+    "raw_perfect": 59,
+    "director_only_task_prompt": 128,
+    "multiturn_director_without_initial_history": 31,
+    "worker_context_with_old_contract": 128,
+    "final_answer_passthrough": 128,
+    "nodes": 161,
+    "nodes_with_external_tools": 0,
+    "director_unfinished": 2,
+    "tool_calls": 0,
+    "positive_misses": 80,
+    "consumed_source_refs": 131,
+    "source_refs_with_answer_removed": 126,
+    "removed_prior_refs": 62,
+    "removed_peer_upstream_refs": 64,
+    "format_recovery_with_excerpted_original": 10,
+    "relay_affected_cases": 29,
+    "format_recovery_cases": 47,
+    "format_recovery_excerpted_cases": 9,
+    "cases_with_rubric_failure": 69,
+    "answers_over_4000_chars": 44,
+    "answers_over_8000_chars": 13
+  },
+  "score_decomposition": {
+    "score": 41.32507303555304,
+    "raw": 46.55135944180304,
+    "missing_positive_points": 40.93017374164578,
+    "triggered_negative_points": 12.518466816551182,
+    "length_penalty_points": 5.22628640625,
+    "chars": 3777.6484375
+  },
+  "schema_recovery_errors": {
+    "invalid_field_type:confidence": 51,
+    "missing_final_json:": 2
+  },
+  "source_dataset_rows": 525,
+  "source_dataset_sha256": "d44b08e6e952e04c945e2c406f02533d9e7a989a84e35820ee7efdff20c9e4e2",
+  "full_strata": {
+    "good_faith_typical": 256,
+    "good_faith_difficult": 78,
+    "red_teaming_difficult": 191
+  },
+  "sample_strata": {
+    "red_teaming_difficult": 45,
+    "good_faith_difficult": 19,
+    "good_faith_typical": 64
+  },
+  "full_strata_reweighted_estimate": 40.84757843741563,
+  "sample_bootstrap_95_ci": [
+    30.735566672491778,
+    51.00504944819617
+  ],
+  "limits": "Stratum reweighting and case bootstrap are descriptive only. No causal effect sizes for individual bugs were measured. No comparable GPT-5.4-only answers exist for these exact 128 tasks in this audit."
+}

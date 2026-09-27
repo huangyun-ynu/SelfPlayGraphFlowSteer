@@ -84,6 +84,12 @@ class BenchmarkRunTracker:
         _write_json(state_path, self.state)
 
     def start_wandb(self, config: dict[str, Any]) -> None:
+        manifest_path = self.root / "run_manifest.json"
+        if manifest_path.exists():
+            previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if (previous.get("execution_semantics") != config.get("execution_semantics")
+                    and (previous.get("execution_semantics") or config.get("execution_semantics"))):
+                raise ValueError("benchmark execution/submission semantics changed; use a new run directory")
         _write_json(self.root / "run_manifest.json", config)
         if self.wandb_mode == "disabled":
             return
@@ -234,7 +240,9 @@ class BenchmarkRunTracker:
             "sample/dataset": payload["dataset"],
             "sample/task_id": record["task_id"],
             "sample/score": record["score"],
-            "sample/passed": int(record["passed"]),
+            "sample/passed": int(record["passed"]) if record["passed"] is not None else None,
+            "sample/outcome_status": record.get("outcome_status", "legacy"),
+            "sample/submission_status": record.get("submission_status", "legacy"),
             "sample/token_cost": record["token_cost"],
             "sample/duration_s": record["duration_s"],
         }
@@ -276,7 +284,8 @@ class BenchmarkRunTracker:
 
 
 def benchmark_aggregate(
-    records: list[EvaluationRecord], dataset_by_task: dict[tuple[str, int], str]
+    records: list[EvaluationRecord], dataset_by_task: dict[tuple[str, int], str],
+    *, planned_by_dataset: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     grouped: dict[str, list[EvaluationRecord]] = defaultdict(list)
     for record in records:
@@ -285,12 +294,25 @@ def benchmark_aggregate(
     def summarize(items: list[EvaluationRecord]) -> dict[str, Any]:
         if not items:
             return {"examples": 0}
-        return {
-            "examples": len(items),
-            "mean_score": sum(item.score for item in items) / len(items),
-            "pass_rate": sum(item.passed for item in items) / len(items),
-            "mean_token_cost": sum(item.token_cost for item in items) / len(items),
-            "mean_duration_s": sum(item.duration_s for item in items) / len(items),
-        }
+        from dataclasses import asdict
 
-    return {"overall": summarize(records), **{name: summarize(rows) for name, rows in grouped.items()}}
+        from .benchmark import summarize as summarize_records
+
+        return asdict(summarize_records(items))
+
+    result = {"overall": summarize(records), **{name: summarize(rows) for name, rows in grouped.items()}}
+    if planned_by_dataset is not None:
+        planned = {**planned_by_dataset, "overall": sum(planned_by_dataset.values())}
+        for name, count in planned.items():
+            rows = records if name == "overall" else grouped.get(name, [])
+            item = result.setdefault(name, summarize(rows))
+            item["planned_examples"] = count
+            item["missing_examples"] = max(0, count - len(rows))
+            item["unknown_examples"] = item.get("unknown_examples", 0) + item["missing_examples"]
+            item["known_coverage"] = item.get("known_examples", 0) / count if count else 0.0
+            item["submission_rate"] = item.get("submitted_examples", 0) / count if count else 0.0
+            item["successful_submission_rate_all"] = (
+                sum(row.submission_status == "submitted" and row.passed is True for row in rows)
+                / count if count else 0.0
+            )
+    return result

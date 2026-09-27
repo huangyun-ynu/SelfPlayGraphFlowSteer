@@ -60,6 +60,9 @@ class TokenizedDirectorTrajectory:
     policy_calls: tuple[TokenizedPolicyCall, ...] = ()
 
     def __post_init__(self) -> None:
+        from .submission_contract import validate_primary_training_outcome
+
+        validate_primary_training_outcome(self.metadata)
         if len(self.token_ids) != len(self.action_mask):
             raise ValueError("token_ids and action_mask must have equal length")
         if any(value not in (0, 1) for value in self.action_mask):

@@ -2196,6 +2196,12 @@ class AlternatingGRPOTrainer:
         proposer_batch: TrainingBatch,
         solver_batch: TrainingBatch,
     ) -> None:
+        from .execution_contract import validate_training_contract
+
+        try:
+            validate_training_contract(proposer_batch, solver_batch)
+        except ValueError as exc:
+            raise UnsafeTrainingBatchError(str(exc)) from exc
         if proposer_batch.role != "proposer" or solver_batch.role != "solver":
             raise UnsafeTrainingBatchError("training batch roles must be proposer then solver")
         lineage = solver_batch.metadata.get("policy_lineage")

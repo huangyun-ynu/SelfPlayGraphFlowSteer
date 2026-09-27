@@ -1963,6 +1963,8 @@ def _text_action_messages(messages: Sequence[dict[str, Any]], actions: Sequence[
             'To execute a local action, output only JSON: '
             '{"action_calls":[{"name":"ACTION_NAME","arguments":{}}]}. '
             'Choose one available action and conform to its parameters. '
+            'Emit exactly one JSON object per response. After an action request, stop; '
+            'never append another action object or a final answer in the same response. '
             'Do not invent execution results; wait for the subsequent observation. '
             'When finished, return the requested final answer. Available actions: '
             + json.dumps([_openai_tool(action)["function"] for action in actions])

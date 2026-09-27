@@ -88,6 +88,21 @@ def test_load_config_accepts_archived_director_prompt_variant(tmp_path) -> None:
     assert create_adaptive_application(config, mock=True).solver.director_prompt_variant == "v2"
 
 
+@pytest.mark.parametrize('variant', ['v2', 'v2.1', 'v2.2', 'v3'])
+def test_director_and_pats_configuration_accept_same_versions(tmp_path, variant):
+    path = write_config(tmp_path)
+    text = path.read_text()
+    if variant == 'v3':
+        text = text.replace('[canvas]', '[canvas]\nsubmission_protocol = "unified_task_result_v1"')
+    path.write_text(text + f'\n\n[director]\nprompt_variant = "{variant}"\n')
+    config = load_adaptive_config(path)
+    config.validate()
+    assert config.pats.director_prompt_variant == variant
+    application = create_adaptive_application(config, mock=True)
+    assert application.solver.director_prompt_variant == variant
+    assert config.model_manifest()['execution_semantics']['director_prompt_variant'] == variant
+
+
 def test_worker_token_totals_deduplicate_reused_final_execution_artifact() -> None:
     artifact_1 = {"artifact_id": "artifact_1", "token_in": 100, "token_out": 10}
     artifact_2 = {"artifact_id": "artifact_2", "token_in": 200, "token_out": 20}
@@ -99,6 +114,22 @@ def test_worker_token_totals_deduplicate_reused_final_execution_artifact() -> No
     ]
 
     assert _unique_worker_token_totals(events, run_id="task-7-r3") == (300, 30)
+
+
+def test_worker_usage_ledger_keeps_overwritten_peer_initials_and_excludes_cache():
+    initial = {"usage_schema": "worker_execution_usage_v1", "artifact_id": "first",
+               "cache_hit": False, "token_in": 100, "token_out": 10}
+    revision = {**initial, "artifact_id": "second", "token_in": 200, "token_out": 20}
+    report = {"artifacts": {"a": {"artifact_id": "second", "token_in": 200, "token_out": 20}},
+              "execution_events": [initial, revision], "token_in": 300, "token_out": 30}
+    events = [SimpleNamespace(payload={"execution": report}),
+              SimpleNamespace(payload={"execution": report}),
+              SimpleNamespace(payload={"execution": {
+                  "artifacts": report["artifacts"],
+                  "execution_events": [{**revision, "artifact_id": "cache-alias", "cache_hit": True}],
+                  "token_in": 0, "token_out": 0,
+              }})]
+    assert _unique_worker_token_totals(events, run_id="peer-run") == (300, 30)
 
 
 def test_dataset_specific_canvas_token_budget_is_selected_per_task(tmp_path) -> None:
@@ -113,11 +144,11 @@ def test_dataset_specific_canvas_token_budget_is_selected_per_task(tmp_path) -> 
 
     assert result.task.metadata["canvas_token_budget"] == {
         "dataset": "nq_open",
-        "max_total_tokens": 65536,
+        "max_total_tokens": 240000,
         "fallback_max_total_tokens": 32768,
     }
     assert application.solver.active_canvas is not None
-    assert application.solver.active_canvas.config.max_total_tokens == 65536
+    assert application.solver.active_canvas.config.max_total_tokens == 240000
     assert config.canvas.max_total_tokens == 32768
 
 
@@ -370,27 +401,30 @@ def test_resources_require_explicit_physical_gpu_allowlist(tmp_path, monkeypatch
     ).validate()
 
 
-def test_answer_submission_configuration_is_loaded_and_wired(tmp_path) -> None:
+@pytest.mark.parametrize("legacy_formatter", [False, True])
+def test_answer_submission_configuration_is_loaded_and_wired(tmp_path, legacy_formatter) -> None:
     config_path = write_config(tmp_path)
     with config_path.open("a", encoding="utf-8") as handle:
-        handle.write(
-            """
-
-[answer_submission]
-enabled = true
-qa_model_enabled = true
-runtime_route = "default"
-max_tokens = 96
-require_source_span = true
-"""
-        )
+        handle.write("\n[answer_submission]\nenabled = true\n")
+        if legacy_formatter:
+            # Archived config keys must never restore the removed model path,
+            # including when they name a route that does not exist.
+            handle.write(
+                'qa_model_enabled = true\nruntime_route = "removed_formatter_route"\n'
+                'max_tokens = 96\nrequire_source_span = true\n'
+                'qa_evidence_spans_enabled = true\n'
+            )
 
     config = load_adaptive_config(config_path)
     application = create_adaptive_application(config, mock=True)
 
     assert config.answer_submission.enabled
-    assert config.answer_submission.max_tokens == 96
+    assert vars(config.answer_submission) == {"enabled": True}
     assert application.solver.answer_finalizer is not None
+    task = TaskSpec("qa", "Who wrote it?", metadata={"dataset": "nq_open"})
+    result = application.solver.answer_finalizer.finalize(task, "Final Answer: A Person")
+    assert result.submitted_answer == "A Person"
+    assert result.method == "qa_deterministic_extraction"
 
 
 def test_director_reward_configuration_is_versioned_and_backward_compatible(
@@ -694,8 +728,8 @@ def test_gpt_6_astra_remote_runtime_allows_twenty_concurrent_requests() -> None:
         replace(runtime, max_concurrency=21).validate()
 
 
-@pytest.mark.parametrize("model", ["deepseek-flash", "MiniMax-M2.7"])
-def test_high_capacity_remote_runtime_allows_thirty_concurrent_requests(model) -> None:
+@pytest.mark.parametrize("model,limit", [("deepseek-flash", 40), ("MiniMax-M2.7", 30)])
+def test_high_capacity_remote_runtime_enforces_model_concurrency_limit(model, limit) -> None:
     runtime = FixedRuntimeConfig(
         base_url="https://example.test/v1",
         api_key="test-key",
@@ -703,16 +737,19 @@ def test_high_capacity_remote_runtime_allows_thirty_concurrent_requests(model) -
         model_path=None,
         request_profile="generic",
         network_path="direct",
-        max_concurrency=30,
+        max_concurrency=limit,
         managed_locally=False,
     )
 
     runtime.validate()
     with pytest.raises(
         ValueError,
-        match="externally managed runtime.max_concurrency must not exceed 30",
+        match=f"externally managed runtime.max_concurrency must not exceed {limit}",
     ):
-        replace(runtime, max_concurrency=31).validate()
+        replace(runtime, max_concurrency=limit + 1).validate()
+    replace(runtime, max_concurrency_by_dataset={"hotpotqa": limit}).validate()
+    with pytest.raises(ValueError, match=f"dataset concurrency must not exceed {limit}"):
+        replace(runtime, max_concurrency_by_dataset={"hotpotqa": limit + 1}).validate()
 
 
 def test_proposer_solver_are_separate_but_share_base_initialization(tmp_path) -> None:

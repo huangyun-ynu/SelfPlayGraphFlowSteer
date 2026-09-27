@@ -1,0 +1,116 @@
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -3058,6 +3058,7 @@
+                             prior_artifact,
+                             [recovery_agent],
+                             phase="selected_output_recovery_prior",
++                            graph=graph,
+                         )
+                         if prior_artifact is not None
+                         else None
+@@ -3067,6 +3068,7 @@
+                             self.artifacts[peer_id],
+                             [recovery_agent],
+                             phase="selected_output_recovery_peer_evidence",
++                            graph=graph,
+                         )
+                         for peer_id in configured
+                         if peer_id in recovery_peer_ids and peer_id in self.artifacts
+@@ -3105,6 +3107,7 @@
+                             prior_artifact,
+                             [agent_id],
+                             phase="swe_final_fix_prior",
++                            graph=graph,
+                         )
+                         if prior_artifact is not None
+                         and "swe_output_commit_required"
+@@ -3219,11 +3222,13 @@
+                     # visibility (A <-> B <-> C does not make A and C peers).
+                     peer_ids = sorted(graph.bidirectional_neighbors(agent_id) & healthy_id_set)
+                     peer_packets = [
+-                        self._packet(first_pass[peer_id], [agent_id], phase="peer_proposal")
++                        self._packet(
++                            first_pass[peer_id], [agent_id], phase="peer_proposal", graph=graph
++                        )
+                         for peer_id in peer_ids
+                     ]
+                     prior_packet = self._packet(
+-                        first_pass[agent_id], [agent_id], phase="self_proposal"
++                        first_pass[agent_id], [agent_id], phase="self_proposal", graph=graph
+                     )
+                     artifact, reused, token_in, token_out = self._run_agent(
+                         task=task,
+@@ -3299,11 +3304,11 @@
+                 _runtime_reserved_closure_tokens=0,
+             )
+         prior = self._packet(
+-            self.artifacts[agent_id], [agent_id], phase="selected_output_recovery_prior"
++            self.artifacts[agent_id], [agent_id], phase="selected_output_recovery_prior", graph=graph
+         )
+         peers = [
+             self._packet(
+-                self.artifacts[key], [agent_id], phase="selected_output_recovery_peer_evidence"
++                self.artifacts[key], [agent_id], phase="selected_output_recovery_peer_evidence", graph=graph
+             )
+             for key in graph.bidirectional_neighbors(agent_id)
+             if key in self.artifacts
+@@ -3701,7 +3706,7 @@
+         for source in sorted(graph.directed_predecessors(agent_id)):
+             artifact = self.artifacts.get(source)
+             if artifact is not None:
+-                packets.append(self._packet(artifact, [agent_id], phase="upstream"))
++                packets.append(self._packet(artifact, [agent_id], phase="upstream", graph=graph))
+         return packets
+ 
+     def _final_packets(self, graph: MultiAgentGraph) -> list[RelayPacket]:
+@@ -3709,7 +3714,7 @@
+         for source, target in sorted(graph.directed_edges):
+             artifact = self.artifacts.get(source)
+             if artifact is not None:
+-                packets.append(self._packet(artifact, [target], phase="final"))
++                packets.append(self._packet(artifact, [target], phase="final", graph=graph))
+         return packets
+ 
+     def _packet(
+@@ -3718,9 +3723,16 @@
+         recipients: list[str],
+         *,
+         phase: str,
++        graph: MultiAgentGraph,
+     ) -> RelayPacket:
+         self._message_seq += 1
+-        bounded = self._bounded_artifact(artifact)
++        source = graph.nodes[artifact.agent_id]
++        # Canvas owns action_adapter; model-authored text cannot disable bounds.
++        # HealthBench keeps essential explanations in answer, including own drafts.
++        bounded = self._bounded_artifact(
++            artifact,
++            preserve_answer=source.metadata.get("action_adapter") == "healthbench_professional",
++        )
+         return RelayPacket.from_artifact(
+             bounded,
+             recipients=recipients,
+@@ -3728,7 +3740,9 @@
+             phase=phase,
+         )
+ 
+-    def _bounded_artifact(self, artifact: AgentArtifact) -> AgentArtifact:
++    def _bounded_artifact(
++        self, artifact: AgentArtifact, *, preserve_answer: bool = False
++    ) -> AgentArtifact:
+         if self.relay_max_chars <= 0:
+             return artifact
+         total = len(artifact.answer) + len(artifact.summary)
+@@ -3736,9 +3750,10 @@
+             return artifact
+         bounded = AgentArtifact(**artifact.to_dict())
+         if bounded.summary:
+-            bounded.answer = ""
++            if not preserve_answer:
++                bounded.answer = ""
+             bounded.summary = bounded.summary[: self.relay_max_chars]
+-        else:
++        elif not preserve_answer:
+             bounded.answer = bounded.answer[: self.relay_max_chars]
+         bounded.unresolved_issues = bounded.unresolved_issues[:4]
+         bounded.evidence = bounded.evidence[:4]

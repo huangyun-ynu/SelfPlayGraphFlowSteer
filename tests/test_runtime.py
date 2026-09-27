@@ -155,7 +155,7 @@ def test_worker_receives_action_schema_and_action_observation_protocol() -> None
     assert "task" not in first_context
     assert "Never call an Action named finalize" in first_instruction
     assert "not an Action call" in first_instruction
-    assert "shortest answer span" in first_instruction
+    assert "direct task result" in first_instruction
     assert "assigned_task field is the only task visible" in first_instruction
     assert "do not infer or attempt to reconstruct" in first_instruction
     assert observation["action_observation"]["status"] == "ok"
@@ -391,6 +391,81 @@ def test_worker_validates_action_arguments_before_execution() -> None:
     assert error["details"]["retry_allowed"] is True
 
 
+@pytest.mark.parametrize('rejection', ['preflight', 'invalid_arguments'])
+def test_rejected_stateful_call_does_not_starve_next_legal_call(rejection):
+    class CheckedSearch(FakeStatefulSearchTool):
+        def preflight(self, arguments):
+            if arguments['query'] == 'blocked':
+                return {'code': 'state_invalid', 'message': 'Not legal in this state'}
+
+    search = CheckedSearch()
+    backend = MockBackend([
+        LLMResponse(text='', model='mock', action_calls=[
+            ActionCall('bad', 'search', {'query': 'blocked' if rejection == 'preflight' else 7}),
+            ActionCall('good', 'search', {'query': 'useful'}),
+            ActionCall('stale', 'search', {'query': 'stale'}),
+        ]), json.dumps({'answer': 'grounded'}),
+    ])
+    artifact = ModelAgentExecutor(backend, tools={'search': search}).execute(
+        task='question', node=AgentNode('a', 'solve', allowed_tools=('search',)),
+        upstream=[], peers=[], revision=False, seed=0,
+    )
+    assert search.calls == [{'query': 'useful'}]
+    assert artifact.react_trace[0]['observation']['status'] == 'error'
+    assert artifact.react_trace[1]['observation']['status'] == 'ok'
+    deferred = artifact.react_trace[2]['observation']['error']
+    assert deferred['code'] == 'stateful_action_deferred'
+    assert deferred['details']['executed_call_id'] == 'good'
+
+
+def test_stateful_execution_exception_still_defers_later_calls():
+    class UncertainMutation(FakeStatefulSearchTool):
+        def execute(self, arguments):
+            self.calls.append(arguments)
+            raise RuntimeError('Remote mutation may have happened')
+
+    search = UncertainMutation()
+    backend = MockBackend([
+        LLMResponse(text='', model='mock', action_calls=[
+            ActionCall('attempt', 'search', {'query': 'first'}),
+            ActionCall('stale', 'search', {'query': 'second'}),
+        ]), json.dumps({'answer': 'failed'}),
+    ])
+    artifact = ModelAgentExecutor(backend, tools={'search': search}).execute(
+        task='question', node=AgentNode('a', 'solve', allowed_tools=('search',)),
+        upstream=[], peers=[], revision=False, seed=0,
+    )
+    assert search.calls == [{'query': 'first'}]
+    assert artifact.react_trace[1]['observation']['error']['code'] == 'stateful_action_deferred'
+
+
+def test_swe_duplicate_status_does_not_discard_new_search_from_same_batch():
+    class SWERead(FakeNamedTool):
+        stateful = True
+
+    status, search = SWERead('swe_status'), SWERead('swe_search')
+    tools = {status.name: status, search.name: search}
+    registry = DatasetActionRegistry([DatasetActionAdapter(
+        'swe_bench', ('swe_bench',), tuple(tools), 6, 0, 6)], available_actions=tools)
+    backend = MockBackend([
+        LLMResponse(text='', model='mock', action_calls=[ActionCall('initial', 'swe_status', {})]),
+        LLMResponse(text='', model='mock', action_calls=[
+            ActionCall('duplicate', 'swe_status', {}),
+            ActionCall('new-evidence', 'swe_search', {'pattern': 'OrderBy'}),
+        ]), json.dumps({'answer': 'Inspected the ordering implementation'}),
+    ])
+    artifact = ModelAgentExecutor(backend, tools=tools, action_registry=registry).execute(
+        task='Investigate ordering', node=AgentNode('a', 'inspect ordering',
+            allowed_tools=(status.name, search.name), operation_policy_configured=True,
+            initial_tool_budget=6, total_tool_budget=6, metadata={'action_adapter': 'swe_bench'}),
+        upstream=[], peers=[], revision=False, seed=0,
+    )
+    assert status.calls == [{}]
+    assert search.calls == [{'pattern': 'OrderBy'}]
+    assert artifact.react_trace[1]['observation']['error']['code'] == 'repeated_no_progress_action'
+    assert artifact.react_trace[2]['observation']['status'] == 'ok'
+
+
 def test_invalid_action_call_does_not_consume_configured_execution_budget() -> None:
     backend = MockBackend(
         [
@@ -476,7 +551,7 @@ def test_force_finalize_starts_immediately_after_action_budget_is_consumed() -> 
     assert len(backend.calls) == 2
     assert backend.calls[-1]["actions"] == []
     assert "Action phase is over" in backend.calls[-1]["messages"][0]["content"]
-    assert "shortest answer span" in backend.calls[-1]["messages"][0]["content"]
+    assert "assigned local result" in backend.calls[-1]["messages"][-1]["content"]
 
 
 def test_runtime_caps_unsupported_high_confidence_after_failed_tool() -> None:

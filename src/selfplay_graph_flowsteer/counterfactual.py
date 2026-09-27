@@ -9,6 +9,7 @@ from typing import Any
 from .actions import ActionParser, ActionType, CanvasAction
 from .graph import MultiAgentGraph
 from .observability import ExecutionTrace
+from .output_contract import worker_output_role_changes_input
 
 
 @dataclass(frozen=True)
@@ -298,7 +299,9 @@ def _replay_relation_branch(
         target=decision.target,
         present=present,
     )
-    parser = ActionParser()
+    from .unified_contract import is_unified_node
+    unified = any(is_unified_node(node) for node in graph.nodes.values())
+    parser = ActionParser(unified=unified)
     for event in decision.suffix_events:
         relation_payload = event.get("relation_decision")
         if isinstance(relation_payload, dict):
@@ -323,6 +326,12 @@ def _replay_relation_branch(
         if not action.valid:
             raise ValueError(f"invalid accepted replay action at sequence {event.get('sequence')}")
         if action.action_type is ActionType.FINISH:
+            if unified:
+                graph.require_node(str(action.target))
+                graph.output_agent = str(action.target)
+            continue
+        if action.action_type is ActionType.RUN_AGENT and unified:
+            dirty.update(graph.dirty_closure({str(action.target)}))
             continue
         if _same_relation_pair(action, decision.source, decision.target):
             raise ValueError("selected relation is not the latest effective pair decision")
@@ -460,7 +469,7 @@ def _apply_replay_action(
         return set(graph.delete_agent(str(action.target or action.agent_id)).dirty_agents)
     if kind is ActionType.SET_OUTPUT:
         selected = str(action.target)
-        graph.set_output(selected)
+        mutation = graph.set_output(selected)
         # Canvas SET_OUTPUT also transfers the adapter's single-committer
         # capability. Use the recorded target to select the known capability;
         # retain strict comparison for arbitrary metadata or policy drift.
@@ -470,25 +479,13 @@ def _apply_replay_action(
                 graph.assign_exclusive_capability(selected, capability)
         removed = set(graph.nodes) - set(after.nodes)
         if removed:
-            if not recorded_before or "nodes" not in recorded_before:
-                raise ValueError("SET_OUTPUT pruning replay requires the recorded before graph")
-            before = MultiAgentGraph.from_dict(recorded_before)
-            before.set_output(selected)
-            expected_removed = {
-                agent_id
-                for agent_id, node in before.nodes.items()
-                if agent_id != selected
-                and (not node.configured or selected not in before.reachable_from(agent_id))
-            }
-            if set(before.nodes) != set(graph.nodes) or removed != expected_removed:
-                raise ValueError("SET_OUTPUT pruning differs from recorded deterministic cleanup")
-            # Replay the factual suffix cleanup on both siblings. Recomputing
-            # reachability on the intervened graph would delete additional nodes
-            # in the off branch and change more than the selected relation.
-            for agent_id in sorted(removed):
-                graph.delete_agent(agent_id)
-        # Output selection changes no Worker input and therefore creates no
-        # counterfactual execution dirtiness.
+            raise ValueError("SET_OUTPUT replay cannot contain implicit Agent deletion")
+        selected_node = graph.require_node(selected)
+        contract = selected_node.metadata.get("system_managed_contract")
+        dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
+        adapter = str(selected_node.metadata.get("action_adapter", ""))
+        if worker_output_role_changes_input(dataset=dataset, action_adapter=adapter):
+            return set(mutation.dirty_agents)
         return set()
     raise ValueError(f"unsupported replay action: {kind.value}")
 
@@ -496,4 +493,8 @@ def _apply_replay_action(
 def _graph_without_version(graph: MultiAgentGraph) -> dict[str, Any]:
     payload = graph.to_dict()
     payload.pop("version", None)
+    # This is derived from graph.output_agent before execution, not a sampled
+    # node property. Both siblings retain the same explicit output selection.
+    for node in payload["nodes"]:
+        node.get("metadata", {}).pop("_runtime_is_output_agent", None)
     return payload

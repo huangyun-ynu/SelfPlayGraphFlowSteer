@@ -11,13 +11,18 @@ class EvaluationRecord:
     task_id: str
     system: str
     answer: str
-    score: float
-    passed: bool
+    score: float | None
+    passed: bool | None
     seed: int = 0
     token_cost: int = 0
     checkpoint: str = ""
     duration_s: float = 0.0
     trajectory: dict[str, Any] = field(default_factory=dict)
+    outcome_status: str = "legacy"
+    submission_status: str = "legacy"
+    submission_contract_version: str = "legacy"
+    answer_metrics: dict[str, Any] = field(default_factory=dict)
+    diagnostic_metrics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -27,6 +32,7 @@ def from_adaptive_result(
     result: AdaptiveApplicationResult, *, seed: int = 0, checkpoint: str = ""
 ) -> EvaluationRecord:
     verification = result.solver_result.verification
+    outcome = result.solver_result.outcome_decision
     payload = result.to_dict()
     solver_payload = result.solver_result.to_dict()
     trajectory = dict(solver_payload["trace"])
@@ -37,19 +43,36 @@ def from_adaptive_result(
             "skills_used": solver_payload["skills_used"],
             "skill_context": solver_payload["skill_context"],
             "answer_submission": solver_payload["answer_submission"],
+            "submission_receipt": solver_payload["submission_receipt"],
+            "submission_contract_version": solver_payload["submission_contract_version"],
+            "outcome_decision": solver_payload["outcome_decision"],
+            "candidate_output": solver_payload["candidate_output"],
         }
     )
+    metrics = dict(result.task.metadata.get("qa_official_metrics") or {})
+    from .config import canonical_dataset_name
+
+    if (canonical_dataset_name(result.task.metadata.get("dataset", "")) == "aime"
+            and outcome and outcome.status == "scored" and verification):
+        metrics = {"schema": "aime_integer_em_v1", "em": float(verification.passed)}
     return EvaluationRecord(
         task_id=result.task.task_id,
         system="selfplay_graph_flowsteer",
         answer=str(payload["answer"]),
-        score=verification.score if verification else 0.0,
-        passed=verification.passed if verification else False,
+        score=(verification.score if verification else 0.0
+               if outcome and outcome.status == "policy_failure" else None),
+        passed=(verification.passed if verification else False
+                if outcome and outcome.status == "policy_failure" else None),
         seed=seed,
         token_cost=int(payload["token_in"]) + int(payload["token_out"]),
         checkpoint=checkpoint,
         duration_s=0.0,
         trajectory=trajectory,
+        outcome_status=(outcome.status if outcome else "scored" if verification else "unsubmitted_unknown"),
+        submission_status=str(payload["submission_status"]),
+        submission_contract_version=str(payload["submission_contract_version"]),
+        answer_metrics=metrics,
+        diagnostic_metrics=dict(result.task.metadata.get("diagnostic_qa_metrics") or {}),
     )
 
 
