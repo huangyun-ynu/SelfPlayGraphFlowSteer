@@ -34,6 +34,12 @@ def selected_output_instruction(
         action_adapter=action_adapter,
     ):
         return ""
+    if canonical_dataset_name(dataset) == "hotpotqa":
+        return (
+            "You are the selected output Agent. Submit the answer to the original public "
+            "question in public_task_context using the HotpotQA answer contract, including "
+            "all requested hops, comparisons, and list members. "
+        )
     if short_answer_qa or is_short_qa_dataset(dataset):
         return (
             "You are the selected output Agent. Your answer is submitted for the original "

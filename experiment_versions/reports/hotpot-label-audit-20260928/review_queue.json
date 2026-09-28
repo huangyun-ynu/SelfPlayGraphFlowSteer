@@ -1,0 +1,146 @@
+{
+  "audit_only": true,
+  "auto_apply": false,
+  "used_by_training_loader": false,
+  "reference_changes_applied": false,
+  "cases": [
+    {
+      "id": "5a8346bb55429966c78a6b69",
+      "group": "data_quality",
+      "finding": "reference_markup_corruption",
+      "recommendation_zh": "建议裁决后仅在另存的清洗版标签中改为Lycians；避免让模型学习HTML残片。",
+      "proposal": {
+        "answer_candidate": "Lycians"
+      }
+    },
+    {
+      "id": "5ab9a694554299743d22eb8a",
+      "group": "data_quality",
+      "finding": "wrong_reference_entity",
+      "recommendation_zh": "建议人工裁决后清洗版采用Oswald；原始基准保留。",
+      "proposal": {
+        "answer_candidate": "Oswald"
+      }
+    },
+    {
+      "id": "5a8dd3935542995a26add3f2",
+      "group": "data_quality",
+      "finding": "question_answer_type_mismatch",
+      "recommendation_zh": "先决定要问歌曲还是专辑，不能仅靠替换gold掩盖题干问题。",
+      "proposal": {
+        "if_asking_song": "When Love Takes Over",
+        "if_keeping_reference_question": "Which fourth studio album by David Guetta includes When Love Takes Over, featuring Kelly Rowland?"
+      }
+    },
+    {
+      "id": "5a7e1f3f5542997cc2c47524",
+      "group": "data_quality",
+      "finding": "non_exhaustive_reference",
+      "recommendation_zh": "作为集合答案或补充经复核的完整答案变体；不要奖励删掉同样有证据的pianist。",
+      "proposal": {
+        "supported_occupation_set": [
+          "pianist",
+          "composer",
+          "conductor"
+        ]
+      }
+    },
+    {
+      "id": "5a808d785542996402f6a54e",
+      "group": "data_quality",
+      "finding": "award_vs_nomination",
+      "recommendation_zh": "把题干改为问提名的奖项后重新裁决；不要把提名训练成获奖。",
+      "proposal": {
+        "question_candidate": "For which award was Charles Kimbrough nominated for playing Jim Dial in Murphy Brown?"
+      }
+    },
+    {
+      "id": "5a7a7b5155429941d65f2672",
+      "group": "data_quality",
+      "finding": "missing_question_predicate",
+      "recommendation_zh": "补全出生时间提问并保留歌曲消歧；不把原预测自动判对。",
+      "proposal": {
+        "question_candidate": "When was Dr. Dre, whose song Lil Ghetto Boy is sampled in Things Done Changed, born?"
+      }
+    },
+    {
+      "id": "5ac2f46a5542996773102655",
+      "group": "data_quality",
+      "finding": "party_vs_coalition",
+      "recommendation_zh": "若保留NDA标签，应把问题改为哪个政治联盟；不得为提高EM把BJP/NDA视作同义词。",
+      "proposal": {
+        "question_edit": "political party -> political alliance / coalition"
+      }
+    },
+    {
+      "id": "5ae1fec25542997283cd231c",
+      "group": "data_quality",
+      "finding": "reversed_trip_direction",
+      "recommendation_zh": "修正from/to后再训练；这题同时存在题干错误和模型关系粒度错误。",
+      "proposal": {
+        "question_candidate": "The aircraft in the 1950 British Columbia B-36 crash had departed from an air base just southeast of which Alaska town?"
+      }
+    },
+    {
+      "id": "5a88ffd95542995153361245",
+      "group": "data_quality",
+      "finding": "misattached_award_premise",
+      "recommendation_zh": "去掉错误提名前提，或明确问Green Zone编剧；不能用EM正确证明题干可靠。",
+      "proposal": {
+        "question_candidate": "Who wrote the screenplay for Paul Greengrass's 2010 film Green Zone?"
+      }
+    },
+    {
+      "id": "5a76abf65542993569682c7d",
+      "group": "data_quality",
+      "finding": "negation_reversed",
+      "recommendation_zh": "问命名来源可保留John Napier；如问谁引入自然对数，需另行核实且不能直接用当前标签。",
+      "proposal": {
+        "question_candidate": "After which Scottish mathematician is the Napierian logarithm named?"
+      }
+    },
+    {
+      "id": "5a80b3a65542992bc0c4a7ba",
+      "group": "data_quality",
+      "finding": "casualties_as_deaths",
+      "recommendation_zh": "把题干改为combined losses/casualties，不训练未经证据支持的死亡人数。",
+      "proposal": {
+        "question_edit": "over 10,000 soldiers died -> combined losses/casualties exceeded 10,000"
+      }
+    },
+    {
+      "id": "5abaf81f55429939ce03dd7c",
+      "group": "data_quality",
+      "finding": "governor_vs_lieutenant_governor",
+      "recommendation_zh": "修正职务称谓后再训练；日期本身不必改。",
+      "proposal": {
+        "question_edit": "Governor of Oklahoma -> Lieutenant Governor of Oklahoma"
+      }
+    },
+    {
+      "id": "5ae3642d5542991a06ce99b4",
+      "group": "data_quality",
+      "finding": "venue_as_city",
+      "recommendation_zh": "把city改为holiday park/venue再裁决；参考名称可保留。",
+      "proposal": {
+        "question_edit": "a city in Prestatyn -> a holiday park / venue in Prestatyn"
+      }
+    },
+    {
+      "id": "5a83458755429966c78a6b66",
+      "group": "data_quality",
+      "finding": "taxonomic_rank_confusion",
+      "recommendation_zh": "重写为共同植物类别；不要让模型学到tree是一个species或把不同科当作没有共同类别。",
+      "proposal": {
+        "question_candidate": "What broad type of plant do Lodoicea and Nothofagus have in common?"
+      }
+    },
+    {
+      "id": "5a7780a655429949eeb29e9b",
+      "group": "pending_review",
+      "finding": "prior_collaboration_as_ep_participation",
+      "recommendation_zh": "待核对唱片制作名单；当前证据不足以确认题干关系，也不足以断言Little Mix标签错误。",
+      "proposal": null
+    }
+  ]
+}

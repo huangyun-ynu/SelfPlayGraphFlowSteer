@@ -1,0 +1,238 @@
+--- a/src/selfplay_graph_flowsteer/runtime.py
++++ b/src/selfplay_graph_flowsteer/runtime.py
+@@ -25,6 +25,7 @@
+ from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
+ from .graph import MultiAgentGraph
+ from .healthbench_protocol import healthbench_answer_instruction
++from .hotpot_answer_contract import HOTPOT_RESULT_FIELDS, hotpot_output_instruction
+ from .latency import (
+     RouteLatencyEstimate,
+     RouteLatencyTracker,
+@@ -436,7 +437,7 @@
+ 
+     backend: ChatBackend
+     role: str = "worker"
+-    version: str = "model-agent-v25-student-text-actions"
++    version: str = "model-agent-v26-student-text-actions-hotpot-evidence-first"
+     tools: dict[str, AgentTool] = field(default_factory=dict)
+     action_registry: DatasetActionRegistry | None = None
+     max_tool_rounds: int = 3
+@@ -3041,7 +3042,7 @@
+ 
+     @property
+     def version(self) -> str:
+-        return "solver-routed-model-agent-v22-student-text-actions:" + ",".join(self.routes)
++        return "solver-routed-model-agent-v23-student-text-actions-hotpot-evidence-first:" + ",".join(self.routes)
+ 
+     def route_for(self, node: AgentNode) -> str:
+         explicit = str(node.metadata.get("runtime_route", "")).strip()
+@@ -6431,6 +6432,8 @@
+         "all explanation in summary or evidence. "
+         + qa_instruction
+     )
++    if canonical_dataset_name(dataset) == "hotpotqa":
++        output_instruction = hotpot_output_instruction(is_output_agent=is_output_agent)
+     if action_adapter == "healthbench_professional":
+         output_instruction = (
+             "Return one final JSON object with answer, summary, confidence, evidence, "
+@@ -7022,6 +7025,12 @@
+         + qa_finalization_rule
+         + (" " + role_instruction if role_instruction else "")
+     )
++    if canonical_dataset_name(dataset) == "hotpotqa":
++        output_instruction = hotpot_output_instruction(is_output_agent=is_output_agent)
++        output_instruction += " " + role_instruction
++        recovery_context["artifact_schema"] = {
++            key: recovery_context["artifact_schema"][key] for key in HOTPOT_RESULT_FIELDS
++        }
+     if action_adapter == "healthbench_professional":
+         output_instruction = (
+             "Return exactly one JSON object with answer, summary, confidence, evidence, "
+--- a/src/selfplay_graph_flowsteer/answer_submission.py
++++ b/src/selfplay_graph_flowsteer/answer_submission.py
+@@ -9,6 +9,7 @@
+ 
+ from .aime_submission import is_aime_dataset, parse_aime_answer
+ from .healthbench_protocol import healthbench_answer_instruction
++from .hotpot_answer_contract import hotpot_submission_instruction
+ from .observability import TaskSpec
+ from .qa_submission import extract_qa_answer, is_short_qa_dataset
+ 
+@@ -118,6 +119,8 @@
+ def submission_contract(task: TaskSpec) -> str:
+     dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+     verifier = str(task.metadata.get("verifier", "")).strip().casefold()
++    if dataset == "hotpotqa":
++        return hotpot_submission_instruction()
+     if dataset == "healthbench_professional" or verifier == "healthbench_rubric":
+         return "Submission contract: " + healthbench_answer_instruction().strip()
+     if is_aime_dataset(task.metadata.get("dataset", "")):
+--- a/src/selfplay_graph_flowsteer/output_contract.py
++++ b/src/selfplay_graph_flowsteer/output_contract.py
+@@ -34,6 +34,12 @@
+         action_adapter=action_adapter,
+     ):
+         return ""
++    if canonical_dataset_name(dataset) == "hotpotqa":
++        return (
++            "You are the selected output Agent. Submit the answer to the original public "
++            "question in public_task_context using the HotpotQA answer contract, including "
++            "all requested hops, comparisons, and list members. "
++        )
+     if short_answer_qa or is_short_qa_dataset(dataset):
+         return (
+             "You are the selected output Agent. Your answer is submitted for the original "
+--- a/src/selfplay_graph_flowsteer/execution_contract.py
++++ b/src/selfplay_graph_flowsteer/execution_contract.py
+@@ -71,6 +71,7 @@
+             "execution_contract",
+             "actions",
+             "output_contract",
++            "hotpot_answer_contract",
+             "runtime",
+             "llm",
+             "artifact_protocol",
+--- a/tests/test_runtime.py
++++ b/tests/test_runtime.py
+@@ -1617,7 +1617,7 @@
+     minimax = MockBackend([response, response])
+     grok = MockBackend([response])
+     executor = RoutedModelAgentExecutor({"minimax": minimax, "grok": grok}, ("minimax", "grok"))
+-    assert executor.version == ("solver-routed-model-agent-v21-qa-request-credit:minimax,grok")
++    assert executor.version == ("solver-routed-model-agent-v23-student-text-actions-hotpot-evidence-first:minimax,grok")
+ 
+     first = executor.execute(
+         task="task",
+--- /dev/null
++++ b/src/selfplay_graph_flowsteer/hotpot_answer_contract.py
+@@ -0,0 +1,47 @@
++"""Reference-free Hotpot answer guidance for the existing Worker response."""
++
++HOTPOT_ANSWER_CONTRACT_VERSION = "hotpot_evidence_first_v1"
++HOTPOT_RESULT_FIELDS = (
++    "evidence", "summary", "confidence", "unresolved_issues", "tool_summary", "answer",
++)
++
++
++def hotpot_output_instruction(*, is_output_agent: bool) -> str:
++    scope = (
++        "Resolve the original question in public_task_context, including every hop or "
++        "side of a comparison. A narrower assigned_task must not replace that question. "
++        if is_output_agent else
++        "Resolve your assigned local responsibility using the public passages and visible packets. "
++    )
++    return (
++        "Return one final JSON object in this key order: evidence, summary, confidence, "
++        "unresolved_issues, tool_summary, answer. "
++        + scope
++        + "First select the relevant passage facts in evidence, with passage titles and brief "
++        "supporting quotes; do not invent quotations. In summary, state a concise resolved "
++        "conclusion connecting those facts. For a comparison, verify both values, units, "
++        "and the requested direction; for a shared property, a broad category is valid if "
++        "both passages support it. Follow the precise requested relation and its qualifiers "
++        "when choosing among nested locations, dates, or related entities. "
++        "Determine the requested answer type from the question: entity, location, title, "
++        "date, number, category, list, or yes/no. Write answer LAST, consistent with the "
++        "resolved conclusion. If the conclusion corrects an earlier candidate, submit the "
++        "corrected value. Use the supporting passage's answer phrase where possible, "
++        "without paraphrasing, explanatory suffixes, or alternative guesses. For a count "
++        "or rank, return the number alone when the question already specifies its unit. "
++        "For a type or genre, return the category name. Keep qualifiers needed to identify "
++        "the requested entity or location, and every requested member of a list. Preserve "
++        "the number and conjunction of a quoted category or name; do not mechanically "
++        "singularize, shorten, or split names. For yes/no questions return yes or no. "
++        "Put uncertainty in unresolved_issues and confidence, not in alternative answers. "
++    )
++
++
++def hotpot_submission_instruction() -> str:
++    return (
++        "Submission contract: The selected output Agent answers the complete original "
++        "HotpotQA question using the supplied passages and visible evidence. The question "
++        "determines the answer type and granularity. Put the supported answer phrase in "
++        "answer, preserving required qualifiers and list members; put the evidence and "
++        "resolved conclusion before answer. Intermediate Agents may return local findings."
++    )
+--- /dev/null
++++ b/tests/test_hotpot_answer_contract.py
+@@ -0,0 +1,80 @@
++"""Exercise public context, recovery, and submission with the Hotpot contract."""
++
++import json
++
++import pytest
++
++from selfplay_graph_flowsteer.answer_submission import (
++    AnswerFinalizer, AnswerSubmissionConfig, submission_contract,
++)
++from selfplay_graph_flowsteer.canvas import GraphCanvas
++from selfplay_graph_flowsteer.config import CanvasConfig
++from selfplay_graph_flowsteer.hotpot_answer_contract import HOTPOT_RESULT_FIELDS
++from selfplay_graph_flowsteer.llm import MockBackend
++from selfplay_graph_flowsteer.observability import TaskSpec
++from selfplay_graph_flowsteer.runtime import ModelAgentExecutor, MultiAgentRuntime, _worker_output_instruction
++
++
++@pytest.mark.parametrize("recover", [False, True])
++def test_evidence_first_artifact_survives_runtime_and_submission_without_gold(recover):
++    result = dict(zip(HOTPOT_RESULT_FIELDS, [
++        ["[Eastmere] Latitude 55 N", "[Westmere] Latitude 32 N"],
++        "Eastmere is farther north because 55 N exceeds 32 N.",
++        0.95, [], [], "Eastmere",
++    ]))
++    backend = MockBackend((["{\"answer\":null}"] if recover else []) + [json.dumps(result)])
++    question = "[Eastmere] Latitude 55 N. [Westmere] Latitude 32 N. Which is farther north?"
++    task = TaskSpec("synthetic", question, reference="PRIVATE_REFERENCE_DO_NOT_EXPOSE",
++                    metadata={"dataset": "hotpotqa"})
++    canvas = GraphCanvas(task=question, dataset="hotpotqa", runtime_routes=("mock",),
++                         runtime=MultiAgentRuntime(ModelAgentExecutor(backend)),
++                         config=CanvasConfig(max_rounds=50, remaining_token_admission_enabled=False))
++    actions = [
++        dict(action="add_agent", agent_id="a"),
++        dict(action="set_prompt", target="a", role="Evidence analyst",
++             objective="Identify Eastmere's latitude.", scope="Read the Eastmere passage.",
++             expected_output="The latitude and evidence."),
++        dict(action="set_output", target="a"),
++        dict(action="set_model", target="a", runtime_route="mock"),
++    ]
++    for action in actions:
++        if action["action"] == "set_model":
++            canvas.graph.nodes["a"].operation_policy_configured = True
++        response = canvas.step(json.dumps(action), authoritative_director=True)
++        assert response.accepted, response.feedback
++    artifact = canvas.runtime.artifacts["a"]
++    assert artifact.answer == "Eastmere"
++    assert len(backend.calls) == (2 if recover else 1)
++    for call in backend.calls:
++        encoded = json.dumps(call["messages"])
++        assert task.reference not in encoded
++        assert question in encoded
++        assert "Write answer LAST" in encoded
++        assert "shortest direct answer" not in encoded
++        assert "original question" in encoded
++    if recover:
++        context = json.loads(backend.calls[-1]["messages"][-1]["content"])
++        assert tuple(context["artifact_schema"]) == HOTPOT_RESULT_FIELDS
++    # Submission does not read the summary to overwrite the answer or consult gold.
++    final = AnswerFinalizer(AnswerSubmissionConfig(enabled=True)).finalize(
++        task=task, raw_answer=artifact.answer,
++    )
++    assert final.submitted_answer == "Eastmere"
++
++
++@pytest.mark.parametrize("dataset", ["nq_open", "aime", "healthbench_professional", "webshop"])
++def test_other_dataset_worker_contract_unchanged(dataset):
++    from selfplay_graph_flowsteer.qa_submission import is_short_qa_dataset
++    instruction = _worker_output_instruction([], dataset=dataset, action_adapter=dataset,
++                                             short_answer_qa=is_short_qa_dataset(dataset),
++                                             is_output_agent=True)
++    assert "Write answer LAST" not in instruction
++    assert "Return one final JSON object with answer, summary" in instruction
++
++
++def test_hotpot_submission_uses_public_question_without_mutating_reference():
++    task = TaskSpec("span", "What type of music?", reference="secret",
++                    metadata={"dataset": "hotpotqa"})
++    assert "answer type and granularity" in submission_contract(task)
++    assert "secret" not in submission_contract(task)
++    assert task.reference == "secret"

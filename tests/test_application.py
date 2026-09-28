@@ -728,7 +728,7 @@ def test_gpt_6_astra_remote_runtime_allows_twenty_concurrent_requests() -> None:
         replace(runtime, max_concurrency=21).validate()
 
 
-@pytest.mark.parametrize("model,limit", [("deepseek-flash", 40), ("MiniMax-M2.7", 30)])
+@pytest.mark.parametrize("model,limit", [("deepseek-flash", 50), ("MiniMax-M2.7", 30)])
 def test_high_capacity_remote_runtime_enforces_model_concurrency_limit(model, limit) -> None:
     runtime = FixedRuntimeConfig(
         base_url="https://example.test/v1",

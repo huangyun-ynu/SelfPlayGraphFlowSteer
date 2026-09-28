@@ -1,0 +1,73 @@
+{
+  "schema": "spgfs-hotpot-formal-promotion-v1",
+  "formal_root": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer",
+  "source_code_commit": "698ef78eb000876678dc3a72d6519da2a461babd",
+  "source_evaluation_run": "experiment_versions/reports/hotpot128-aime30-c50-20260928-204627",
+  "source_metrics": {
+    "strict_em_correct": 111,
+    "total": 128,
+    "strict_em": 0.8671875,
+    "answer_f1": 0.9205182404401154
+  },
+  "contract_version": "hotpot_evidence_first_v1",
+  "source_module_matches_evaluated_hash": true,
+  "promoted_worker_and_recovery_sha256": {
+    "hotpotqa:False": "9868116bfbf81cf47ffd926c641ce179a6e38330b35514856395a300af7ac71f",
+    "hotpotqa:True": "0025cfe55cf690d3680395469cae7a2d7f5a9e65e7e979725c87d3043c4a03a7"
+  },
+  "matches_evaluated_prompt_hashes": true,
+  "other_dataset_prompt_hashes_unchanged": true,
+  "formal_config_unchanged": true,
+  "formal_training_worker_model_selection_preserved": true,
+  "source_flash_eval_config": "experiment_versions/reports/hotpot128-aime30-c50-20260928-204627/config.toml",
+  "dataset_sha256": "6e4096785ad5b869b6541c868beb25ad7f157cc64ae8968c0db3cbe2f185e27c",
+  "actual_training_pool": {
+    "path": "state/formal-data/validated_task_pool.main-235e670.webshop-index-v2.worker08.jsonl",
+    "sha256": "397fb3e27e084a0845812c61a574bd76aabb9b765b10cee62c71e79c2eaf5070",
+    "total_rows": 3516,
+    "hotpot_rows": 512,
+    "eval_id_overlap": [],
+    "eval_prompt_overlap": 0
+  },
+  "tests": {
+    "command": "python -m pytest tests/test_hotpot_answer_contract.py tests/test_runtime.py tests/test_output_contract.py tests/test_hotpot_corrections.py tests/test_prepare_static_eval.py tests/test_submission_grade_boundary.py tests/test_finish_submission_contract.py -q",
+    "passed": 173,
+    "failed": 0,
+    "duration_s": 2.02
+  },
+  "files": {
+    "src/selfplay_graph_flowsteer/runtime.py": {
+      "before_sha256": "d6e64317b1321432dc3f85c38627bf6c8766f03a3d1ae8007def51285b18ccb6",
+      "after_sha256": "19c17e3860a93f8f8626aa938735c42ee01d6ed38787788770ebb6406546a233"
+    },
+    "src/selfplay_graph_flowsteer/answer_submission.py": {
+      "before_sha256": "0fa56993d0fc2288b7d5c46eaef99bd49e0b29af6f6b8c9c22359b3538ee06eb",
+      "after_sha256": "6e18fd5050053191291ddd19dc24503e069e049a41903678ab59c86d77bfe7e5"
+    },
+    "src/selfplay_graph_flowsteer/output_contract.py": {
+      "before_sha256": "a88bb3ce99cf7cf24a5f85199bc1592b6391c6f08e2ce5f6a5447893ab90eca2",
+      "after_sha256": "31c69774e93239d48df2903449b4fe2789d28138c35b8622edb96b35a729e8e0"
+    },
+    "src/selfplay_graph_flowsteer/execution_contract.py": {
+      "before_sha256": "549259fdbab9b1bffb9e2e90447f7a60d1060f2de3c33f10d176c880175aa76a",
+      "after_sha256": "e042adda0419c3d412a8e3d98e8a08c6804d74f6efefebcd461279f5a04c9594"
+    },
+    "tests/test_runtime.py": {
+      "before_sha256": "498daa8230db3ebf5abb9a9efe78a1738f9dd54002f64b8e1015756b73c1255a",
+      "after_sha256": "7f8f001942713e6a8a262d7528a1e482a1cb1d4aecec57db0f52c680eee9ba07"
+    },
+    "src/selfplay_graph_flowsteer/hotpot_answer_contract.py": {
+      "before_sha256": null,
+      "after_sha256": "d9ff12c879c51a4c894824488f10e7a14a44d53caafef28ff9432ef6e1088631"
+    },
+    "tests/test_hotpot_answer_contract.py": {
+      "before_sha256": null,
+      "after_sha256": "53244222292f6d8b86c0526eb6972fad2393042459d504bade9282fefb0ae0df"
+    }
+  },
+  "preexisting_files_checked": 547,
+  "only_expected_existing_files_changed": true,
+  "backup_directory": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/promotions/hotpot-8672-20260928",
+  "training_started": false,
+  "new_model_api_calls": 0
+}

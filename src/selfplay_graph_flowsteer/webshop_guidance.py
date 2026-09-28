@@ -6,8 +6,9 @@ not LASER's controller, action mapper, or environment implementation.
 """
 
 MERGED_CHECKLIST_POLICY = "merged_checklist_v1"
+PUBLIC_EVIDENCE_POLICY = "public_evidence_v1"
 WEBSHOP_WORKER_GUIDANCE_POLICIES = frozenset(
-    {"baseline", "laser_checklist_v1", MERGED_CHECKLIST_POLICY}
+    {"baseline", "laser_checklist_v1", MERGED_CHECKLIST_POLICY, PUBLIC_EVIDENCE_POLICY}
 )
 
 LASER_PAGE_CHECKLIST = """
@@ -91,6 +92,46 @@ verified_requirements and an honest unresolved_constraints list, which may be
 nonempty. It stages a candidate; only the runtime commits one staged purchase
 after Canvas selects the output Agent. A recommendation or an unstaged product
 page is not commit-ready. Do not claim a completed purchase before that commit.
+"""
+
+
+PUBLIC_EVIDENCE_CHECKLIST = """
+WebShop public evidence protocol (public_evidence_v1):
+Use the public request to find a relevant product, verify explicit requirements,
+select its requested options, then buy within the existing action budget.
+1. In your first search/click call, provide decision.requirements: one ID per
+   product type, attribute, requested option, and price limit; copy a short exact
+   quote from public_task_context and mark required/preference/uncertain.
+   Include ALL explicit requirements. These IDs and quotes persist across revisions.
+2. Search for the product type plus distinguishing constraints. On another search,
+   use decision.query_reason to identify an unresolved requirement; broaden one
+   modifier if needed. Preview colors/models may be defaults, so inspect options.
+3. On opening a candidate, the observation supplies public_decision.current_sources.
+   Update decision.candidate {asin, checks} on a following click/search. Each check
+   has requirement_id, status (supported/conflict/unknown/title_only), references
+   [{source_id, quote}]. Copy quotes from the indicated observed field. A valid
+   quote establishes provenance, not that its meaning satisfies the requirement:
+   e.g. washable does not necessarily mean machine washable. Missing facts stay unknown.
+4. For requested options, give option_group (copy option_name) and option_value
+   from visible select_option actions. supported requires live selected_options
+   readback; availability alone is insufficient. Update the assessment before
+   selecting; verify readback next turn. Title-only variant evidence is title_only.
+   Only requested groups need selection. Navigating away can reset selections.
+5. Record decision.best_candidate_asin after comparison. Its cited excerpts and
+   recovery query remain available. Revisit only with a currently valid target_id
+   or by redoing a public query; never construct a jump from a historical ASIN.
+6. Before buying, explicitly assess every requirement. Resolve known conflicts
+   or useful unknowns if navigation/inspection/options still leave a purchase path.
+   Do not reopen every section by default. Price ranges crossing the ceiling are
+   unknown. Preserve product type when comparing accessories, bundles and variants.
+7. Buy Now uses purchase_evidence {asin, state_version} from the current page.
+   When any check remains unresolved, also provide accept_unresolved_reason:
+   why the best observed candidate is the final choice given the remaining budget.
+   Do not declare unresolved checks supported just to pass validation. A truthful
+   partial choice is allowed. If a validation error occurs, correct it without
+   inventing evidence. Finalize once commit_pending/purchased/done is true.
+The ledger reports your semantic judgments separately from verified public facts.
+All environment actions still use current target_id and state_version, one per turn.
 """
 
 

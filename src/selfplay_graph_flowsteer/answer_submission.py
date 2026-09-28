@@ -9,6 +9,7 @@ from typing import Any
 
 from .aime_submission import is_aime_dataset, parse_aime_answer
 from .healthbench_protocol import healthbench_answer_instruction
+from .hotpot_answer_contract import hotpot_submission_instruction
 from .observability import TaskSpec
 from .qa_submission import extract_qa_answer, is_short_qa_dataset
 
@@ -118,6 +119,8 @@ def is_short_answer_qa(task: TaskSpec) -> bool:
 def submission_contract(task: TaskSpec) -> str:
     dataset = str(task.metadata.get("dataset", "")).strip().casefold()
     verifier = str(task.metadata.get("verifier", "")).strip().casefold()
+    if dataset == "hotpotqa":
+        return hotpot_submission_instruction()
     if dataset == "healthbench_professional" or verifier == "healthbench_rubric":
         return "Submission contract: " + healthbench_answer_instruction().strip()
     if is_aime_dataset(task.metadata.get("dataset", "")):

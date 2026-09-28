@@ -1,0 +1,81 @@
+{
+  "run_dir": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-hotpot-answer-contract/state/hotpot128-aime30-c50-20260928-204627",
+  "code_commit": "698ef78eb000876678dc3a72d6519da2a461babd",
+  "datasets": {
+    "hotpotqa": {
+      "planned": 128,
+      "completed": 128,
+      "execution_errors": 0,
+      "valid_submissions": 128,
+      "unsubmitted": 0,
+      "verifier_passed": 119,
+      "verifier_pass_rate_all": 0.9296875,
+      "worker_requests": 264,
+      "worker_models": {
+        "deepseek-flash": 264
+      },
+      "missing_provider_model_event_ids": [],
+      "worker_event_outcomes": {
+        "backend_request_success": 264
+      },
+      "worker_input_tokens": 605317,
+      "worker_output_tokens": 58171,
+      "dataset_sha256": "6e4096785ad5b869b6541c868beb25ad7f157cc64ae8968c0db3cbe2f185e27c",
+      "records_sha256": "c078d6a074bfc96cf8d94395d6b05f4a2f4492fadaa4c63b60626fb0e5b71446",
+      "source_binding_verified": true,
+      "strict_em_correct": 111,
+      "strict_em": 0.8671875,
+      "answer_f1": 0.9205182404401154
+    },
+    "aime": {
+      "planned": 30,
+      "completed": 30,
+      "execution_errors": 0,
+      "valid_submissions": 28,
+      "unsubmitted": 2,
+      "verifier_passed": 24,
+      "verifier_pass_rate_all": 0.8,
+      "worker_requests": 389,
+      "worker_models": {
+        "deepseek-flash": 388,
+        "unknown": 1
+      },
+      "missing_provider_model_event_ids": [
+        "3f126ab0cbb1468c8976017999a6d124"
+      ],
+      "worker_event_outcomes": {
+        "backend_request_success": 389
+      },
+      "worker_input_tokens": 1441411,
+      "worker_output_tokens": 182662,
+      "dataset_sha256": "f50a3ba12616c8d87b37d1fd7a0a2c2b5e440c18388db0991855423856a610c7",
+      "records_sha256": "8f30985d7d8ac657ddc38c2fc643e3a59b0628810a875c093009ce272627bfa1",
+      "source_binding_verified": true,
+      "numeric_correct": 24,
+      "numeric_accuracy_all": 0.8
+    }
+  },
+  "shared_config_check": {
+    "equal_fields": [
+      "execution_semantics",
+      "director_model",
+      "director_model_source",
+      "director_thinking",
+      "worker_logical_routes",
+      "worker_endpoint_pools",
+      "route_concurrency",
+      "dataset_token_limits",
+      "workers",
+      "swe_enabled",
+      "deepseek_thinking",
+      "director_skill_root"
+    ],
+    "hotpot_count": 128,
+    "aime_count": 30,
+    "differences_expected": [
+      "datasets",
+      "examples_planned",
+      "director_thinking_by_dataset keys"
+    ]
+  }
+}

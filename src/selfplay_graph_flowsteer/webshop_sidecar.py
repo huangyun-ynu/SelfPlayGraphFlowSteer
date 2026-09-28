@@ -318,10 +318,20 @@ class WebShopSession:
             "purchased": terminal and action_kind == "purchase",
             "reward": float(result.get("reward", 0.0)),
             "state_version": self.state_version,
+            "public_task_statement": self.instruction,
             "steps": self.step_count,
             "termination_reason": "purchase_completed" if terminal else "active",
             "valid_subactions": valid,
             "raw_available_actions": actions,
+        }
+        # This pinned simulator terminates on purchase, without a finite step
+        # cap. The caller still owns a separate hard per-question Action budget.
+        from .webshop_steps import PINNED_WEBSHOP_REVISION
+
+        revision = getattr(self.worker, "source_revision", None)
+        payload["environment_step_limit"] = {
+            "kind": "unbounded" if revision == PINNED_WEBSHOP_REVISION else "unknown",
+            "source_revision": revision,
         }
         if action_kind != "reset":
             payload["action_effect"] = {"kind": action_kind, "value": action_value}

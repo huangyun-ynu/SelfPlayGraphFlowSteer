@@ -27,7 +27,8 @@ from .contracts import CodeArtifactRef
 from .observability import TaskSpec, VerificationResult
 from .swe_paths import normalize_swe_directory_path
 from .swe_public_tests import (
-    PUBLIC_TEST_PROFILES, PublicTestError, environment_status, resolve_target, run_public_test,
+    PUBLIC_TEST_PROFILES, PublicTestError, environment_status, require_public_test_environments,
+    resolve_target, run_public_test,
 )
 
 SWE_ACTION_NAMES = (
@@ -1058,6 +1059,7 @@ class SWEWorkspaceLifecycle:
         self._active: _WorkspaceAttempt | None = None
         self._results: dict[str, dict[str, Any]] = {}
         self._visible_artifacts: dict[str, CodeArtifactRef] = {}
+        self._continuation_artifact: CodeArtifactRef | None = None
         # Task-scoped recovery references survive failed attempts and node
         # deletion. They never stand in for a current tested Worker result.
         self._recovery_candidates: dict[str, dict[str, Any]] = {}
@@ -1079,6 +1081,8 @@ class SWEWorkspaceLifecycle:
         }:
             raise ValueError("SWE lifecycle can bind only a SWE-bench task")
         assert_public_swe_payload(task.metadata)
+        if self.public_test_environment_root is not None:
+            require_public_test_environments(self.public_test_environment_root, [task.metadata])
         public = PublicSWETask(
             instance_id=str(task.metadata.get("instance_id", task.metadata.get("source_id", ""))),
             repo=str(task.metadata.get("repo", "")),
@@ -1106,6 +1110,20 @@ class SWEWorkspaceLifecycle:
         self._visible_artifacts.clear()
         self._recovery_candidates.clear()
         self._binding = TrustedSWETaskBinding(public, private)
+        self._continuation_artifact = None
+        continuation = task.metadata.get("continuation_artifact_ref")
+        if continuation is not None:
+            if not isinstance(continuation, dict):
+                raise ValueError("continuation artifact reference must be an object")
+            ref = CodeArtifactRef.from_dict(continuation)
+            if (ref.instance_id, ref.repo, ref.base_commit) != (
+                public.instance_id, public.repo, public.base_commit
+            ):
+                raise ValueError("continuation artifact belongs to another SWE task")
+            payload = self.artifact_store.read(ref)
+            if len(payload) != ref.patch_bytes:
+                raise ValueError("continuation artifact byte count mismatch")
+            self._continuation_artifact = ref
         # Reward capability is granted only after the trusted local registry
         # matches the public identity; a pool row cannot self-authorize it.
         task.metadata["reward_capable"] = self._binding.reward_capable
@@ -1163,6 +1181,21 @@ class SWEWorkspaceLifecycle:
                 cwd=workspace,
                 timeout_s=30.0,
             )
+            if self._continuation_artifact is not None:
+                ref = self._continuation_artifact
+                patch = self.artifact_store.read(ref)
+                with _git_safe_environment(workspace) as git_environment:
+                    applied = self._run_process(
+                        ["git", "apply", "--whitespace=nowarn", "-"],
+                        cwd=workspace,
+                        timeout_s=20.0,
+                        input_bytes=patch,
+                        environment_overrides=git_environment,
+                    )
+                if applied[0] != 0:
+                    raise SWEWorkspaceProvisioningError(
+                        f"continuation artifact {ref.artifact_sha256} failed to apply: {applied[2][:500]}"
+                    )
         except Exception:
             shutil.rmtree(workspace, ignore_errors=True)
             raise
@@ -1170,6 +1203,7 @@ class SWEWorkspaceLifecycle:
         self._active = _WorkspaceAttempt(
             agent_id=agent_id,
             workspace=workspace,
+            version=1 if self._continuation_artifact is not None else 0,
             visible_artifacts={
                 **self._visible_artifacts,
                 **{sha: CodeArtifactRef.from_dict(item["code_artifact_ref"])
@@ -1185,6 +1219,10 @@ class SWEWorkspaceLifecycle:
                 "revision": bool(revision),
                 "workspace": str(workspace),
                 "base_commit": public.base_commit,
+                "continuation_artifact_sha256": (
+                    self._continuation_artifact.artifact_sha256
+                    if self._continuation_artifact is not None else None
+                ),
             }
         )
         return self.status()
@@ -1300,6 +1338,10 @@ class SWEWorkspaceLifecycle:
             "base_commit": public.base_commit,
             "workspace_version": attempt.version,
             "changed_files": list(self._changed_files(attempt.workspace)),
+            "continuation_artifact_ref": (
+                self._continuation_artifact.to_dict()
+                if self._continuation_artifact is not None else None
+            ),
             "recoverable_code_artifacts": self.recoverable_code_artifacts(),
         }
         if self.public_test_environment_root is not None:

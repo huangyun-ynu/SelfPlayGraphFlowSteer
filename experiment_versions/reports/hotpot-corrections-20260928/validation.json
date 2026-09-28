@@ -1,0 +1,74 @@
+{
+  "active_dataset_version": "flowsteer-hotpotqa-corrected-v1",
+  "offline_tests": {
+    "worktree": {
+      "passed": 16,
+      "failed": 0
+    },
+    "main": {
+      "passed": 16,
+      "failed": 0
+    }
+  },
+  "main_protected_inputs_unchanged": 40,
+  "other_dataset_manifest_entries_unchanged": true,
+  "train_overlap_checks": [
+    {
+      "path": "data/formal/train/hotpotqa.jsonl",
+      "sha256": "b0a626cf4b64a107e3800ff495320175fbc1d84609b8723ea5464499c26853e2",
+      "hotpot_rows": 512,
+      "reviewed_ids": 15,
+      "overlap": []
+    },
+    {
+      "path": "state/formal-data/validated_task_pool.jsonl",
+      "sha256": "7153b49ea9ecf1b5ed5427bc063c42961578864dd70c49f5793b71ead3a3b47b",
+      "hotpot_rows": 512,
+      "reviewed_ids": 15,
+      "overlap": []
+    }
+  ],
+  "main_protected_file_hashes": {
+    "configs/formal_training.toml": "5deb4276c2973dd6dfa94721e47ec8e74ab765078958cb2212dff845085e1a25",
+    "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl": "84db56807e8e8cd98224ba53b124b289f783faf463a55f5a7e6785b2127cbcc2",
+    "data/formal/sources/flowsteer/hotpotqa_eval_128.raw.jsonl": "55a74378c02a8fc3d40fa6bbcd967447f10b6021d3a39c707c14e3b5d265f25a",
+    "data/formal/train/hotpotqa.jsonl": "b0a626cf4b64a107e3800ff495320175fbc1d84609b8723ea5464499c26853e2",
+    "data/formal/train/webshop.jsonl": "7166743ec89973e30809b5c266a094821d98a39f801a128e63d0304a8ced2d60",
+    "docs/STUDENT_API.md": "80ea4fa975dcf6ff82791cacbe509929d431075065334f43d28c4971208fedbe",
+    "docs/SWE_PUBLIC_FUNCTIONAL_TESTS_20260927.zh-CN.md": "1867bd405fc0834eddc89d1a35b0e1739cecb4cd8609238c9a6461f02e45d73b",
+    "scripts/formal/prepare_swe_public_tests.py": "ad321f128fd9d81aa119133db6cb2c162e5408bf970055d0bbc7dcba40aa615e",
+    "scripts/formal/run_experiment.sh": "d7caf0d3b2958e5431f1dc79e5345eb17b691b329114efc79f7f19714b52a978",
+    "scripts/formal/run_webshop_official_eval.sh": "dc68a62469e926d8290803044ae641135301e16c35be109a08d82713c41a7a6d",
+    "src/selfplay_graph_flowsteer/_swe_public_probe.py": "3ae6160fcfe3a5ccd5525a2e8fdeb0394a2cb3567b393552e80f4df1c30ea332",
+    "src/selfplay_graph_flowsteer/adaptive.py": "f0232c8e7dd1dc38ead4dc49abe118200d944c6d1ec5118fc74f0749d99db1ae",
+    "src/selfplay_graph_flowsteer/application.py": "2437b2a9958403ef1fccbbb00952bd14e2a18295787d587314240d34baece455",
+    "src/selfplay_graph_flowsteer/canvas.py": "4e0bd6dc1387aeef1dd79e2dae192757c1bb9c714da44f290627890a6c2f6e6e",
+    "src/selfplay_graph_flowsteer/cli.py": "e5d2bec46f4d0eb51c9790bc2bed923556709110b32f9c7b5817f75eb385a4b0",
+    "src/selfplay_graph_flowsteer/config.py": "73be2e217746e2128c1f2540217937a2a9fbcfb52afc9fc74cbe33219c1da9bf",
+    "src/selfplay_graph_flowsteer/delegation.py": "2af35114dd2eb1dc90fae61610fe5ff74242604eb9e37ae2143955674cde1fbc",
+    "src/selfplay_graph_flowsteer/director.py": "4b829443a50dc3d0d67cb9677d5e98caa738cf7daef8b9bcd3cea9a8e24059b8",
+    "src/selfplay_graph_flowsteer/endpoint_pool.py": "95697428a4f38d010b0a0e9ae63d94d9ab0e8ce252426d6c067d2589ae1a2787",
+    "src/selfplay_graph_flowsteer/execution_contract.py": "549259fdbab9b1bffb9e2e90447f7a60d1060f2de3c33f10d176c880175aa76a",
+    "src/selfplay_graph_flowsteer/llm.py": "8ebe1514d24b57146c09a9e2855d5c5cd78f5c0bec7bb8608a1a4d1834f1f159",
+    "src/selfplay_graph_flowsteer/outcome_admission.py": "7f892b4af5f20689bad754fd92b20b952a954835ae4ddd4675d2ceacc2a9f0f2",
+    "src/selfplay_graph_flowsteer/runtime.py": "d6e64317b1321432dc3f85c38627bf6c8766f03a3d1ae8007def51285b18ccb6",
+    "src/selfplay_graph_flowsteer/selfplay_runtime.py": "253093c46d2bf78fcd3e8c9144fa01adf2e1f1169ef476afbc3b3b2c76bc6203",
+    "src/selfplay_graph_flowsteer/submission_contract.py": "adc7a98f8973bfadb97f280cf624ea2a9700e616eb6b4ebe0b60eb5a646654ce",
+    "src/selfplay_graph_flowsteer/swe_public_recipes.py": "01445119112ffe688782d1eacfb4dedbc3f0d1b5071195302fddfe3bd71f3f44",
+    "src/selfplay_graph_flowsteer/swe_public_tests.py": "32eb1d813c10e00a74f08c45b2e5a4d7b7906cefbea979ce3b10a02af8d6fbaa",
+    "src/selfplay_graph_flowsteer/swebench.py": "e9b6668e21e4fcac2ecb775188edbbd0bdac8b8d6190f3173519730326a8dab2",
+    "src/selfplay_graph_flowsteer/unified_submission.py": "6b535ae945656dfa158649b2c8f205daf659c944330b81fd89d18a6a20434a6a",
+    "src/selfplay_graph_flowsteer/webshop.py": "c045510d794b37b809e933416b33de731f9ef1354a07b1a16842f54a2bbd6c88",
+    "src/selfplay_graph_flowsteer/webshop_guidance.py": "a7219cd0195a36a2cc09bc0fb903612a707285d554162ddec7f7c750706cb283",
+    "src/selfplay_graph_flowsteer/webshop_profiles.py": "cfe62a3ba5caa7538e7e0a2eee9b4cbc1156cabdeec21c38e7024d646d9daa0e",
+    "src/selfplay_graph_flowsteer/webshop_sidecar.py": "aeaadfdbfc789977ff246f0037742dadf343dd7f3813d4fce384bb9a0db8d9a6",
+    "state/formal-data/validated_task_pool.jsonl": "7153b49ea9ecf1b5ed5427bc063c42961578864dd70c49f5793b71ead3a3b47b",
+    "state/hotpotqa-deepseek-c50-20260928/results/records.jsonl": "c5b714cf10656fdd75dbcb7d8ab0a6ef562260dcc8e6af6b3165a2ae6d665f6f",
+    "tests/test_application.py": "e0bfe74b4a848e3a47ec05706816d7c1d5c7438305e2a806076d2d011d21a88d",
+    "tests/test_live_smoke_regressions.py": "55a9a147789620652bf71cc8b10047105f286190b5993a2a3d2396bce6bf2d22",
+    "tests/test_selfplay_runtime.py": "f6f2bcc6cbf470cb12282fd383d205dedb1ff707c0177d294c308beb85bef756",
+    "tests/test_swe_candidate_integrity.py": "f435249352d04985fee29b0a9e2a4203bccdce1289d1418c1913e69feed461eb",
+    "tests/test_swe_public_tests.py": "8e792a21992f3cf542ed7aad6566bfe84f152912c8275693941add642620e260"
+  },
+  "model_api_calls": 0
+}

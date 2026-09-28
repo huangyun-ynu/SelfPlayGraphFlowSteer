@@ -10,7 +10,9 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import time
+from collections.abc import Iterable, Mapping
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import Any
@@ -63,6 +65,21 @@ def environment_status(root: Path, repo: str, version: str) -> dict[str, Any]:
     )
     return {**result, "ready": ready, "runner": recipe.runner, "smoke_target": recipe.smoke,
             "error": None if ready else "test_environment_not_prepared"}
+
+
+def require_public_test_environments(root: Path, tasks: Iterable[Mapping[str, Any]]) -> None:
+    """Reject missing environments before spending any inference budget."""
+    identities = sorted({(str(row.get("repo", "")), str(row.get("version", ""))) for row in tasks})
+    missing = [status for repo, version in identities
+               if not (status := environment_status(root, repo, version))["ready"]]
+    if missing:
+        details = "; ".join(f'{row["repo"]}@{row["version"]}: {row["error"]}' for row in missing)
+        raise PublicTestError(
+            "public_test_preflight_failed",
+            f"SWE public test environments are not ready ({len(missing)}/{len(identities)}): "
+            f"{details}. Run scripts/formal/prepare_swe_public_tests.py for these public tasks "
+            f"with --env-root {root} before inference.",
+        )
 
 
 def resolve_target(workspace: Path, repo: str, version: str, profile: str, target: object) -> str:
@@ -120,21 +137,26 @@ def run_public_test(*, root: Path, repo: str, version: str, workspace: Path, tar
                     require_ready: bool = True, lock_held: bool = False) -> dict[str, Any]:
     recipe = RECIPES[repo, version]
     directory = root / environment_key(repo, version)
-    with nullcontext() if lock_held else environment_lock(directory, setup_timeout):
+    lock = nullcontext() if lock_held else environment_lock(directory, setup_timeout)
+    # pytest's own tests launch nested pytest runs. Keeping their temporary
+    # projects below the environment's pytest.ini makes rootdir detection wrong.
+    # Use the caller's temporary root, outside the source/configuration tree.
+    with lock, tempfile.TemporaryDirectory(prefix="swe-public-test-") as scratch:
         if require_ready:
             status = environment_status(root, repo, version)
             if not status["ready"]:
                 raise PublicTestError(str(status["error"]), "Prepare this repository/version before running public tests")
         source = snapshot_source(workspace, directory)
-        # Nested pytest self-tests must not discover the training project's
-        # pyproject.toml above the environment directory.
+        # A checkout without pytest configuration must not discover the training
+        # project's pyproject.toml above the environment directory.
         (directory / "pytest.ini").write_text("[pytest]\n")
         for name in ("home", "tmp", "cache"):
             (directory / name).mkdir(exist_ok=True)
         python = str(directory / "venv/bin/python")
         environment = {
             "PATH": str(directory / "venv/bin") + os.pathsep + os.environ.get("PATH", "/usr/bin:/bin"),
-            "HOME": str(directory / "home"), "TMPDIR": str(directory / "tmp"),
+            "HOME": str(directory / "home"), "TMPDIR": scratch,
+            "PYTEST_DEBUG_TEMPROOT": scratch,
             "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1",
             "PYTHONPATH": os.pathsep.join(str(source / p) for p in ("", "src", "lib", "tests")),
             "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1",
@@ -149,6 +171,14 @@ def run_public_test(*, root: Path, repo: str, version: str, workspace: Path, tar
             setup_config = directory / "matplotlib-setup.cfg"
             setup_config.write_text("[libs]\nsystem_freetype = true\nsystem_qhull = true\n")
             environment["MPLSETUPCFG"] = str(setup_config)
+            native = directory / "native"
+            environment.update({
+                "PKG_CONFIG_PATH": str(native / "lib/pkgconfig"),
+                "CFLAGS": f"-I{native / 'include'}",
+                "CPPFLAGS": f"-I{native / 'include'}",
+                "LDFLAGS": f"-L{native / 'lib'} -Wl,-rpath,{native / 'lib'}",
+                "LD_LIBRARY_PATH": str(native / "lib"),
+            })
         setup = run_process(
             [python, "-m", "pip", "install", "--no-deps", "--no-build-isolation", "-e", "."],
             cwd=source, timeout_s=setup_timeout, environment_overrides=environment,

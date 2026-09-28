@@ -1,0 +1,1026 @@
+[
+  {
+    "task_id": "swe_bench_verified_test:django__django-11087",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16950",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-13798",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-12585",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11885",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11999",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-12858",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-9367",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-6599",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-5809",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-7229",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14631",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-21612",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-19346",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14315",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-13852",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-13480",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16801",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-12155",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-14531",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-7521",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:psf__requests-2317",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-10999",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-26466",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16493",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13933",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-12419",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-12096",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-6461",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16819",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-11310",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-14976",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-8475",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-14629",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-7393",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-5840",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-9320",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13128",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-7432",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-20488",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-25931",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-12489",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-4075",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-8265",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-25747",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-3305",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-22871",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16116",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-11445",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pylint-dev__pylint-4661",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14999",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-20859",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-24637",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13417",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-15976",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:astropy__astropy-7671",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16255",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-9591",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15368",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11400",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13297",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11815",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-8638",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-14053",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-12276",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14752",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13512",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-9230",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15851",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-20801",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11211",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11964",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-15100",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-9698",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-8056",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16938",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13837",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-7205",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-16886",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13195",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-13615",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-13439",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14792",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-10051",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pydata__xarray-6992",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13023",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-18698",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:astropy__astropy-8872",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14017",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-9288",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-26342",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14011",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13786",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-12193",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13569",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pylint-dev__pylint-6528",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15037",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-13142",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16429",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:astropy__astropy-7606",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13551",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16527",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14580",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:astropy__astropy-14182",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16662",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-9258",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16485",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:pytest-dev__pytest-10356",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-12325",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11532",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13112",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:matplotlib__matplotlib-24177",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15916",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13513",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-10914",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15987",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:scikit-learn__scikit-learn-13328",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-11490",
+    "score": null,
+    "passed": null,
+    "outcome_status": "unsubmitted_unknown",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15569",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-16136",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14534",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-12419",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-13212",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-15732",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sphinx-doc__sphinx-8551",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-15345",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:django__django-14122",
+    "score": 1.0,
+    "passed": true,
+    "outcome_status": "scored",
+    "submission_status": "submitted",
+    "submission_contract_version": "unified_submission_v1"
+  },
+  {
+    "task_id": "swe_bench_verified_test:sympy__sympy-22080",
+    "score": 0.0,
+    "passed": false,
+    "outcome_status": "policy_failure",
+    "submission_status": "unsubmitted",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format"
+  }
+]

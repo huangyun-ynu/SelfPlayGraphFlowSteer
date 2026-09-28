@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 DEFAULT_DATASET_MAX_TOTAL_TOKENS = {
     "aime": 240_000,
@@ -91,6 +91,7 @@ class ModelGatewayConfig:
 class CanvasConfig:
     # Historical traces keep legacy semantics; new runs explicitly select v1.
     submission_protocol: str = "legacy"
+    submission_protocol_by_dataset: dict[str, str] = field(default_factory=dict)
     submission_journal_dir: str = "state/submissions"
     max_recovery_executions: int = 2
     action_budget_policy: str = "phase_split_v1"
@@ -105,6 +106,7 @@ class CanvasConfig:
     max_total_tokens_by_dataset: dict[str, int] = field(
         default_factory=lambda: dict(DEFAULT_DATASET_MAX_TOTAL_TOKENS)
     )
+    worker_token_budget_by_dataset: dict[str, dict[str, object]] = field(default_factory=dict)
     relay_max_chars: int = 4000
     feedback_max_chars: int = 6000
     artifact_summary_max_chars: int = 320
@@ -141,10 +143,32 @@ class CanvasConfig:
     def __post_init__(self) -> None:
         if self.submission_protocol not in {"legacy", "unified_task_result_v1"}:
             raise ValueError("unsupported submission_protocol")
+        for dataset, protocol in self.submission_protocol_by_dataset.items():
+            if canonical_dataset_name(dataset) != "swe_bench":
+                raise ValueError("dataset submission protocol overrides currently support SWE only")
+            if protocol not in {"legacy", "unified_task_result_v1"}:
+                raise ValueError("unsupported dataset submission_protocol")
         if self.max_recovery_executions < 0:
             raise ValueError("max_recovery_executions must be non-negative")
         if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
             raise ValueError("unknown canvas.action_budget_policy")
+        for dataset, policy in self.worker_token_budget_by_dataset.items():
+            if canonical_dataset_name(dataset) != "swe_bench" or not isinstance(policy, dict):
+                raise ValueError("reported Worker usage policy is supported for SWE only")
+            if policy.get("policy") != "reported_usage_threshold_v1":
+                raise ValueError("unknown SWE Worker usage policy")
+            if policy.get("accounting_scope", "question_attempt") != "question_attempt":
+                raise ValueError("SWE reported usage requires a question-attempt account")
+            if type(policy.get("max_unsettled_attempts", 2)) is not int or policy.get("max_unsettled_attempts", 2) <= 0:
+                raise ValueError("max_unsettled_attempts must be positive")
+            if type(policy.get("max_inflight_requests", 1)) is not int or policy.get("max_inflight_requests", 1) != 1:
+                raise ValueError("SWE reported usage requires one local in-flight request per question")
+            if policy.get("unknown_usage_policy", "continue_bounded") != "continue_bounded":
+                raise ValueError("unsupported unknown usage policy")
+            if "start_threshold" in policy and (
+                type(policy["start_threshold"]) is not int or policy["start_threshold"] <= 0
+            ):
+                raise ValueError("start_threshold must be a positive integer")
         limits = [*self.max_director_edits_by_dataset.values()]
         if self.max_director_edits is not None:
             limits.append(self.max_director_edits)
@@ -155,6 +179,13 @@ class CanvasConfig:
         if self.director_budget_policy == "edits_v1" and (
                 self.submission_protocol != "unified_task_result_v1" or self.max_director_edits is None):
             raise ValueError("edits_v1 requires unified submission and a finite default edit limit")
+
+    def for_dataset(self, dataset: object) -> CanvasConfig:
+        overrides = {canonical_dataset_name(key): value
+                     for key, value in self.submission_protocol_by_dataset.items()}
+        protocol = overrides.get(canonical_dataset_name(dataset))
+        return (replace(self, submission_protocol=protocol, submission_protocol_by_dataset={})
+                if protocol is not None else self)
 
     def director_edit_limit(self, dataset: object) -> int | None:
         overrides = {canonical_dataset_name(key): value
@@ -168,3 +199,10 @@ class CanvasConfig:
             for name, limit in self.max_total_tokens_by_dataset.items()
         }
         return dataset_key, int(normalized.get(dataset_key, self.max_total_tokens))
+
+    def worker_usage_policy(self, dataset: object) -> dict[str, object] | None:
+        name = canonical_dataset_name(dataset)
+        for key, value in self.worker_token_budget_by_dataset.items():
+            if canonical_dataset_name(key) == name:
+                return dict(value)
+        return None

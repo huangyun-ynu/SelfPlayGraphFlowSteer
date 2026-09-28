@@ -244,7 +244,7 @@ class UnifiedSubmissionMixin:
         if (self.structural_exploration_required and not self.structural_exploration_waived
                 and not self._structural_exploration_satisfied()):
             blockers.append("structural_exploration_required")
-        if self.total_tokens > self.config.max_total_tokens:
+        if self.runtime.worker_usage_ledger is None and self.total_tokens > self.config.max_total_tokens:
             blockers.append("worker_budget_exceeded")
         binding = self.runtime.artifact_input_binding(target) if artifact is not None else {}
         return {
@@ -261,7 +261,8 @@ class UnifiedSubmissionMixin:
         }
 
     def _unified_can_run(self, target):
-        if not self.active or self.total_tokens >= self.config.max_total_tokens:
+        if not self.active or (self.runtime.worker_usage_ledger is None
+                               and self.total_tokens >= self.config.max_total_tokens):
             return False
         node = self.graph.nodes.get(target)
         if node is None or not node.configured:
@@ -393,6 +394,8 @@ class UnifiedSubmissionMixin:
                     self.dirty_agents.discard(self.pending_agent_id)
                     self.dirty_reasons.pop(self.pending_agent_id, None)
                     self.pending_agent_id = None
+                usage_ledger = self.runtime.worker_usage_ledger
+                usage_status = usage_ledger.status() if usage_ledger is not None else None
                 self.submission_receipt = _issue_receipt(
                     context=context, version=SUBMISSION_VERSION, dataset=self.dataset,
                     accepted_event_id=f"{self.run_id}:canvas:{len(self.history)}",
@@ -402,6 +405,11 @@ class UnifiedSubmissionMixin:
                     raw_answer_snapshot=raw_answer, submitted_answer_snapshot=submitted_answer,
                     answer_hash=answer_hash(submitted_answer), normalization_version=normalization,
                     worker_tokens_used=self.total_tokens, worker_token_limit=self.config.max_total_tokens,
+                    worker_budget_policy=usage_status["policy"] if usage_status else "strict_limit_v1",
+                    worker_usage_complete=usage_status["usage_complete"] if usage_status else True,
+                    worker_usage_ledger_digest=usage_ledger.digest() if usage_ledger else "",
+                    worker_dispatch_valid=usage_ledger.dispatches_valid() if usage_ledger else False,
+                    worker_unsettled_attempts=usage_status["unsettled_attempt_count"] if usage_status else 0,
                     payload_kind=assessment["payload_kind"], payload=copy.deepcopy(assessment["payload"]),
                     transaction_id=transaction_id,
                 )
@@ -464,6 +472,12 @@ class UnifiedSubmissionMixin:
             for name in {action.value for action in self._DIRECTOR_EDIT_ACTIONS} | {"consider_relation"}:
                 if name not in allowed:
                     parameters[name] = {}
+        usage_ledger = self.runtime.worker_usage_ledger
+        usage_status = usage_ledger.status() if usage_ledger else None
+        if usage_status is not None:
+            usage_status["digest"] = usage_ledger.digest()
+            if usage_ledger.stop_reason() is not None:
+                allowed = ["finish"] if "finish" in allowed else []
         return {
             "canvas_version": self.graph.version, "director_action_protocol_version": ACTION_PROTOCOL,
             "submission_contract_version": SUBMISSION_VERSION, "submission_protocol": PROTOCOL,
@@ -471,6 +485,7 @@ class UnifiedSubmissionMixin:
             "state": self.state.value, "legal_agent_ids": ids, "pending_agent_id": self.pending_agent_id,
             "pending_relation_decision": self.pending_relation_decision.to_dict() if self.pending_relation_decision else None,
             "allowed_actions": allowed,
+            "worker_usage": usage_status,
             "action_field_requirements": {name: list(UNIFIED_ACTION_FIELDS[name]) for name in allowed if name in UNIFIED_ACTION_FIELDS},
             "legal_action_parameters": parameters, "graph_state": self._graph_state_snapshot(),
             "result_assessments": assessments,

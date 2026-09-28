@@ -28,12 +28,18 @@ from .director_timeline import TIMELINE_CONTEXT_MODES, director_context_mode
 from .model_network import model_proxy
 from .model_network import model_urlopen as urlopen
 from .qwen_compat import qwen_request_extra, response_content, response_policy_parts
+from .student_action_protocol import PROTOCOL as STUDENT_ACTION_PROTOCOL, response_text_parts
 from .webshop_budget import request_admission, request_budget_quote
+from .worker_usage_ledger import UsageDispatchStopped, active_worker_usage
 
 _ENDPOINT_FAILOVER_ACTIVE = ContextVar("endpoint_failover_active", default=False)
 _ENDPOINT_REQUEST_END = ContextVar("endpoint_request_end", default=None)
 _ENDPOINT_QUEUE_WAIT_CAP_S = ContextVar("endpoint_queue_wait_cap_s", default=None)
 _REQUEST_DATASET = ContextVar("request_dataset", default="")
+
+
+def current_request_dataset() -> str:
+    return _REQUEST_DATASET.get()
 
 
 @contextmanager
@@ -89,6 +95,17 @@ class RequestTokenCreditExceeded(RuntimeError):
         self.credit = credit
         self.budget = dict(budget or {})
         self.request_events = list(_current_request_events())
+
+
+class WorkerUsageDispatchStopped(RequestTokenCreditExceeded):
+    """The reported-usage policy stopped a new physical Worker request."""
+
+    def __init__(self, stopped: UsageDispatchStopped):
+        self.reason = stopped.reason
+        super().__init__(0, RequestTokenCredit(0), {
+            **stopped.status, "usage_stop_reason": stopped.reason,
+            "semantics": "reported_usage_threshold_v1", "admitted": False,
+        })
 
 
 _TOKEN_CREDIT: ContextVar[RequestTokenCredit | None] = ContextVar(
@@ -804,6 +821,18 @@ def _openai_completion_attempt(
         request_budget_cap_s=request_budget_cap_s,
         attempt=attempt,
     ) as slot:
+        usage_scope = active_worker_usage()
+        ledger_attempt = None
+        if usage_scope is not None:
+            ledger, agent_id, execution_id = usage_scope
+            try:
+                ledger_attempt = ledger.begin(
+                    route=config.route_name, agent_id=agent_id,
+                    execution_id=execution_id, request=request,
+                    model=str(request.get("model", "")), api_surface="chat_completions",
+                )
+            except UsageDispatchStopped as stopped:
+                raise WorkerUsageDispatchStopped(stopped) from stopped
         upstream_started = time.monotonic()
         try:
             if config.stream:
@@ -813,8 +842,18 @@ def _openai_completion_attempt(
                 response = _collect_chat_stream(stream, timeout_s=slot.timeout_s)
             else:
                 response = client.chat.completions.create(**request, timeout=slot.timeout_s)
+            if ledger_attempt is not None:
+                usage = getattr(response, "usage", None)
+                ledger.settle(
+                    ledger_attempt,
+                    input_tokens=getattr(usage, "prompt_tokens", None),
+                    output_tokens=getattr(usage, "completion_tokens", None),
+                    provider_response_id=str(getattr(response, "id", "") or ""),
+                )
             _validate_provider_completion(response, route=config.route_name)
         except Exception as exc:
+            if ledger_attempt is not None:
+                ledger.mark_unknown(ledger_attempt)
             # Provider clients expose several timeout exception classes.  If the
             # request consumed the shared hard/no-progress budget, normalize it
             # to the rollout deadline error so the caller persists a timeout
@@ -852,10 +891,16 @@ def _openai_completion_attempt(
             attempt=attempt,
         )
         # Persist known usage immediately, even if a later length-repair request fails.
+        response_usage = getattr(response, "usage", None)
         event["completion_usage"] = {
-            "token_in": int(getattr(response.usage, "prompt_tokens", 0) or 0),
-            "token_out": int(getattr(response.usage, "completion_tokens", 0) or 0),
+            "token_in": (getattr(response_usage, "prompt_tokens", None) if ledger_attempt
+                         else int(getattr(response_usage, "prompt_tokens", 0) or 0)),
+            "token_out": (getattr(response_usage, "completion_tokens", None) if ledger_attempt
+                          else int(getattr(response_usage, "completion_tokens", 0) or 0)),
         }
+        if ledger_attempt is not None:
+            event["worker_usage_attempt_id"] = ledger_attempt
+            event["worker_usage_status"] = ledger.status()
         if budget is not None:
             event["request_token_budget"] = budget
         if credit is not None:
@@ -922,10 +967,32 @@ def _openai_response_attempt(
         request_budget_cap_s=request_budget_cap_s,
         attempt=attempt,
     ) as slot:
+        usage_scope = active_worker_usage()
+        ledger_attempt = None
+        if usage_scope is not None:
+            ledger, agent_id, execution_id = usage_scope
+            try:
+                ledger_attempt = ledger.begin(
+                    route=config.route_name, agent_id=agent_id,
+                    execution_id=execution_id, request=request,
+                    model=str(request.get("model", "")), api_surface="responses",
+                )
+            except UsageDispatchStopped as stopped:
+                raise WorkerUsageDispatchStopped(stopped) from stopped
         upstream_started = time.monotonic()
         try:
             response = client.responses.create(**request, timeout=slot.timeout_s)
+            if ledger_attempt is not None:
+                usage = getattr(response, "usage", None)
+                ledger.settle(
+                    ledger_attempt,
+                    input_tokens=getattr(usage, "input_tokens", None),
+                    output_tokens=getattr(usage, "output_tokens", None),
+                    provider_response_id=str(getattr(response, "id", "") or ""),
+                )
         except Exception as exc:
+            if ledger_attempt is not None:
+                ledger.mark_unknown(ledger_attempt)
             _credit_failed_request(deadline, exc, slot.request_started_monotonic)
             if deadline is not None:
                 deadline.check("backend_request_failed")
@@ -957,6 +1024,9 @@ def _openai_response_attempt(
             upstream_elapsed_s=time.monotonic() - upstream_started,
             attempt=attempt,
         )
+        if ledger_attempt is not None:
+            event["worker_usage_attempt_id"] = ledger_attempt
+            event["worker_usage_status"] = ledger.status()
         if credit is not None:
             usage = getattr(response, "usage", None)
             event["completion_usage"] = {
@@ -1894,6 +1964,9 @@ class OpenAICompatibleBackend:
             item if isinstance(item, dict) else item.model_dump(exclude_none=True)
             for item in (getattr(response, "output", None) or [])
         ]
+        text_parts = []
+        if text_actions:
+            text, text_parts = response_text_parts(output_items, text)
         native_calls = []
         for item in output_items:
             if item.get("type") != "function_call":
@@ -1946,6 +2019,15 @@ class OpenAICompatibleBackend:
                     None if role_config.reasoning_effort is not None else role_config.temperature
                 ),
                 "max_output_tokens_sent": request.get("max_output_tokens"),
+                **({
+                    "text_action_protocol": STUDENT_ACTION_PROTOCOL,
+                    "response_id": str(getattr(response, "id", "") or ""),
+                    "response_text_parts": text_parts,
+                    "response_output_layout": [
+                        {key: item[key] for key in ("type", "role", "channel", "status") if key in item}
+                        for item in output_items
+                    ],
+                } if text_actions else {}),
             },
         )
         if deadline is not None:
@@ -2334,11 +2416,36 @@ class GeminiNativeBackend:
                     request_budget_cap_s=sequence_remaining_s,
                     attempt=attempt + 1,
                 ) as slot:
+                    usage_scope = active_worker_usage()
+                    ledger_attempt = None
+                    if usage_scope is not None:
+                        ledger, agent_id, execution_id = usage_scope
+                        try:
+                            ledger_attempt = ledger.begin(
+                                route=self.config.route_name, agent_id=agent_id,
+                                execution_id=execution_id, request=payload,
+                                model=str(payload.get("model", "")), api_surface="gemini",
+                            )
+                        except UsageDispatchStopped as stopped:
+                            raise WorkerUsageDispatchStopped(stopped) from stopped
                     upstream_started = time.monotonic()
-                    with urlopen(request, timeout=slot.timeout_s) as response:
-                        result = json.loads(response.read().decode("utf-8"))
-                    if isinstance(result, dict) and "error" in result:
-                        raise _GeminiPayloadError(result["error"])
+                    try:
+                        with urlopen(request, timeout=slot.timeout_s) as response:
+                            result = json.loads(response.read().decode("utf-8"))
+                        if isinstance(result, dict) and "error" in result:
+                            raise _GeminiPayloadError(result["error"])
+                        if ledger_attempt is not None:
+                            usage = (result.get("usageMetadata") or {}) if isinstance(result, dict) else {}
+                            ledger.settle(
+                                ledger_attempt,
+                                input_tokens=usage.get("promptTokenCount"),
+                                output_tokens=usage.get("candidatesTokenCount"),
+                                provider_response_id=str(result.get("responseId", "")),
+                            )
+                    except BaseException:
+                        if ledger_attempt is not None:
+                            ledger.mark_unknown(ledger_attempt)
+                        raise
                     _emit_request_event(
                         _request_success_event(
                             slot,

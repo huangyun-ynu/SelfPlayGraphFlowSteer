@@ -6,6 +6,11 @@ import os
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .hotpot_corrections import build as build_hotpot_corrections
+else:
+    from hotpot_corrections import build as build_hotpot_corrections
+
 ROOT = Path(os.environ.get("SPGFS_ROOT", Path(__file__).resolve().parents[2]))
 P10 = Path(os.environ.get("SPGFS_PROTOCOL10_ROOT", ROOT / "assets/protocol-v10-v6"))
 ALFWORLD_ROOT = Path(
@@ -174,11 +179,8 @@ def nq_open() -> list[dict[str, Any]]:
 
 
 def hotpotqa() -> list[dict[str, Any]]:
-    # Frozen FlowSteer public 128: never silently regenerate the former hash sample.
-    path = ROOT / "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl"
-    rows = read_jsonl(path)
-    if len(rows) != 128 or len({row["source_id"] for row in rows}) != 128:
-        raise ValueError("FlowSteer HotpotQA evaluation requires 128 unique rows")
+    # Reapply reviewed corrections from the frozen original; fail on source drift.
+    rows, _, _ = build_hotpot_corrections(ROOT)
     return rows
 
 
@@ -246,12 +248,11 @@ def main() -> None:
             "sha256": digest(path),
             "unique_source_rows": len({row["source_id"] for row in rows}),
         }
-    manifest["datasets"]["hotpotqa"].update(
-        selection="flowsteer_public_eval_128",
-        source_url="https://huggingface.co/datasets/beita6969/FlowSteer-Dataset/resolve/main/eval/hotpotqa.jsonl",
-        canonical_path="data/formal/eval/hotpotqa_flowsteer_public_128.jsonl",
-        source_sha256=digest(ROOT / "data/formal/sources/flowsteer/hotpotqa_eval_128.raw.jsonl"),
-    )
+    _, hotpot_data, hotpot_manifest = build_hotpot_corrections(ROOT)
+    (ROOT / hotpot_manifest["canonical_path"]).write_bytes(hotpot_data)
+    # Preserve --output directory/environment choices for the compatibility path.
+    hotpot_manifest["path"] = manifest["datasets"]["hotpotqa"]["path"]
+    manifest["datasets"]["hotpotqa"].update(hotpot_manifest)
     path = OUT / "static_eval_split_manifest.json"
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False, indent=2))

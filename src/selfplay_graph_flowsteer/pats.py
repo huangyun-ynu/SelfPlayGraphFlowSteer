@@ -19,7 +19,7 @@ import math
 import re
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any
 
 from .config import canonical_dataset_name
@@ -40,6 +40,7 @@ MODES = {"EXPAND", "REVISE", "COMPRESS", "FORCED_PRUNE"}
 class PatsConfig:
     enabled: bool = False
     director_prompt_variant: str = "v2.1"
+    director_prompt_variant_by_dataset: dict[str, str] = field(default_factory=dict)
     ema_alpha: float = 0.1
     revise_threshold: float = 0.3
     compress_threshold: float = 0.85
@@ -59,6 +60,9 @@ class PatsConfig:
 
         if self.director_prompt_variant not in DIRECTOR_PROMPT_VARIANTS:
             raise ValueError("unknown PATS Director prompt variant")
+        if any(not canonical_dataset_name(dataset) or variant not in DIRECTOR_PROMPT_VARIANTS
+               for dataset, variant in self.director_prompt_variant_by_dataset.items()):
+            raise ValueError("unknown dataset PATS Director prompt variant")
         if type(self.enabled) is not bool:
             raise ValueError("PATS enabled must be boolean")
         if not math.isfinite(self.ema_alpha) or not 0 < self.ema_alpha <= 1:
@@ -86,6 +90,27 @@ class PatsConfig:
             raise ValueError("PATS evidence capacity is smaller than admission requirements")
         if type(self.max_policy_lag) is not int or self.max_policy_lag < 0:
             raise ValueError("PATS max_policy_lag must be a nonnegative integer")
+
+    def variant_for_scope(self, scope: str) -> str:
+        if not self.director_prompt_variant_by_dataset:
+            return self.director_prompt_variant
+        dataset = canonical_dataset_name(json.loads(scope)[0])
+        return self.director_prompt_variant_by_dataset.get(dataset, self.director_prompt_variant)
+
+    def for_scope(self, scope: str) -> PatsConfig:
+        return replace(self, director_prompt_variant=self.variant_for_scope(scope),
+                       director_prompt_variant_by_dataset={})
+
+    def contract_hashes_by_dataset(self) -> dict[str, str]:
+        from .pats_semantics import contract_hash
+        return {dataset: contract_hash(variant)
+                for dataset, variant in sorted(self.director_prompt_variant_by_dataset.items())}
+
+    def semantic_contract_hash(self) -> str:
+        from .pats_semantics import contract_hash
+        default = contract_hash(self.director_prompt_variant)
+        scoped = self.contract_hashes_by_dataset()
+        return _digest({"default": default, "by_dataset": scoped}) if scoped else default
 
 
 def _json(value: Any) -> str:
@@ -451,14 +476,16 @@ class PatsController:
             "schema": SCHEMA,
             "selection_revision": "learned_first_v1",
             "semantic_gate_revision": SEMANTIC_REVISION,
-            "semantic_contract_sha256": contract_hash(self.config.director_prompt_variant),
+            "semantic_contract_sha256": self.config.semantic_contract_hash(),
+            "semantic_default_contract_sha256": contract_hash(self.config.director_prompt_variant),
+            "semantic_contract_sha256_by_dataset": self.config.contract_hashes_by_dataset(),
             "config": asdict(self.config),
             "step": state["step"],
             "run": state.get("run"),
             "scopes": {
                 key: {
                     **{k: value[k] for k in ("ema", "policy_snapshot", "mode")},
-                    "cards": filter_semantic_cards(self.store, key, value["cards"], self.config.director_prompt_variant),
+                    "cards": filter_semantic_cards(self.store, key, value["cards"], self.config.variant_for_scope(key)),
                 }
                 for key, value in sorted(state["scopes"].items())
             },
@@ -690,11 +717,11 @@ class PatsController:
                     from .pats_semantics import audit_semantic_cards, card_identity
 
                     original_identities = {
-                        card_identity(scope, card, self.config.director_prompt_variant) for card in record["cards"]
+                        card_identity(scope, card, self.config.variant_for_scope(scope)) for card in record["cards"]
                     }
                     changed_cards = [
                         card for card in revised
-                        if card_identity(scope, card, self.config.director_prompt_variant) not in original_identities
+                        if card_identity(scope, card, self.config.variant_for_scope(scope)) not in original_identities
                     ]
                     if changed_cards:
                         review_stage = "semantic_validation"
@@ -703,7 +730,7 @@ class PatsController:
                             token_counter=self.token_counter,
                             max_input_tokens=self.config.max_review_input_tokens,
                             run=run, step=step,
-                            prompt_variant=self.config.director_prompt_variant,
+                            prompt_variant=self.config.variant_for_scope(scope),
                         )
                         semantic_calls += semantic["checker_calls"]
                         review["semantic_check"] = semantic
@@ -738,7 +765,8 @@ class PatsController:
                 "refiner_calls": calls,
                 "semantic_checker_calls": semantic_calls,
                 "semantic_validator_revision": SEMANTIC_REVISION,
-                "semantic_contract_sha256": contract_hash(self.config.director_prompt_variant),
+                "semantic_contract_sha256": self.config.semantic_contract_hash(),
+                "semantic_contract_sha256_by_dataset": self.config.contract_hashes_by_dataset(),
                 "reviews": reviews,
             }
             with self.store.connect() as db:

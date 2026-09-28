@@ -40,6 +40,12 @@ def prepare(row, args):
                                                 "PIP_CONFIG_FILE": os.devnull,
                                                 "PIP_EXTRA_INDEX_URL": "", "PIP_INDEX_URL": args.index_url})
             python = directory / "venv/bin/python"
+            if recipe.native_packages:
+                if not args.micromamba:
+                    raise ValueError("Native library recipes require --micromamba /path/to/micromamba")
+                run([args.micromamba, "create", "-y", "--override-channels", "-c", "conda-forge",
+                     "--root-prefix", str(args.env_root / "mamba"), "-p", str(directory / "native"),
+                     *recipe.native_packages])
             if python.exists():
                 installed_version = subprocess.check_output(
                     [str(python), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"], text=True).strip()
@@ -101,7 +107,7 @@ def main():
     parser.add_argument("--repo-cache", type=Path, required=True)
     parser.add_argument("--env-root", type=Path, required=True)
     parser.add_argument("--uv", default="uv")
-    parser.add_argument("--micromamba", help="Required for legacy Python 3.6 repositories")
+    parser.add_argument("--micromamba", help="Required for Python 3.6 or native library recipes")
     parser.add_argument("--index-url", default="https://pypi.org/simple")
     parser.add_argument("--repo", action="append")
     parser.add_argument("--version")

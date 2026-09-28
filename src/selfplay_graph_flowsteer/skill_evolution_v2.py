@@ -1032,7 +1032,11 @@ class DirectorSkillBankV2(SolverSkillBank):
             if "semantic_gate_revision" in self._pats:
                 manifest.update(
                     semantic_gate_revision=self._pats["semantic_gate_revision"],
-                    semantic_contract_sha256=self._pats["semantic_contract_sha256"],
+                    semantic_contract_sha256=self._pats.get(
+                        "semantic_contract_sha256_by_dataset", {}
+                    ).get(json.loads(scope)[0], self._pats.get(
+                        "semantic_default_contract_sha256", self._pats["semantic_contract_sha256"]
+                    )),
                 )
             return selected, context, manifest
         if tokenizer is None:
@@ -1147,8 +1151,9 @@ def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
         candidates = [
             record for record in scoped["cards"] if record.get("provenance") != "human_seed"
         ]
-        approvals = semantic_approvals(store, scope, candidates, config.pats.director_prompt_variant)
-        pending = [record for record in candidates if card_identity(scope, record, config.pats.director_prompt_variant) not in approvals]
+        variant = config.pats.variant_for_scope(scope)
+        approvals = semantic_approvals(store, scope, candidates, variant)
+        pending = [record for record in candidates if card_identity(scope, record, variant) not in approvals]
         if not pending or checker_calls >= config.pats.max_reviews_per_cycle:
             continue
         review = audit_semantic_cards(
@@ -1160,7 +1165,7 @@ def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
             max_input_tokens=config.pats.max_review_input_tokens,
             run=str(cycle_dir.parent.resolve()),
             step=step if step is not None else state["step"] + 1,
-            prompt_variant=config.pats.director_prompt_variant,
+            prompt_variant=variant,
         )
         reviews.append({"scope": scope, **review})
         checker_calls += review["checker_calls"]
@@ -1171,7 +1176,8 @@ def _semantic_preflight(store, config, cycle_dir, *, backend, tokenizer, step):
         receipt = {
             "event": "precollection_semantic_review",
             "semantic_gate_revision": SEMANTIC_REVISION,
-            "semantic_contract_sha256": contract_hash(config.pats.director_prompt_variant),
+            "semantic_contract_sha256": config.pats.semantic_contract_hash(),
+            "semantic_contract_sha256_by_dataset": config.pats.contract_hashes_by_dataset(),
             "run": str(cycle_dir.parent.resolve()),
             "collection_cycle": cycle_dir.name,
             "next_collection_step": step,
@@ -1303,7 +1309,7 @@ def _validate_pats_snapshot(config, snapshot):
     if enabled:
         from .pats_semantics import contract_hash
 
-        if frozen.get("semantic_contract_sha256") != contract_hash(config.pats.director_prompt_variant):
+        if frozen.get("semantic_contract_sha256") != config.pats.semantic_contract_hash():
             raise ValueError("frozen PATS runtime contract changed; use a fresh collection")
 
 

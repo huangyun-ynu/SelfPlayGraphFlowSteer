@@ -1,0 +1,111 @@
+{
+  "schema": "spgfs-formal-swe-hotpot-promotion-v1",
+  "created_at": "2026-09-28T22:06:06.355502+08:00",
+  "state": "promoted",
+  "formal_config": "configs/formal_training.toml",
+  "formal_entrypoint": "scripts/formal/run_experiment.sh",
+  "swe": {
+    "baseline": "swe-65of128-20260928",
+    "resolved": 65,
+    "total": 128,
+    "accuracy": 0.5078125,
+    "dataset_sha256": "c56ba020f9bbf791c1e324cf71517c446fb53405a4436ed40c5398b2e17ffd38",
+    "submission_protocol": "unified_task_result_v1",
+    "director_prompt": "v3",
+    "worker_endpoint_pool": [
+      "gpt_student",
+      "gpt"
+    ],
+    "worker_concurrency": {
+      "gpt_student": 10,
+      "gpt": 5
+    },
+    "worker_start_threshold": 350000,
+    "remote_verifier_concurrency": 4,
+    "evaluated_trajectory_workers": 15,
+    "source_snapshot_manifest_sha256": "c6ad5541d5f633e648f6dd322114ef4150640a9c823c1eef2130a7f764f5219b"
+  },
+  "hotpot": {
+    "baseline": "hotpot-8672-20260928",
+    "strict_em_correct": 111,
+    "total": 128,
+    "strict_em": 0.8671875,
+    "contract": "hotpot_evidence_first_v1",
+    "director_prompt": "v2.2",
+    "dataset_version": "flowsteer-hotpotqa-corrected-v1",
+    "dataset_sha256": "6e4096785ad5b869b6541c868beb25ad7f157cc64ae8968c0db3cbe2f185e27c",
+    "provenance": "experiment_versions/promotions/hotpot-8672-20260928/validation.json"
+  },
+  "formal_training": {
+    "trajectory_workers": 24,
+    "rollouts_per_task": 5,
+    "pats_enabled": true,
+    "protocol_overrides": {
+      "swe_bench": "unified_task_result_v1"
+    },
+    "default_director_prompt": "v2.2",
+    "new_training_started": false,
+    "new_model_api_calls": 0,
+    "metrics_are_frozen_evaluation_results": true
+  },
+  "retired_local_backup": "state/formal-training-promotions/swe-65of128-20260928/before",
+  "formal_source_sha256_file": "experiment_versions/reports/swe-65of128-20260928/formal-source-sha256.json",
+  "formal_config_sha256": "6c1a29fe67d0d57537515eb3d282082f1086dc88e8b3dc770e517ab6b90d81b0",
+  "unimplemented_recovery_design": true,
+  "verification": {
+    "worker_recovery_prompt_hashes_match": {
+      "swe_bench": true,
+      "hotpotqa": true
+    },
+    "director_prompt_hashes_match": true,
+    "formal_and_local_config_valid": true,
+    "hotpot_data_check": true,
+    "mixed_protocol_training_batch_validation": "passed",
+    "dataset_scoped_pats_semantic_freeze": "passed",
+    "swe_endpoint_pool_eco_exclusion": "passed",
+    "combined_suite_initial": {
+      "total": 502,
+      "passed": 499,
+      "failed": 3,
+      "duration_s": 394.92,
+      "failures": [
+        {
+          "test": "test_swe_pool_preflight_rejects_eco_only_and_keeps_scoped_members",
+          "resolution": "corrected test fixture to use an independently qualified judge; passed in final integration suite"
+        },
+        {
+          "test": "formal_training_h200.local.toml",
+          "resolution": "retired private historical config; retained v2.1, excluded from active release validation"
+        },
+        {
+          "test": "formal_eval_h200.local.toml",
+          "resolution": "retired private historical config; retained v2.1, excluded from active release validation"
+        }
+      ]
+    },
+    "final_integration_suite": {
+      "passed": 78,
+      "failed": 0,
+      "duration_s": 1.01,
+      "modules": [
+        "test_swe_formal_promotion",
+        "test_pats_integration",
+        "test_webshop_budget_capability",
+        "test_webshop_dataset_index",
+        "test_webshop_fact_projection",
+        "test_webshop_label_audit",
+        "test_webshop_public_evidence",
+        "test_webshop_purchase_review"
+      ]
+    },
+    "active_formal_suite": "24 passed, 2 deselected in 0.46s",
+    "unique_relevant_tests_passed": 564,
+    "staged_credential_scan": "no configured credential values or private keys found",
+    "director_health_http_status": 200,
+    "shell_syntax": "passed",
+    "new_training_started": false,
+    "paid_inference_started": false
+  },
+  "verified_at": "2026-09-28T22:12:18.000934+08:00",
+  "formal_source_manifest_sha256": "c7c04488cb2becd467aa9bf296803ef486b14842dd1b787f7ebcdb81de1bbe19"
+}

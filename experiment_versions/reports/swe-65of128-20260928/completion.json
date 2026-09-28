@@ -1,0 +1,15 @@
+{
+  "expected": 128,
+  "persisted": 128,
+  "official_resolved": 65,
+  "official_unresolved": 39,
+  "outcome_counts": {
+    "scored": 104,
+    "unsubmitted_unknown": 9,
+    "policy_failure": 15
+  },
+  "benchmark_exit_code": 0,
+  "cloud_shutdown_confirmed": true,
+  "director_stop_requested": false,
+  "completed_at": "2026-09-28T21:33:56.370392+08:00"
+}

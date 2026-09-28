@@ -20,6 +20,10 @@ from .backend_failures import EnvironmentServiceError
 from .observability import TaskSpec, VerificationResult
 from .webshop_identity import visible_product_asin
 from .webshop_profiles import M02_PROFILE
+from .webshop_evidence import (
+    EVIDENCE_PROFILES, REVIEW_PROFILES, DEFERRED_ANNOTATION_PROFILES,
+    PublicEvidenceLedger, extend_tool_schema,
+)
 
 _DIRECT_OPENER = build_opener(ProxyHandler({}))
 
@@ -253,6 +257,10 @@ class WebShopSessionLifecycle:
     _committer_agent: str | None = None
     _purchase_committed_by: str | None = None
     _environment_fingerprint: str = ""
+    _public_evidence: PublicEvidenceLedger | None = None
+    _purchase_review: dict[str, Any] | None = None
+    _review_yielded: bool = False
+    _execution_generation: int = 0
     _lock: threading.RLock = field(default_factory=threading.RLock)
 
     def bind_task(self, task: TaskSpec) -> None:
@@ -281,6 +289,10 @@ class WebShopSessionLifecycle:
                 if status.get("status") != "ok":
                     raise RuntimeError("WebShop service health check failed")
             self._task = task
+            self._public_evidence = (
+                PublicEvidenceLedger(task.prompt)
+                if self.compatibility_profile in EVIDENCE_PROFILES else None
+            )
             self._results = {}
             self._transaction_journals = {}
             self._pending_sessions = {}
@@ -359,14 +371,17 @@ class WebShopSessionLifecycle:
                 )
             ):
                 return {"eligible": False, "reason": "no_live_output_owner_session"}
-            remaining = state.get("remaining_steps")
-            if type(remaining) is not int:
+            from .webshop_steps import environment_step_capacity
+
+            limit_kind, remaining = environment_step_capacity(state)
+            if limit_kind == "unknown":
                 return {"eligible": False, "reason": "official_remaining_steps_unknown"}
             return {
                 "eligible": True,
                 "reason": "same_session_output_owner",
                 "session_id": self._active_session,
-                "official_remaining_steps": max(0, remaining),
+                "official_remaining_steps": remaining,
+                "environment_step_limit_kind": limit_kind,
             }
 
     def runtime_transaction_journal_for(self, agent_id: str) -> dict[str, Any] | None:
@@ -397,6 +412,7 @@ class WebShopSessionLifecycle:
                 )
             if self._execution_open:
                 raise RuntimeError("WebShop lifecycle already has an active Worker execution")
+            self._execution_generation += 1
             if self._active_session is not None:
                 self._execution_open = True
                 state = dict(self._results.get(agent_id, {}))
@@ -414,11 +430,17 @@ class WebShopSessionLifecycle:
                 state["_runtime_transaction_journal"] = self._transaction_journals.setdefault(
                     agent_id, {}
                 )
+                if self._purchase_review:
+                    state["purchase_review"] = self._public_purchase_review()
                 return state
             payload = self.client.create_session(_trusted_goal_id(self._task), seed=seed)
             session_id = str(payload.get("session_id", "")).strip()
             if not session_id:
                 raise RuntimeError("WebShop session creation returned no session_id")
+            public_instruction = " ".join(str(payload.get("public_task_statement", "")).split())
+            if public_instruction and public_instruction not in " ".join(self._task.prompt.split()):
+                self.client.close_session(session_id)
+                raise ValueError("WebShop public task text does not match the environment goal index; repair the dataset mapping before inference")
             self._active_agent = agent_id
             self._owner_agent = agent_id
             self._active_session = session_id
@@ -463,13 +485,20 @@ class WebShopSessionLifecycle:
             # can continue from the exact public environment state.
             self._execution_open = False
 
-    def search(self, query: str) -> dict[str, Any]:
+    def search(self, query: str, *, decision: object = None) -> dict[str, Any]:
         with self._lock:
             if self._purchase_committed_by is not None:
                 return self._committed_result()
             session_id, agent_id = self._active()
+            decision_feedback = None
+            if self._public_evidence is not None:
+                self._public_evidence, decision_feedback = self._decision_update(
+                    decision, self._results.get(agent_id, {}), is_purchase=False)
+                self._public_evidence.last_query = query
             self._active_pending_target = None
             result = self._bounded(self._resource_request(agent_id, self.client.search, session_id, query))
+            if decision_feedback:
+                result["decision_feedback"] = decision_feedback
             self._append_env_feedback(result, f"search[{query}]")
             self._results[agent_id] = result
             return result
@@ -480,6 +509,7 @@ class WebShopSessionLifecycle:
         *,
         purchase_evidence: object = None,
         state_version: object = None,
+        decision: object = None,
     ) -> dict[str, Any]:
         with self._lock:
             if self._purchase_committed_by is not None:
@@ -507,10 +537,22 @@ class WebShopSessionLifecycle:
             )
             is_purchase = bool(target and str(target.get("kind", "")) == "purchase")
             validated_purchase_evidence: dict[str, Any] | None = None
+            updated_evidence, decision_feedback = self._decision_update(decision, current, is_purchase=is_purchase)
             if is_purchase:
-                validated_purchase_evidence, rejection = _validate_purchase_evidence(
-                    purchase_evidence
-                )
+                if updated_evidence is not None:
+                    validated_purchase_evidence = updated_evidence.purchase(purchase_evidence, current)
+                    review = self._purchase_review_rejection(validated_purchase_evidence, purchase_evidence)
+                    if review is not None:
+                        raise ValueError(review["message"])
+                    if self.compatibility_profile in REVIEW_PROFILES and self._purchase_review:
+                        validated_purchase_evidence["review"] = {
+                            "receipt": purchase_evidence.get("review_receipt"),
+                            "reason": purchase_evidence.get("review_reason"),
+                            "owner": agent_id, "execution_generation": self._execution_generation,
+                        }
+                    rejection = None
+                else:
+                    validated_purchase_evidence, rejection = _validate_purchase_evidence(purchase_evidence)
                 if rejection is not None:
                     rejected = dict(current)
                     rejected.pop("action_effect", None)
@@ -529,6 +571,9 @@ class WebShopSessionLifecycle:
                     )
                     self._results[agent_id] = rejected
                     return dict(rejected)
+            if updated_evidence is not None:
+                self._public_evidence = updated_evidence
+                current = {**current, "public_decision": updated_evidence.context(current)}
             if is_purchase and agent_id != self._committer_agent:
                 if not self.stage_purchases:
                     raise PermissionError(
@@ -567,6 +612,8 @@ class WebShopSessionLifecycle:
                 return dict(staged)
             self._active_pending_target = None
             result = self._bounded(self._resource_request(agent_id, self.client.click, session_id, target_id))
+            if decision_feedback:
+                result["decision_feedback"] = decision_feedback
             # Use the resolved public label, never opaque transport IDs or goal data.
             label = str(target.get("label", "")) if target else ""
             kind = str(target.get("kind", "")) if target else ""
@@ -597,6 +644,8 @@ class WebShopSessionLifecycle:
         target_id: object,
         *,
         state_version: object = None,
+        decision: object = None,
+        purchase_evidence: object = None,
     ) -> dict[str, Any] | None:
         """Validate the current public action surface without mutating it."""
 
@@ -633,7 +682,114 @@ class WebShopSessionLifecycle:
                     ),
                     "details": _webshop_current_action_surface(current),
                 }
+            is_purchase = any(item.get("target_id") == resolved and item.get("kind") == "purchase"
+                              for item in current.get("valid_subactions", []) if isinstance(item, dict))
+            return self._evidence_preflight(current, decision, purchase_evidence, is_purchase=is_purchase)
+
+    def preflight_search(self, decision: object) -> dict[str, Any] | None:
+        with self._lock:
+            _session_id, agent_id = self._active()
+            return self._evidence_preflight(self._results.get(agent_id, {}), decision, None)
+
+    def _evidence_preflight(self, current, decision, purchase_evidence, *, is_purchase=False):
+        if self._public_evidence is None:
             return None
+        try:
+            updated = self._public_evidence.updated(decision, current)
+            if is_purchase:
+                proposal = updated.purchase(purchase_evidence, current)
+                review = self._purchase_review_rejection(proposal, purchase_evidence)
+                if review is not None:
+                    return review
+        except (ValueError, KeyError, TypeError) as exc:
+            if not is_purchase and self.compatibility_profile in DEFERRED_ANNOTATION_PROFILES:
+                return None  # Valid navigation/search proceeds; annotation rejection is reported after it.
+            return {"code": "webshop_public_evidence_invalid", "message": str(exc),
+                    "details": {**_webshop_current_action_surface(current),
+                                "public_decision": self._public_evidence.context(current)}}
+        return None
+
+    def _decision_update(self, decision, state, *, is_purchase):
+        if self._public_evidence is None:
+            return None, None
+        try:
+            return self._public_evidence.updated(decision, state), None
+        except (ValueError, KeyError, TypeError) as exc:
+            if is_purchase or self.compatibility_profile not in DEFERRED_ANNOTATION_PROFILES:
+                raise
+            # A faulty optional annotation must not prevent a legal information
+            # gathering action. Keep valid public requirements, reject the bad
+            # assessment explicitly, and enforce the full contract on Buy Now.
+            ledger = self._public_evidence
+            if isinstance(decision, dict) and decision.get("requirements"):
+                try:
+                    ledger = ledger.updated({"requirements": decision["requirements"]}, state)
+                except (ValueError, KeyError, TypeError):
+                    pass
+            return ledger, {"assessment_accepted": False, "message": str(exc),
+                            "environment_action_executed": True,
+                            "next": "Correct the rejected assessment on a later call; Buy Now still requires valid evidence for every requirement."}
+
+    def _purchase_review_rejection(self, proposal, evidence):
+        if self.compatibility_profile not in REVIEW_PROFILES:
+            return None
+        required = {r["id"] for r in proposal["requirements"] if r["strength"] == "required"}
+        risks = [c for c in proposal["checks"] if c["requirement_id"] in required and c["status"] != "supported"]
+        if not risks:
+            return None
+        digest = hashlib.sha256(json.dumps(
+            {"proposal": {k: v for k, v in proposal.items() if k != "accept_unresolved_reason"},
+             "owner": self._owner_agent, "session": self._active_session},
+            sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        review = self._purchase_review or {}
+        if (review.get("receipt") == digest and evidence.get("review_receipt") == digest
+                and str(evidence.get("review_reason", "")).strip()
+                and self._execution_generation > review.get("requires_after_generation", -1)):
+            return None
+        return {"code": "webshop_purchase_review_required",
+                "message": ("Review the unresolved required checks before staging. The same owner may inspect "
+                            "more evidence, select options or change candidate. For a final partial purchase, "
+                            "copy the current review_receipt and provide review_reason after review. "
+                            "No environment action or purchase has happened."),
+                "details": {"proposal": proposal, "review_receipt": digest,
+                            "required_risks": risks}}
+
+    def defer_purchase_review(self, arguments, *, yield_to_director: bool) -> dict:
+        """Persist a public proposal after read-only preflight, without staging/stepping."""
+        with self._lock:
+            _session_id, agent_id = self._active()
+            if self.compatibility_profile not in REVIEW_PROFILES or self._public_evidence is None:
+                raise ValueError("purchase review is disabled")
+            current = self._results[agent_id]
+            updated = self._public_evidence.updated(arguments.get("decision"), current)
+            evidence = arguments.get("purchase_evidence")
+            proposal = updated.purchase(evidence, current)
+            rejection = self._purchase_review_rejection(proposal, evidence)
+            if rejection is None:
+                raise ValueError("purchase does not require another review")
+            previous = self._purchase_review or {}
+            awaiting_resume = self._execution_generation <= previous.get("requires_after_generation", -1)
+            should_yield = bool(awaiting_resume or (yield_to_director and not self._review_yielded))
+            self._purchase_review = {
+                "proposal": proposal, "receipt": rejection["details"]["review_receipt"],
+                "requires_after_generation": self._execution_generation if should_yield else -1,
+                "yield_to_director": should_yield,
+            }
+            self._review_yielded = self._review_yielded or should_yield
+            self._public_evidence = updated
+            current = {**current, "public_decision": updated.context(current),
+                       "purchase_review": self._public_purchase_review(), "action_executed": False}
+            current.pop("action_effect", None)
+            current.pop("env_feedback", None)
+            self._results[agent_id] = current
+            return copy.deepcopy(current)
+
+    def _public_purchase_review(self):
+        review = self._purchase_review or {}
+        return {"status": "proposal_before_staging", "proposal": copy.deepcopy(review.get("proposal")),
+                "review_receipt": review.get("receipt"),
+                "yield_to_director": review.get("yield_to_director", False),
+                "can_acknowledge": self._execution_generation > review.get("requires_after_generation", -1)}
 
     def commit_ready_agents(self) -> tuple[str, ...]:
         with self._lock:
@@ -733,6 +889,10 @@ class WebShopSessionLifecycle:
             self._transaction_journals = {}
             self._visible_action_history = []
             self._task = None
+            self._public_evidence = None
+            self._purchase_review = None
+            self._review_yielded = False
+            self._execution_generation = 0
 
     def _append_env_feedback(
         self,
@@ -870,7 +1030,7 @@ class WebShopSessionLifecycle:
     def _bounded(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = dict(payload)
         result.pop("session_id", None)
-        if self.compatibility_profile == M02_PROFILE:
+        if self.compatibility_profile == M02_PROFILE or self.compatibility_profile in EVIDENCE_PROFILES:
             # The newer sidecar adds Native protocol metadata; M02 never saw it.
             result.pop("raw_available_actions", None)
             if isinstance(result.get("valid_subactions"), list):
@@ -930,6 +1090,21 @@ class WebShopSessionLifecycle:
         else:
             result["page_text"] = page_text
             result["observation_truncated"] = False
+        if self._public_evidence is not None:
+            # Every actual environment transition invalidates the old proposal.
+            self._purchase_review = None
+            self._public_evidence.observe(result)
+            result["public_decision"] = self._public_evidence.context(result)
+            if self.compatibility_profile in DEFERRED_ANNOTATION_PROFILES:
+                result["public_decision"]["annotation_policy"] = (
+                    "Invalid annotations on search/navigation are rejected with decision_feedback while the legal "
+                    "environment action proceeds. Correct the assessment later. Buy Now always enforces full evidence validation."
+                )
+            if self.compatibility_profile in REVIEW_PROFILES:
+                result["public_decision"]["review_policy"] = (
+                    "Unresolved required checks trigger pre-purchase review. A proposal is not staged. "
+                    "The Director can revise the same owner; no second environment is opened."
+                )
         return result
 
 
@@ -1158,12 +1333,14 @@ class WebShopSearchTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
+        schema = {
             "type": "object",
             "properties": {"query": {"type": "string", "minLength": 1}},
             "required": ["query"],
             "additionalProperties": False,
         }
+        return (extend_tool_schema(schema, purchase=False)
+                if self.lifecycle.compatibility_profile in EVIDENCE_PROFILES else schema)
 
     def execute(self, arguments: dict[str, Any]) -> str:
         query = arguments.get("query")
@@ -1172,7 +1349,14 @@ class WebShopSearchTool:
         query = query.strip()
         if len(query) > self.max_query_chars:
             raise ValueError(f"webshop_search query exceeds {self.max_query_chars} characters")
+        if self.lifecycle.compatibility_profile in EVIDENCE_PROFILES:
+            return json.dumps(self.lifecycle.search(query, decision=arguments.get("decision")), ensure_ascii=False)
         return json.dumps(self.lifecycle.search(query), ensure_ascii=False)
+
+    def preflight(self, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        if self.lifecycle.compatibility_profile in EVIDENCE_PROFILES:
+            return self.lifecycle.preflight_search(arguments.get("decision"))
+        return None
 
 
 @dataclass(frozen=True)
@@ -1197,7 +1381,7 @@ class WebShopClickTool:
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return {
+        schema = {
             "type": "object",
             "properties": {
                 "target_id": {"type": "string", "minLength": 1},
@@ -1231,6 +1415,8 @@ class WebShopClickTool:
             "required": ["target_id"],
             "additionalProperties": False,
         }
+        return (extend_tool_schema(schema, purchase=True, review=self.lifecycle.compatibility_profile in REVIEW_PROFILES)
+                if self.lifecycle.compatibility_profile in EVIDENCE_PROFILES else schema)
 
     def execute(self, arguments: dict[str, Any]) -> str:
         target_id = arguments.get("target_id")
@@ -1241,6 +1427,8 @@ class WebShopClickTool:
                 target_id.strip(),
                 purchase_evidence=arguments.get("purchase_evidence"),
                 state_version=arguments.get("state_version"),
+                **({"decision": arguments.get("decision")}
+                   if self.lifecycle.compatibility_profile in EVIDENCE_PROFILES else {}),
             ),
             ensure_ascii=False,
         )
@@ -1251,7 +1439,12 @@ class WebShopClickTool:
         return self.lifecycle.preflight_click(
             arguments.get("target_id"),
             state_version=arguments.get("state_version"),
+            **({"decision": arguments.get("decision"), "purchase_evidence": arguments.get("purchase_evidence")}
+               if self.lifecycle.compatibility_profile in EVIDENCE_PROFILES else {}),
         )
+
+    def defer_purchase_review(self, arguments, *, yield_to_director):
+        return self.lifecycle.defer_purchase_review(arguments, yield_to_director=yield_to_director)
 
 
 class WebShopEnvironmentVerifier:
@@ -1266,9 +1459,8 @@ class WebShopEnvironmentVerifier:
         score = float(result.get("reward", 0.0))
         score = min(1.0, max(0.0, score))
         # WebShop's standard harsh success metric is a completed purchase with
-        # reward 1.0.  Exact target-ASIN matching is a stricter diagnostic that
-        # the upstream benchmark records separately and must not replace the
-        # standard success rate.
+        # reward 1.0. The legacy exact_success field aliases reward >= 1; it
+        # does not mean string EM or matching a particular target ASIN.
         passed = bool(result.get("purchased", False)) and score >= 1.0
         detail = {
             key: result.get(key)

@@ -16,7 +16,9 @@ from .backend_failures import (
     BackendRequestError,
     classify_backend_failure,
 )
-from .llm import _logical_request_budget_s, endpoint_failover_scope
+from .llm import (WorkerUsageDispatchStopped, _logical_request_budget_s,
+                  current_request_dataset, endpoint_failover_scope)
+from .config import canonical_dataset_name
 
 
 class EndpointPoolBackend:
@@ -29,6 +31,7 @@ class EndpointPoolBackend:
         pool_retry_attempts: int = 0,
         retry_backoff_s: float = 0.0,
         member_queue_wait_s: float = 0.5,
+        members_by_dataset: dict[str, tuple[str, ...]] | None = None,
     ):
         if not members:
             raise ValueError("endpoint pool must not be empty")
@@ -45,6 +48,15 @@ class EndpointPoolBackend:
             hashlib.sha256(signature.encode()).hexdigest() + ".counter"
         )
         self._deadline = ContextVar(f"endpoint_pool_deadline_{id(self)}", default=None)
+        self.dataset_pools = {}
+        for dataset, selected in (members_by_dataset or {}).items():
+            if not selected or len(set(selected)) != len(selected) or set(selected) - members.keys():
+                raise ValueError("dataset endpoint pool must select unique configured members")
+            self.dataset_pools[canonical_dataset_name(dataset)] = EndpointPoolBackend(
+                name, {key: members[key] for key in selected}, state_dir,
+                pool_retry_attempts=pool_retry_attempts, retry_backoff_s=retry_backoff_s,
+                member_queue_wait_s=member_queue_wait_s,
+            )
 
     def _audit(self, event):
         # Persist failures even when no completed Worker result reaches the runner.
@@ -53,6 +65,9 @@ class EndpointPoolBackend:
             handle.write(json.dumps(event, ensure_ascii=False) + "\n")
 
     def generate(self, messages, **kwargs):
+        scoped = self.dataset_pools.get(current_request_dataset())
+        if scoped is not None:
+            return scoped.generate(messages, **kwargs)
         self.counter_path.parent.mkdir(parents=True, exist_ok=True)
         with self.counter_path.open("a+") as counter:
             fcntl.flock(counter, fcntl.LOCK_EX)
@@ -92,7 +107,14 @@ class EndpointPoolBackend:
                 request_deadline = scope_request(
                     kwargs.get("role", "worker"), first_config.timeout_s
                 )
-        budget = _logical_request_budget_s(first_config, request_deadline)
+        # Bound a pooled call by its slowest configured member. Using only the
+        # first member's timeout leaves no time to fail over when that member
+        # consumes its full timeout (for example, GPT=240s and student=600s).
+        member_budgets = [
+            _logical_request_budget_s(backend.config, request_deadline)
+            for _, backend in ordered
+        ]
+        budget = max(member_budgets)
         end = started + budget
         request_id = uuid.uuid4().hex
         attempts = []
@@ -102,7 +124,7 @@ class EndpointPoolBackend:
             round_members = (
                 ordered[pool_round % len(ordered) :] + ordered[: pool_round % len(ordered)]
             )
-            for key, backend in round_members:
+            for member_index, (key, backend) in enumerate(round_members):
                 # Failed waits do not consume the next member's request budget.
                 if getattr(deadline, "exclude_failed_request_time", False):
                     end = time.monotonic() + _logical_request_budget_s(
@@ -112,6 +134,18 @@ class EndpointPoolBackend:
                     deadline.check("endpoint_pool_failover")
                 if time.monotonic() >= end and last_error is not None:
                     break
+                attempt_started = time.monotonic()
+                request_remaining_s = max(0.0, end - attempt_started)
+                # In benchmark paths without failed-request time credit, share
+                # the bounded pool window across the remaining endpoints in
+                # this round. A quick queue failure leaves almost all of the
+                # window for the next member; a stalled request cannot consume
+                # the fallback member's reserved time.
+                if getattr(deadline, "exclude_failed_request_time", False):
+                    attempt_end = end
+                else:
+                    members_left = len(round_members) - member_index
+                    attempt_end = attempt_started + request_remaining_s / members_left
                 # Only completed canonical messages cross endpoints. Tools execute
                 # outside generate(), so failover cannot replay an environment action.
                 replay = [
@@ -124,7 +158,6 @@ class EndpointPoolBackend:
                     else {k: v for k, v in message.items() if k != "_endpoint_pool_member"}
                     for message in messages
                 ]
-                attempt_started = time.monotonic()
                 event = dict(
                     request_id=request_id,
                     logical_route=self.name,
@@ -133,7 +166,8 @@ class EndpointPoolBackend:
                     attempt=len(attempts) + 1,
                     request_role=kwargs.get("role", ""),
                     timestamp=time.time(),
-                    request_remaining_s=max(0.0, end - attempt_started),
+                    request_remaining_s=request_remaining_s,
+                    endpoint_attempt_budget_s=max(0.0, attempt_end - attempt_started),
                 )
                 try:
                     # A saturated member must not hold the logical request in
@@ -141,9 +175,13 @@ class EndpointPoolBackend:
                     # Give short bursts a bounded grace period, then surface a
                     # retryable local queue timeout and immediately fail over.
                     with endpoint_failover_scope(
-                        end, queue_wait_cap_s=self.member_queue_wait_s
+                        attempt_end, queue_wait_cap_s=self.member_queue_wait_s
                     ):
                         response = backend.generate(replay, **kwargs)
+                except WorkerUsageDispatchStopped:
+                    # A question-wide stop is not a member outage and must not
+                    # rotate through the pool or open a route circuit.
+                    raise
                 except Exception as exc:
                     failure = classify_backend_failure(exc, stage="endpoint_pool", route=key)
                     if failure.backend_failure and hasattr(deadline, "record_failed_request"):
@@ -228,3 +266,5 @@ class EndpointPoolBackend:
         self._deadline.set(deadline)
         for _, backend in self.members:
             backend.set_deadline_context(deadline)
+        for scoped in self.dataset_pools.values():
+            scoped._deadline.set(deadline)

@@ -660,6 +660,16 @@ def _recovery_decision(
             "isolated_swe_verifier_transport_failure",
             infrastructure_incident=True,
         )
+    if (
+        dataset_key == "swe_bench"
+        and isinstance(swe_failure, dict)
+        and swe_failure.get("status") in {"infrastructure_error", "timeout", "cancelled"}
+        and swe_failure.get("detail") not in {"ssh_exit_255", "ssh_request_timeout"}
+        and not metadata.get("infrastructure_failure")
+    ):
+        # The official verifier supplied no pass/fail label. Keep this one
+        # rollout for audit, but do not abort unrelated collected trajectories.
+        return RecoveryDecision(RecoveryScope.NONE, "isolated_swe_verifier_unscored")
     if bool(metadata.get("infrastructure_failure")) or bool(
         metadata.get("swe_infrastructure_failure")
     ):
@@ -1431,6 +1441,26 @@ def adaptive_result_to_rollout(
         "swe-bench",
         "swebench",
     }
+    # Derive the exclusion from the sealed verifier response as well as the
+    # application-side marker. A stale VerificationResult must never turn an
+    # incomplete official run (for example incomplete_f2p_report) into a
+    # trainable negative when the marker was lost during persistence/resume.
+    if (
+        is_swe_task
+        and isinstance(swe_environment_result, dict)
+        and swe_environment_result.get("official") is True
+        and swe_environment_result.get("status") != "typed_policy_failure"
+        and (
+            swe_environment_result.get("environment_completed") is not True
+            or swe_environment_result.get("status")
+            in {"infrastructure_error", "timeout", "cancelled"}
+        )
+        and not swe_infrastructure_failure
+    ):
+        swe_infrastructure_failure = {
+            "status": str(swe_environment_result.get("status", "infrastructure_error")),
+            "detail": str(swe_environment_result.get("detail", "")),
+        }
     swe_non_train_split = bool(is_swe_task and not swe_task_is_training_split(result.task.metadata))
     dataset_key = canonical_dataset_name(result.task.metadata.get("dataset", ""))
     from .submission_contract import (
@@ -1623,6 +1653,8 @@ def adaptive_result_to_rollout(
                 "director_no_legal_continuation",
                 "director_no_progress_exhausted",
                 "director_action_protocol_exhausted",
+                "worker_usage_threshold_reached",
+                "worker_usage_unsettled_limit",
             }
         ),
         None,
@@ -1662,6 +1694,9 @@ def adaptive_result_to_rollout(
         training_exclusion_reasons.append("director_policy_call_ineligible")
     if not run.finished:
         training_exclusion_reasons.append("not_finished")
+    worker_usage = result.task.metadata.get("worker_usage")
+    if isinstance(worker_usage, dict) and not worker_usage.get("usage_complete", True):
+        training_exclusion_reasons.append("worker_usage_incomplete")
     if final_graph_errors:
         training_exclusion_reasons.append("invalid_final_graph")
     if not protocol_reward.execution_complete:
@@ -4005,13 +4040,18 @@ class SelfPlayRolloutRunner:
                             outcome.rollout = scored
                             finish_scheduler_job("scored_terminal_failure")
                             return job, outcome, None, attempt_events
-                    if decision.reason == "isolated_swe_verifier_transport_failure":
+                    if decision.reason in {
+                        "isolated_swe_verifier_transport_failure",
+                        "isolated_swe_verifier_unscored",
+                    }:
                         # Preserve the failed verification and policy record for diagnosis;
                         # it remains ineligible for Solver and Frontier evidence.
                         outcome.rollout.trajectory.metadata[
                             "isolated_verifier_transport_failure"
+                            if decision.reason == "isolated_swe_verifier_transport_failure"
+                            else "isolated_verifier_unscored"
                         ] = True
-                        finish_scheduler_job("isolated_verifier_transport_failure")
+                        finish_scheduler_job(decision.reason)
                         return job, outcome, None, attempt_events
                     outcome.close()
                     if decision.infrastructure_incident:
@@ -6010,6 +6050,11 @@ class SelfPlayRolloutRunner:
             "canvas_state": canvas.state.value,
             "round_index": canvas.round_index,
             "total_worker_tokens": canvas.total_tokens,
+            "worker_usage": (
+                {**canvas.runtime.worker_usage_ledger.status(),
+                 "digest": canvas.runtime.worker_usage_ledger.digest()}
+                if canvas.runtime.worker_usage_ledger is not None else None
+            ),
             "pending_agent_id": canvas.pending_agent_id,
             "dirty_agents": sorted(canvas.dirty_agents),
             "graph": canvas.graph.to_dict(),

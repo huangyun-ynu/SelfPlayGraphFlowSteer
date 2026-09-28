@@ -1,5 +1,15 @@
 # Formal Training 配置与凭据说明
 
+> 2026-09-28 SWE 更新：正式 SWE 基线已提升为 65/128（50.78%）版本，
+> 单独使用 v3 / unified_task_result_v1；其他六集保持原协议。
+> SWE GPT 池为 GPT-student（并发 10）与非 eco GPT（并发 5），每题共享
+> 350,000 实际 usage 发送阈值。下文通用路由表描述其余数据集默认值。
+> 版本来源、训练与评测设置的区别见 [SWE 正式同步记录](SWE_FORMAL_PROMOTION_20260928.zh-CN.md)。
+>
+> 同一正式版本也包含 HotpotQA **111/128（86.72% 严格 EM）** 的
+> `hotpot_evidence_first_v1` 输出契约和修订版 v1 评测数据；Hotpot 仍使用 v2.2。
+> 详见 [Hotpot 正式同步记录](HOTPOT_FORMAL_PROMOTION_20260928.zh-CN.md)。
+
 本文档根据 `configs/formal_training.toml`、`scripts/formal/*.sh` 和当前项目目录整理，
 用于在一台新主机上恢复正式训练/评测环境。文档只记录变量名、路由和路径，**不记录真实
 API key、私钥或腾讯云 SecretKey**。真实值必须写入仓库根目录的 `.env`，该文件不得提交 Git。

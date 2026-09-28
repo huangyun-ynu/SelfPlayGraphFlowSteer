@@ -610,6 +610,40 @@ def test_swe_post_commit_protocol_failure_preserves_official_result(tmp_path) ->
     assert excluded.trajectory.metadata["typed_policy_failure"] is None
 
 
+@pytest.mark.parametrize("status", ["infrastructure_error", "timeout", "cancelled"])
+def test_swe_unscored_verifier_result_excludes_trajectory_without_failure_marker(
+    tmp_path, status
+) -> None:
+    config = load_adaptive_config(write_config(tmp_path))
+    result = create_adaptive_application(config, mock=True).solve(
+        "Fix the repository", task_id=f"swe-unscored-{status}"
+    )
+    result.task.metadata.update({
+        "dataset": "swe_bench",
+        "source_split": "train",
+        "swe_environment_result": {
+            "status": status,
+            "official": True,
+            "synthetic": False,
+            "environment_completed": False,
+            "detail": "incomplete_f2p_report",
+        },
+    })
+    # Simulate a stale zero score and a lost application-side failure marker.
+    result.solver_result.verification = VerificationResult(0.0, False, "swe_outcome")
+
+    rollout = adaptive_result_to_rollout(result, ByteTokenizer(), rollout_index=0, seed=43)
+    metadata = rollout.trajectory.metadata
+    assert metadata["training_eligible"] is False
+    assert metadata["reward_known"] is False
+    assert metadata["task_outcome_passed"] is None
+    assert "swe_infrastructure_failure" in metadata["training_exclusion_reasons"]
+    assert metadata["swe_infrastructure_failure"]["detail"] == "incomplete_f2p_report"
+    decision = _recovery_decision("swe_bench", rollout=rollout)
+    assert decision.reason == "isolated_swe_verifier_unscored"
+    assert decision.infrastructure_incident is False
+
+
 @pytest.mark.parametrize("dataset", ["webshop", "alfworld"])
 def test_stateful_missing_output_is_admitted_only_after_recovery_exhaustion(
     tmp_path, dataset

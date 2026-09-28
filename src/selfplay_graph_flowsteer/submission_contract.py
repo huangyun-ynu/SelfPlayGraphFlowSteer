@@ -72,6 +72,11 @@ class SubmissionReceipt:
     normalization_version: str
     worker_tokens_used: int
     worker_token_limit: int
+    worker_budget_policy: str = "strict_limit_v1"
+    worker_usage_complete: bool = True
+    worker_usage_ledger_digest: str = ""
+    worker_dispatch_valid: bool = False
+    worker_unsettled_attempts: int = 0
     payload_kind: str = "text"
     payload: dict[str, Any] = field(default_factory=dict)
     transaction_id: str = ""
@@ -115,8 +120,15 @@ def receipt_error(receipt: Any, *, run: Any, events: Any, run_id: str, dataset: 
     if (not receipt.artifact_id or not receipt.input_signature
             or not receipt.submitted_answer_snapshot
             or answer_hash(receipt.submitted_answer_snapshot) != receipt.answer_hash
-            or receipt.worker_tokens_used > receipt.worker_token_limit):
+            or (receipt.worker_budget_policy == "strict_limit_v1"
+                and receipt.worker_tokens_used > receipt.worker_token_limit)):
         return "submission_snapshot_invalid"
+    if receipt.worker_budget_policy == "reported_usage_threshold_v1":
+        if (receipt.dataset != "swe_bench" or not receipt.worker_usage_ledger_digest
+                or not receipt.worker_dispatch_valid or receipt.worker_tokens_used < 0):
+            return "submission_worker_usage_invalid"
+    elif receipt.worker_budget_policy != "strict_limit_v1":
+        return "submission_worker_usage_invalid"
     calls = [turn for turn in run.turns if turn.call_id == receipt.director_call_id]
     if len(calls) != 1 or not calls[0].accepted:
         return "submission_director_call_missing"
@@ -149,6 +161,13 @@ def receipt_error(receipt: Any, *, run: Any, events: Any, run_id: str, dataset: 
             or event.get("director_call_id") != receipt.director_call_id
             or event.get("submission_receipt") != receipt.to_dict()):
         return "submission_accept_event_invalid"
+    if receipt.worker_budget_policy == "reported_usage_threshold_v1":
+        usage = event.get("control_snapshot", {}).get("worker_usage") or {}
+        if (usage.get("digest") != receipt.worker_usage_ledger_digest
+                or usage.get("confirmed_used") != receipt.worker_tokens_used
+                or usage.get("usage_complete") != receipt.worker_usage_complete
+                or usage.get("unsettled_attempt_count") != receipt.worker_unsettled_attempts):
+            return "submission_worker_usage_mismatch"
     return None
 
 

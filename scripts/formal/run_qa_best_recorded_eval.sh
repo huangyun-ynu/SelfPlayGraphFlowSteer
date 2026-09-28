@@ -7,7 +7,8 @@ cd "$ROOT"
 DATASET_NAME="${1:-hotpotqa}"
 case "$DATASET_NAME" in
   hotpotqa)
-    DEFAULT_DATASET="$ROOT/data/formal/eval/hotpotqa_official_test.jsonl"
+    # Historical comparisons retain the unmodified FlowSteer questions and labels.
+    DEFAULT_DATASET="$ROOT/data/formal/eval/hotpotqa_flowsteer_public_128.jsonl"
     DEFAULT_WORKERS=10
     ;;
   nq_open)

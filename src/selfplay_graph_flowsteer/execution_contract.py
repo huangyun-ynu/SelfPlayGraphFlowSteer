@@ -22,6 +22,19 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
     from .submission_contract import SUBMISSION_CONTRACT_VERSION
 
     base, hints = director_prompt_components(prompt_variant)
+    from .config import canonical_dataset_name
+    scoped_protocols = (admission_config or {}).get("canvas", {}).get("submission_protocol_by_dataset", {})
+    variants_by_dataset = {
+        canonical_dataset_name(dataset): "v3" if protocol == "unified_task_result_v1" else prompt_variant
+        for dataset, protocol in scoped_protocols.items()
+    }
+    scoped_prompt_hashes = {}
+    for dataset, variant in variants_by_dataset.items():
+        scoped_base, scoped_hints = director_prompt_components(variant)
+        scoped_prompt_hashes[dataset] = {
+            key: _digest(scoped_base.rstrip() + "\n\n" + hint.strip() + "\n")
+            for key, hint in sorted(scoped_hints.items())
+        }
     rendered = {}
     for dataset, adapter in (
         ("hotpotqa", "hotpotqa_context"),
@@ -52,7 +65,7 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
                 **args,
             )
             responsibility = ""
-            if prompt_variant == "v3":
+            if variants_by_dataset.get(dataset, prompt_variant) == "v3":
                 from .contracts import AgentNode
                 from .unified_contract import PROTOCOL, result_instruction
 
@@ -71,6 +84,7 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "execution_contract",
             "actions",
             "output_contract",
+            "hotpot_answer_contract",
             "runtime",
             "llm",
             "artifact_protocol",
@@ -86,9 +100,19 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "unified_contract",
             "unified_submission",
             "webshop_native",
+            "webshop",
+            "webshop_sidecar",
+            "webshop_profiles",
+            "webshop_steps",
+            "webshop_evidence",
             "webshop_native_executor",
             "alfworld",
             "swebench",
+            "worker_usage_ledger",
+            "student_action_protocol",
+            "swe_public_tests",
+            "swe_public_recipes",
+            "_swe_public_probe",
             "outcome_admission",
             "swe_failure_attribution",
             "selfplay_runtime",
@@ -121,6 +145,16 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
         "submission_admission_config": json.loads(json.dumps(admission_config or {})),
         "worker_output_role_version": WORKER_OUTPUT_ROLE_VERSION,
         "director_prompt_variant": prompt_variant,
+        "director_prompt_variant_by_dataset": variants_by_dataset,
+        "director_prompt_template_sha256_by_dataset": scoped_prompt_hashes,
+        "director_action_protocol_version_by_dataset": {
+            dataset: "director_action_json_v3" if variant == "v3" else DIRECTOR_ACTION_PROTOCOL_VERSION
+            for dataset, variant in variants_by_dataset.items()
+        },
+        "submission_contract_version_by_dataset": {
+            dataset: "unified_submission_v1" if variant == "v3" else SUBMISSION_CONTRACT_VERSION
+            for dataset, variant in variants_by_dataset.items()
+        },
         "director_prompt_template_sha256_by_problem_type": {
             key: _digest(base.rstrip() + "\n\n" + hint.strip() + "\n")
             for key, hint in sorted(hints.items())
@@ -132,6 +166,9 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
         ).hexdigest(),
         "pats_semantic_revision": SEMANTIC_REVISION,
         "pats_runtime_contract_sha256": contract_hash(prompt_variant),
+        "pats_runtime_contract_sha256_by_dataset": {
+            dataset: contract_hash(variant) for dataset, variant in variants_by_dataset.items()
+        },
     }
 
 
@@ -148,19 +185,35 @@ def require_same_semantics(expected, actual) -> None:
 def bind_rollout_contract(batches, rollouts):
     from dataclasses import replace
 
-    versions = {r.trajectory.metadata.get("submission_contract_version", "legacy") for r in rollouts}
-    if len(versions) > 1:
-        raise ValueError("submission contract changed within rollout group")
-
     values = [manifest_semantics(r.trajectory.metadata.get("model_roles", {})) for r in rollouts]
+    versions = {r.trajectory.metadata.get("submission_contract_version", "legacy") for r in rollouts}
+    scoped = bool(values and values[0] and values[0].get("submission_contract_version_by_dataset"))
+    if not scoped and len(versions) > 1:
+        raise ValueError("submission contract changed within rollout group")
     if not values or not any(value is not None for value in values):
         return batches  # Offline/legacy fixtures; the live learner requires a binding.
-    for value in values:
+    for rollout, value in zip(rollouts, values):
         require_same_semantics(values[0], value)
+        _validate_dataset_submission_contract(rollout.trajectory.metadata, value)
     return tuple(
         replace(batch, metadata={**batch.metadata, "execution_semantics": values[0]})
         for batch in batches
     )
+
+
+def _validate_dataset_submission_contract(metadata: dict, semantics: dict | None) -> None:
+    """A mixed batch may use different protocols only as declared by its manifest."""
+    from .config import canonical_dataset_name
+
+    scoped = (semantics or {}).get("submission_contract_version_by_dataset", {})
+    if not scoped:
+        return
+    dataset = canonical_dataset_name(metadata.get("dataset", ""))
+    if not dataset:
+        raise ValueError("dataset required for mixed submission contracts")
+    expected = scoped.get(dataset, semantics["submission_contract_version"])
+    if metadata.get("submission_contract_version", "legacy") != expected:
+        raise ValueError(f"submission contract does not match dataset: {dataset}")
 
 
 def validate_training_contract(proposer_batch, solver_batch, *, expected=None):
@@ -180,3 +233,4 @@ def validate_training_contract(proposer_batch, solver_batch, *, expected=None):
         observed = manifest_semantics(sample.metadata.get("model_roles", {}))
         if recorded is not None or observed is not None:
             require_same_semantics(recorded, observed)
+        _validate_dataset_submission_contract(sample.metadata, recorded)

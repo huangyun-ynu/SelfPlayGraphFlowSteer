@@ -787,8 +787,10 @@ class GraphDirector:
                 ).feedback
                 break
             if not self.canvas.control_snapshot()["allowed_actions"]:
+                ledger = self.canvas.runtime.worker_usage_ledger
                 feedback = self.canvas.terminate_director_stall(
-                    "director_no_legal_continuation"
+                    ledger.stop_reason() if ledger and ledger.stop_reason()
+                    else "director_no_legal_continuation"
                 ).feedback
                 break
             if stalled_turns == 3:

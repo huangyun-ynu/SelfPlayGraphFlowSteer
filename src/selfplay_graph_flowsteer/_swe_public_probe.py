@@ -41,5 +41,5 @@ if __name__ == "__main__":
     evidence = Evidence(sys.argv[1])
     evidence.write()
     sys.exit(pytest.main(["-q", "--tb=short", "-p", "no:cacheprovider",
-                         "--basetemp=" + str(evidence.path.parent / "tmp/pytest"), *sys.argv[2:]],
+                         "--basetemp=" + str(Path(os.environ["TMPDIR"]) / "pytest"), *sys.argv[2:]],
                          plugins=[evidence]))

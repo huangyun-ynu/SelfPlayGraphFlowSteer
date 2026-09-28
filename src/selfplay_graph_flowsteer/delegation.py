@@ -680,7 +680,19 @@ def delegation_safety_issue(
     """
 
     delegation = str(text or "").strip()
-    if _ANSWER_OR_SOLUTION_RE.search(delegation):
+    for answer_match in _ANSWER_OR_SOLUTION_RE.finditer(delegation):
+        # A conditional abstention format copied from the public question is
+        # an output rule, not a claim that this particular question is
+        # unanswerable. Keep unconditional answer declarations blocked.
+        public_abstention = bool(
+            re.search(r"\b(?:respond|reply)\s+with\s+['\"]?unanswerable\b", public_task, re.I)
+        )
+        conditional_abstention = bool(
+            re.fullmatch(r"answer\s+is\s+['\"]?unanswerable['\"]?", answer_match.group(), re.I)
+            and re.search(r"\botherwise\b[^.!?]{0,100}$", delegation[:answer_match.start()], re.I)
+        )
+        if public_abstention and conditional_abstention:
+            continue
         return DelegationIssue(
             "answer_or_solution_leak",
             "SET_PROMPT contains an answer clue or solution content",

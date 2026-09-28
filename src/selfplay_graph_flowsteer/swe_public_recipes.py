@@ -17,23 +17,27 @@ class PublicTestRecipe:
     packages: tuple[str, ...]
     runner: str
     smoke: str
+    native_packages: tuple[str, ...] = ()
 
     @property
     def fingerprint(self) -> str:
-        return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
+        fields = asdict(self)
+        if not self.native_packages:
+            fields.pop("native_packages")
+        return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
 
 
 RECIPES: dict[tuple[str, str], PublicTestRecipe] = {}
 
 
-def _add(repo, versions, *, python="3.9", packages=(), runner="pytest", smoke):
+def _add(repo, versions, *, python="3.9", packages=(), runner="pytest", smoke, native_packages=()):
     for version in versions.split():
         RECIPES[repo, version] = PublicTestRecipe(
             python, (*(() if any(p.startswith("pip==") for p in packages) else ("pip==24.0",)),
                      *(() if any(p.startswith("setuptools==") for p in packages)
                                     else ("setuptools==68.0.0",)),
                      *(() if any(p.startswith("wheel==") for p in packages) else ("wheel==0.41.2",)), *packages),
-            runner, smoke,
+            runner, smoke, native_packages,
         )
 
 
@@ -104,6 +108,7 @@ _add("pydata/xarray", "0.12 2022.03 2022.06 2022.09", python="3.10",
      packages=(*_PYTEST, "numpy==1.23.5", "pandas==1.4.4", "scipy==1.10.1",
                "dask==2022.8.1", "cftime==1.6.2", "setuptools-scm==7.1.0"))
 _add("matplotlib/matplotlib", "3.4 3.5 3.6 3.7", python="3.10",
+     native_packages=("freetype=2.12.1", "qhull=2020.2"),
      smoke="lib/matplotlib/tests/test_cbook.py",
      packages=("pytest==7.1.3", "packaging==23.1", "numpy==1.23.5", "Pillow==9.5.0", "contourpy==1.1.0",
                "cycler==0.11.0", "fonttools==4.42.1", "kiwisolver==1.4.5",

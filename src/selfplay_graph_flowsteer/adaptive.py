@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 from .aime_submission import is_aime_dataset
@@ -48,6 +50,7 @@ from .submission_contract import (
 )
 from .swebench import public_swe_evaluation, swe_lifecycles
 from .webshop import webshop_lifecycles
+from .worker_usage_ledger import WorkerUsageLedger
 
 _SWE_INFRASTRUCTURE_STATUSES = frozenset({"infrastructure_error", "timeout", "cancelled"})
 _MODEL_ATTRIBUTED_ACTION_FAILURE_CODES = frozenset(
@@ -539,6 +542,20 @@ class AdaptiveWorkflowSolver:
             binary_relation_policy=self.director_tokenizer is not None,
         )
         canvas.run_id = run_id
+        usage_policy = base_canvas_config.worker_usage_policy(dataset_key)
+        if usage_policy is not None:
+            ledger_file = (
+                Path(base_canvas_config.submission_journal_dir)
+                / "worker_usage"
+                / (hashlib.sha256(run_id.encode()).hexdigest() + ".sqlite3")
+            )
+            self.runtime.worker_usage_ledger = WorkerUsageLedger(
+                ledger_file,
+                question_attempt_id=run_id,
+                threshold=int(usage_policy.get("start_threshold", selected_token_budget)),
+                max_unsettled_attempts=int(usage_policy.get("max_unsettled_attempts", 2)),
+            )
+            canvas.total_tokens = self.runtime.worker_usage_ledger.status()["confirmed_used"]
         canvas.prepare_text_submission = lambda active: self._prepare_text_submission(task, active)
         self.active_canvas = canvas
         try:
@@ -561,6 +578,20 @@ class AdaptiveWorkflowSolver:
             ):
                 lifecycle.close_all()
             raise
+        if self.runtime.worker_usage_ledger is not None:
+            ledger = self.runtime.worker_usage_ledger
+            canvas.total_tokens = ledger.status()["confirmed_used"]
+            task.metadata["worker_usage"] = {
+                **ledger.status(), "digest": ledger.digest(),
+                "dispatch_policy_valid": ledger.dispatches_valid(),
+                "question_attempt_id": run_id,
+            }
+        if active_swe_lifecycles:
+            task.metadata["swe_recoverable_code_artifacts"] = [
+                candidate
+                for lifecycle in active_swe_lifecycles
+                for candidate in lifecycle.recoverable_code_artifacts()
+            ]
         receipt = canvas.submission_receipt
         frozen_run = copy.deepcopy(run) if receipt is not None else None
         if self.post_director_hook is not None:
@@ -872,6 +903,10 @@ class AdaptiveWorkflowSolver:
             director_edit_limit=canvas.config.director_edit_limit(canvas.dataset) if canvas.unified else None,
             worker_tokens=canvas.total_tokens,
             worker_token_limit=canvas.config.max_total_tokens,
+            worker_budget_policy=(canvas.runtime.worker_usage_ledger.status()["policy"]
+                                  if canvas.runtime.worker_usage_ledger else "strict_limit_v1"),
+            worker_dispatch_valid=(canvas.runtime.worker_usage_ledger.dispatches_valid()
+                                   if canvas.runtime.worker_usage_ledger else False),
             infrastructure_failure=bool(
                 stale_output or backend_failures or task.metadata.get("swe_infrastructure_failure")
                 or task.metadata.get("output_contract_failure")

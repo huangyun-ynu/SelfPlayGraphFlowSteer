@@ -60,6 +60,7 @@ from .selfplay_runtime import (
 from .services import ModelServiceSpec, VLLMServiceManager
 from .skills import SolverSkillBank
 from .static_director_skills import StaticDirectorSkillBank
+from .swe_public_tests import require_public_test_environments
 from .training import (
     AlternatingGRPOTrainer,
     AlternatingTrainingConfig,
@@ -1392,6 +1393,12 @@ def benchmark(args: argparse.Namespace) -> int:
         if args.limit_per_dataset is not None:
             selected = selected[: args.limit_per_dataset]
         examples.extend(selected)
+    if not args.mock and config.swe.enabled and config.swe.public_test_environment_root is not None:
+        require_public_test_environments(
+            config.swe.public_test_environment_root,
+            (example.metadata for example in examples
+             if canonical_dataset_name((example.metadata or {}).get("dataset", "")) == "swe_bench"),
+        )
     if args.historical_duration_priority:
         examples.sort(
             key=lambda example: -PRIMARY_DATASET_DURATION_ESTIMATES_S.get(
@@ -1536,7 +1543,10 @@ def model_services(args: argparse.Namespace) -> int:
         if args.action == "start":
             status = manager.start(spec, wait_s=args.wait_s)
         elif args.action == "stop":
-            manager.stop(role, wait_s=args.wait_s)
+            # A completed evaluation may retain its Director allocation for a
+            # follow-up run. The marker belongs to this service state directory.
+            if not (Path(args.state_dir) / "keep_running").exists():
+                manager.stop(role, wait_s=args.wait_s)
             status = manager.status(spec)
         elif args.action == "refresh":
             if args.checkpoint is None or len(roles) != 1:
@@ -1944,6 +1954,14 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
             "each active endpoint pool requires at least one freshly qualified member: "
             + ", ".join(sorted(unavailable_pools))
         )
+    scoped_pools = {
+        dataset: {key: members for key, members in pools.items() if key in active_pools}
+        for dataset, pools in config.dataset_endpoint_pools.items()
+    }
+    for dataset, pools in scoped_pools.items():
+        for key, members in pools.items():
+            if not (set(members) & usable):
+                raise ValueError(f"dataset endpoint pool requires a freshly qualified member: {dataset}/{key}")
     support_routes = tuple(dict.fromkeys((*support_routes, *sorted(pool_members))))
     restricted = replace(
         config,
@@ -1954,6 +1972,7 @@ def _apply_fresh_route_report(config, args: argparse.Namespace):
         dataset_worker_routes=dataset_routes,
         dataset_route_overrides=selected_overrides,
         runtime_endpoint_pools=active_pools,
+        dataset_endpoint_pools=scoped_pools,
         skill_distiller_runtime=config.skill_distiller_runtime,
     )
     restricted.validate()

@@ -17,12 +17,23 @@
     "hotpotqa": {
       "path": "data/formal/eval/hotpotqa_official_test.jsonl",
       "rows": 128,
-      "sha256": "84db56807e8e8cd98224ba53b124b289f783faf463a55f5a7e6785b2127cbcc2",
+      "sha256": "6e4096785ad5b869b6541c868beb25ad7f157cc64ae8968c0db3cbe2f185e27c",
       "unique_source_rows": 128,
-      "selection": "flowsteer_public_eval_128",
+      "selection": "flowsteer_public_eval_128_locally_corrected",
+      "dataset_version": "flowsteer-hotpotqa-corrected-v1",
+      "canonical_path": "data/formal/eval/hotpotqa_flowsteer_corrected_v1_128.jsonl",
       "source_url": "https://huggingface.co/datasets/beita6969/FlowSteer-Dataset/resolve/main/eval/hotpotqa.jsonl",
-      "canonical_path": "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl",
-      "source_sha256": "55a74378c02a8fc3d40fa6bbcd967447f10b6021d3a39c707c14e3b5d265f25a"
+      "source_sha256": "55a74378c02a8fc3d40fa6bbcd967447f10b6021d3a39c707c14e3b5d265f25a",
+      "original_path": "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl",
+      "original_sha256": "84db56807e8e8cd98224ba53b124b289f783faf463a55f5a7e6785b2127cbcc2",
+      "corrections_path": "data/formal/private/hotpotqa_corrections_v1.json",
+      "corrections_sha256": "e80de98401ec9aebcccfac32efb2b80961d26ae80362244c96fbaa4695dec045",
+      "corrected_rows": 14,
+      "question_changes": 13,
+      "reference_changes": 3,
+      "target_answers_changes": 3,
+      "upstream_split": "train",
+      "official_hotpotqa_erratum": false
     },
     "alfworld": {
       "path": "data/formal/eval/alfworld_official_test.jsonl",

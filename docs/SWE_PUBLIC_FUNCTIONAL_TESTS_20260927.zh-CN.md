@@ -28,7 +28,7 @@ Django 使用 `tests/runtests.py --settings=test_sqlite --parallel=1`，target �
 
 runner 选择参考 [SWE-bench v3.0.9 的公开安装规格](https://github.com/SWE-bench/SWE-bench/blob/da5456ec492cb591be8d7d7d79bbd20870d6332f/swebench/harness/constants/python.py)，本地依赖以实际 base checkout 验证后的配置为准。这些是本地开发环境，不是官方评分镜像。
 
-Matplotlib 使用系统 FreeType/Qhull；数值和功能测试可运行，但涉及字体像素基准的图像比较可能受 FreeType 版本影响。数据库、网络服务、TeX 等可选集成测试仍需要对应外部设施；默认 smoke 不依赖这些设施。
+Matplotlib 使用环境目录中单独准备的 FreeType 2.12.1 / Qhull 2020.2；数值和功能测试可运行，但涉及字体像素基准的图像比较可能受 FreeType 版本影响。数据库、网络服务、TeX 等可选集成测试仍需要对应外部设施；默认 smoke 不依赖这些设施。
 
 ## 环境准备和复用
 
@@ -54,13 +54,19 @@ UV_PYTHON_INSTALL_DIR="$PWD/state/swe/python" PYTHONPATH=src \
   --jobs 3
 ```
 
-迁移到新机器时需要 uv、编译器，以及 Matplotlib 的 `libfreetype6-dev` / `libqhull-dev`。旧 Django 和 Astropy 环境由 micromamba 从 conda-forge 准备 Python 3.6，其余使用 uv 管理的 Python 3.9/3.10/3.11。准备阶段允许下载公开依赖，工具调用阶段离线安装当前源码。
+迁移到新机器时需要 uv、编译器、pkg-config 和 micromamba。Matplotlib 的原生依赖由准备脚本安装到各环境的 `native/`，无需修改服务器全局软件。旧 Django、Astropy 和 scikit-learn 的部分环境由 micromamba 从 conda-forge 准备 Python 3.6，其余使用 uv 管理的 Python 3.9/3.10/3.11。准备阶段允许下载公开依赖，工具调用阶段离线安装当前源码。
 
 每个环境保存 `ready.json`、`installed.txt`、`smoke.json` 和 `provision.log`。只有非空 smoke 实际运行且成功后才产生 ready 标记；配方指纹不一致、未知版本或环境缺失会明确报错，不会套用另一版本。需要重新验证时使用 `--recheck`，可用 `--repo` / `--version` 限定范围。
+
+2026-09-28 起，配置公开测试环境的真实 benchmark 会在开始推理前聚合检查所选题目的所有仓库版本；SWE 生命周期绑定任务时也会检查，覆盖其它调用入口。缺失时抛出 `public_test_preflight_failed` 并列出需要准备的版本。mock benchmark 跳过批量环境检查。
+
+当前 student02 机器以 `--jobs 48` 完成了新 128 题所需的 48 个环境，明细见 `state/swe-student-repair-20260928/environments.json`。这些是每个仓库版本选一个公开 base commit 的环境冒烟验证，不代表所有题目的完整测试均通过。
 
 ## 执行与证据
 
 每次测试在锁内复制当前 Worker 工作区，重新安装该份源码并运行测试。安装、编译和测试输出都留在环境副本中，不污染导出的补丁；同一环境的并发测试被串行化。代价是包含原生扩展的仓库会有额外编译时间。
+
+测试的临时文件单独放入调用进程临时根目录下的唯一目录，完成后清理；pytest 的 `--basetemp` 也使用该目录。启动时应将 `TMPDIR` 放在项目配置树外（本机为 student02 的 `.tmp`），避免 pytest 自测创建的嵌套项目继承上层 `pytest.ini` / `pyproject.toml`，产生错误的 rootdir 和节点路径。
 
 pytest 结果区分收集、开始执行、实际运行和 fixture setup 错误。未启动、环境安装失败、收集失败、空选择或全部 fixture setup 失败，均返回 `test_executed=false`。实际断言失败如实返回非零退出码，仍作为有效的失败测试证据。
 

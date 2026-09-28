@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Historical M02 reproduction; retains its original configuration and concurrency.
+# Current v2.2 evaluation entrypoint: run_webshop_v22_eval.sh.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

@@ -25,6 +25,12 @@ if [[ ! -f "$SPGFS_FORMAL_TASK_POOL" ]]; then
   exit 2
 fi
 
+# Reject stale raw release indices and held-out goals before starting services
+# or updating parameters, including when a cached combined task pool is supplied.
+"${SPGFS_PYTHON:-$SPGFS_VENV/bin/python}" scripts/formal/webshop_dataset_index.py \
+  --input "$SPGFS_FORMAL_TASK_POOL" --goals "$SPGFS_WEBSHOP_GOALS" \
+  --validate-only --require-training-split
+
 IFS=, read -r DEFAULT_PROPOSER_GPU DEFAULT_SOLVER_GPU DEFAULT_ASYNC_ROLLOUT_GPU _ \
   <<<"$SPGFS_ALLOWED_PHYSICAL_GPUS"
 PROPOSER_GPU_ID="${SPGFS_PROPOSER_GPU_ID:-$DEFAULT_PROPOSER_GPU}"

@@ -91,6 +91,7 @@ def _evidence_order(evidence):
 
 def build_review_messages(*, scope, mode, policy_snapshot, record, config, token_counter):
     """Drop whole evidence groups to fit the request; never invent/truncate their contents."""
+    config = config.for_scope(scope)
     system = review_system_prompt(config, mode)
     body = {
         "scope": scope,

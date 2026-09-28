@@ -1,0 +1,14 @@
+{
+  "phase": "completed",
+  "updated_at": "2026-09-28T20:56:33+0800",
+  "results": {
+    "hotpotqa": {
+      "completed": 128,
+      "passed": 119
+    },
+    "aime": {
+      "completed": 30,
+      "passed": 24
+    }
+  }
+}

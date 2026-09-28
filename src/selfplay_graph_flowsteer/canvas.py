@@ -301,7 +301,12 @@ class GraphCanvas(UnifiedSubmissionMixin):
         self.worker_task = worker_task if worker_task is not None else task
         self.director_task = director_task if director_task is not None else task
         self.runtime = runtime
-        self.config = config or CanvasConfig()
+        inferred_dataset = (
+            action_adapter.datasets[0]
+            if action_adapter is not None and len(action_adapter.datasets) == 1
+            else ""
+        )
+        self.config = (config or CanvasConfig()).for_dataset(dataset or inferred_dataset)
         self.parser = parser or ActionParser(unified=self.unified)
         self._init_unified()
         self.runtime_routes = tuple(runtime_routes)
@@ -738,6 +743,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
             return self._reject_for_time_admission(action, growth_admission)
         if (
             self.config.structural_repair_enabled
+            and self.runtime.worker_usage_ledger is None
             and action.action_type is ActionType.ADD_AGENT
             and self.graph.nodes
             and self.config.max_total_tokens - self.total_tokens
@@ -1855,7 +1861,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 action, accepted=False, rejection_code="director_finish_source_required",
                 feedback="Text submission requires FINISH from an actual Director call.",
             )
-        if self.total_tokens > self.config.max_total_tokens:
+        if self.runtime.worker_usage_ledger is None and self.total_tokens > self.config.max_total_tokens:
             self.state = CanvasState.FAILED
             return self._record(
                 action, accepted=False, rejection_code="execution_budget_exceeded",
@@ -2147,23 +2153,38 @@ class GraphCanvas(UnifiedSubmissionMixin):
         if not executable_dirty and not force:
             return None
         if self.dataset == "swe_bench" and configured:
+            usage_ledger = self.runtime.worker_usage_ledger
             remaining = max(0, self.config.max_total_tokens - self.total_tokens)
-            self._token_admission_event.update(
-                budget_schema=SWE_SHARED_TOKEN_BUDGET,
-                remaining_worker_tokens=remaining,
-                budget_scope="per_question",
-                allocation="shared_remaining",
-                reserved_closure_tokens=0,
-                request_admission="authoritative_after_request_serialization",
-            )
-            for agent_id in configured:
-                metadata = self.graph.nodes[agent_id].metadata
-                metadata.update(
-                    _runtime_token_credit=remaining,
-                    _runtime_budget_kind=SWE_SHARED_TOKEN_BUDGET,
+            if usage_ledger is not None:
+                usage_status = usage_ledger.status()
+                self._token_admission_event.update(
+                    budget_schema=usage_status["policy"],
+                    remaining_worker_tokens=max(0, usage_status["threshold"] - usage_status["confirmed_used"]),
+                    budget_scope="per_question", allocation="shared_reported_usage",
+                    request_admission="reported_usage_before_physical_dispatch",
+                    usage_status=usage_status,
                 )
-                # Restored nodes must not retain the old finalization reserve.
-                metadata.pop("_runtime_finalization_output_reserve", None)
+                for agent_id in configured:
+                    metadata = self.graph.nodes[agent_id].metadata
+                    metadata.pop("_runtime_token_credit", None)
+                    metadata.pop("_runtime_finalization_output_reserve", None)
+                    metadata["_runtime_budget_kind"] = "swe_reported_usage_threshold_v1"
+            else:
+                self._token_admission_event.update(
+                    budget_schema=SWE_SHARED_TOKEN_BUDGET,
+                    remaining_worker_tokens=remaining,
+                    budget_scope="per_question",
+                    allocation="shared_remaining",
+                    reserved_closure_tokens=0,
+                    request_admission="authoritative_after_request_serialization",
+                )
+                for agent_id in configured:
+                    metadata = self.graph.nodes[agent_id].metadata
+                    metadata.update(
+                        _runtime_token_credit=remaining,
+                        _runtime_budget_kind=SWE_SHARED_TOKEN_BUDGET,
+                    )
+                    metadata.pop("_runtime_finalization_output_reserve", None)
         elif (is_short_qa_dataset(self.dataset)
                 or (self.unified and self.dataset != "webshop")) and executable_dirty:
             # The estimator is a scheduling hint, not permission to spend past
@@ -2262,11 +2283,15 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 agent_id: set(self.dirty_reasons.get(agent_id, ())) for agent_id in executable_dirty
             },
             token_credit=(max(0, self.config.max_total_tokens - self.total_tokens)
-                          if self.dataset != "webshop" or self.config.remaining_token_admission_enabled
+                          if (self.dataset != "webshop" or self.config.remaining_token_admission_enabled)
+                          and self.runtime.worker_usage_ledger is None
                           else None),
         )
         self._step_scheduled_agents.update(report.scheduled_agents)
-        self.total_tokens += report.token_in + report.token_out
+        if self.runtime.worker_usage_ledger is not None:
+            self.total_tokens = self.runtime.worker_usage_ledger.status()["confirmed_used"]
+        else:
+            self.total_tokens += report.token_in + report.token_out
         # Execution has already committed artifacts to the runtime. Clear the
         # corresponding dirty bits before reporting a budget violation; otherwise
         # every later graph edit re-executes the same Agents and compounds the
@@ -2285,7 +2310,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
             for artifact in report.artifacts.values()
         ):
             raise RequiredWorkerBackendFailure(report)
-        if self.total_tokens > self.config.max_total_tokens:
+        if self.runtime.worker_usage_ledger is None and self.total_tokens > self.config.max_total_tokens:
             raise TokenBudgetExceeded(
                 report,
                 self.total_tokens,
@@ -3748,6 +3773,22 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 swe_progress = artifact.swe_progress or {}
                 webshop_progress = artifact.webshop_progress or {}
                 webshop_action_budget = webshop_progress.get("action_budget") or {}
+                if webshop_progress.get("state") == "review_pending":
+                    proposal = (webshop_progress.get("purchase_review") or {}).get("proposal") or {}
+                    facts.append(
+                        f"Public WebShop proposal before staging for {agent_id}: "
+                        + json.dumps({
+                            "asin": proposal.get("asin"),
+                            "state_version": proposal.get("state_version"),
+                            "unresolved_constraints": proposal.get("unresolved_constraints", []),
+                            "checks": [{"requirement_id": check.get("requirement_id"),
+                                        "status": check.get("status"),
+                                        "references": check.get("references", [])[:1]}
+                                       for check in proposal.get("checks", []) if check.get("status") != "supported"],
+                        }, ensure_ascii=False)
+                        + ". No purchase/reward exists for this proposal. Revise the same owner "
+                        "or select it for bounded closure; stateless review does not create a shopping session."
+                    )
                 webshop_recovery = None
                 if webshop_action_budget.get("transfer_status") not in (None, "not_requested"):
                     webshop_recovery = (
@@ -4660,7 +4701,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
     def terminate_director_stall(self, code: str) -> CanvasStep:
         """Record runtime closure only; no model call or graph repair is invented."""
         if code not in {"director_no_legal_continuation", "director_no_progress_exhausted",
-                        "director_action_protocol_exhausted"}:
+                        "director_action_protocol_exhausted", "worker_usage_threshold_reached",
+                        "worker_usage_unsettled_limit", "worker_usage_request_inflight"}:
             raise ValueError(f"unsupported Director stall: {code}")
         if (self.unified and code == "director_no_legal_continuation"
                 and self._unified_transaction is None
@@ -4811,12 +4853,22 @@ class GraphCanvas(UnifiedSubmissionMixin):
         # mutation). Structural edit masks must not hide this protocol action.
         if self.state is CanvasState.AWAITING_RELATION_CHOICE and self.pending_relation_decision:
             allowed_actions = ["relation_choice"]
+        worker_usage_ledger = self.runtime.worker_usage_ledger
+        worker_usage = worker_usage_ledger.status() if worker_usage_ledger else None
+        if worker_usage is not None:
+            worker_usage["digest"] = worker_usage_ledger.digest()
+            if worker_usage_ledger.stop_reason() is not None:
+                allowed_actions = [
+                    action_name for action_name in allowed_actions
+                    if action_name in {"set_output", "finish"}
+                ]
         return {
             "canvas_version": self.graph.version,
             "director_action_protocol_version": DIRECTOR_ACTION_PROTOCOL_VERSION,
             "output_contract_version": OUTPUT_CONTRACT_VERSION,
             "submission_contract_version": SUBMISSION_CONTRACT_VERSION,
             "submission_status": "submitted" if self.submission_receipt else "candidate",
+            "worker_usage": worker_usage,
             "worker_protocol_status_version": WORKER_PROTOCOL_STATUS_VERSION,
             "worker_protocol_status": {
                 agent_id: {

@@ -1,0 +1,23 @@
+{
+  "equal_fields": [
+    "execution_semantics",
+    "director_model",
+    "director_model_source",
+    "director_thinking",
+    "worker_logical_routes",
+    "worker_endpoint_pools",
+    "route_concurrency",
+    "dataset_token_limits",
+    "workers",
+    "swe_enabled",
+    "deepseek_thinking",
+    "director_skill_root"
+  ],
+  "hotpot_count": 128,
+  "aime_count": 30,
+  "differences_expected": [
+    "datasets",
+    "examples_planned",
+    "director_thinking_by_dataset keys"
+  ]
+}

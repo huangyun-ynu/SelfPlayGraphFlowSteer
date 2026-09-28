@@ -80,6 +80,8 @@ def terminal_policy_failure(
     max_rounds: int,
     worker_tokens: int,
     worker_token_limit: int,
+    worker_budget_policy: str = "strict_limit_v1",
+    worker_dispatch_valid: bool = False,
     infrastructure_failure: bool = False,
     runtime_failure_evidence: dict[str, Any] | None = None,
     historical_artifacts: dict[str, Any] | None = None,
@@ -108,9 +110,15 @@ def terminal_policy_failure(
         "time_budget_consolidation_required",
     }:
         return None
+    if "worker_usage_unsettled_limit" in codes:
+        # The amount actually billed is still unknown; keep outcome attribution
+        # separate from a confirmed Worker spending stop.
+        return None
     # An overrun is an admission/accounting defect, not evidence that the model
     # knowingly spent a correctly enforced budget.
-    if worker_token_limit > 0 and worker_tokens > worker_token_limit:
+    if (worker_token_limit > 0 and worker_tokens > worker_token_limit
+            and not (dataset == "swe_bench" and worker_budget_policy == "reported_usage_threshold_v1"
+                     and worker_dispatch_valid)):
         return None
     for artifact in [*artifacts.values(), *(historical_artifacts or {}).values()]:
         if artifact.get("backend_failure"):
@@ -151,6 +159,8 @@ def terminal_policy_failure(
         reason = "director_repeated_illegal_actions"
     elif rounds > 0 and "director_context_budget_exhausted" in codes:
         reason = "director_context_budget_exhausted"
+    elif worker_tokens > 0 and "worker_usage_threshold_reached" in codes:
+        reason = "worker_usage_threshold_reached"
     elif worker_tokens > 0 and codes & {
         "token_budget_admission_required",
         "execution_budget_exceeded",

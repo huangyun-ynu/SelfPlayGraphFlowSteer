@@ -202,6 +202,23 @@ def test_public_requested_modulo_deliverable_is_not_a_solution_method(divisor, r
     ) is not None
 
 
+def test_public_conditional_unanswerable_output_rule_is_allowed_without_answer_leak():
+    task = (
+        "Based on the following passage, answer the question. If the answer cannot be found "
+        "in the passage, respond with 'unanswerable'."
+    )
+    conditional = (
+        "Determine whether the passage answers the question; otherwise, state that "
+        "the answer is 'unanswerable'"
+    )
+    assert delegation_safety_issue(conditional, field="expected_output", public_task=task) is None
+    assert delegation_safety_issue(conditional, field="expected_output") is not None
+    assert delegation_safety_issue("The answer is unanswerable", field="expected_output", public_task=task) is not None
+    assert delegation_safety_issue(
+        conditional + "; final answer is Paris", field="expected_output", public_task=task,
+    ) is not None
+
+
 def test_canvas_admits_public_modulo_goal_and_still_requires_director_finish():
     canvas = GraphCanvas(
         task="Let N be the count. Find the remainder when N is divided by $1000.$",

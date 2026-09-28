@@ -1,0 +1,513 @@
+{
+  "schema": "spgfs-hotpot-corrections-v1",
+  "dataset_version": "flowsteer-hotpotqa-corrected-v1",
+  "original_path": "data/formal/eval/hotpotqa_flowsteer_public_128.jsonl",
+  "original_sha256": "84db56807e8e8cd98224ba53b124b289f783faf463a55f5a7e6785b2127cbcc2",
+  "source_raw_path": "data/formal/sources/flowsteer/hotpotqa_eval_128.raw.jsonl",
+  "source_raw_sha256": "55a74378c02a8fc3d40fa6bbcd967447f10b6021d3a39c707c14e3b5d265f25a",
+  "upstream_revision": "1908d6afbbead072334abe2965f91bd2709910ab",
+  "upstream_url": "https://huggingface.co/datasets/hotpotqa/hotpot_qa/tree/1908d6afbbead072334abe2965f91bd2709910ab",
+  "audit_cases_path": "experiment_versions/reports/hotpot-label-audit-20260928/cases.jsonl",
+  "original_license": "CC-BY-SA-4.0",
+  "authorship": "Local corrections authorized by the user, 2026-09-28; not an official HotpotQA erratum.",
+  "expected_rows": 128,
+  "expected_corrections": 14,
+  "patches": [
+    {
+      "source_id": "hotpotqa/5a8346bb55429966c78a6b69",
+      "finding": "reference_markup_corruption",
+      "before": {
+        "reference": "=\"Lycians\">Lycians",
+        "target_answers": [
+          "=\"Lycians\">Lycians"
+        ],
+        "question": "The city of Telmessos was called Telebehi by what Iron Age people?"
+      },
+      "after": {
+        "reference": "Lycians",
+        "target_answers": [
+          "Lycians"
+        ],
+        "question": "The city of Telmessos was called Telebehi by what Iron Age people?"
+      },
+      "reason_zh": "标签含 =\"Lycians\"> 这段HTML属性残片。题目问民族，证据指向Lycians。标准HotpotQA镜像也保留相同损坏标签。",
+      "evidence": [
+        {
+          "title": "Telmessos (Caria)",
+          "sent_id": 0,
+          "text": "Telmessos or Telmessus, also Telmissos (Ancient Greek: Τελμησσός or Τελμισσός), was a city in Caria."
+        },
+        {
+          "title": "Telmessos (Caria)",
+          "sent_id": 1,
+          "text": " It was called Telebehi in the Lycian language."
+        },
+        {
+          "title": "Lycian language",
+          "sent_id": 0,
+          "text": "The Lycian language (𐊗𐊕𐊐𐊎𐊆𐊍𐊆 \"Trm̃mili\" ) was the language of the ancient <a href=\"Lycians\">Lycians the region known as <a href=\"Lycia\">Lycia</a> in <a href=\"Anatolia\">Anatolia</a> (present day <a href=\"Turkey\">Turkey</a>), during the <a href=\"Iron%20Age\">Iron Age</a>."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5ab9a694554299743d22eb8a",
+      "finding": "wrong_reference_entity",
+      "before": {
+        "reference": "Tiny TV",
+        "target_answers": [
+          "Tiny TV"
+        ],
+        "question": "Which show on Tiny TV aired on August 20, 2001?"
+      },
+      "after": {
+        "reference": "Oswald",
+        "target_answers": [
+          "Oswald"
+        ],
+        "question": "Which show featured on Tiny TV first aired in the United States on August 20, 2001?"
+      },
+      "reason_zh": "题目问Tiny TV中的节目；Oswald段落第1句给出2001-08-20首播日期，Tiny TV只是包含该节目的节目时段。标签选错实体。原supporting_facts还漏标了Oswald的日期句。",
+      "evidence": [
+        {
+          "title": "Tiny TV",
+          "sent_id": 0,
+          "text": "Tiny TV was a block of preschool programming on POGO that aired on weekdays from 9:00 am, and featured shows such as Oswald, Bob the Builder, and Noddy in Toyland."
+        },
+        {
+          "title": "Oswald (TV series)",
+          "sent_id": 0,
+          "text": "Oswald is an American-British children's animated television series originally airing on Nickelodeon as part of the Nick Jr. block."
+        },
+        {
+          "title": "Oswald (TV series)",
+          "sent_id": 2,
+          "text": " The show was created by Dan Yaccarino and co-produced by HIT Entertainment."
+        },
+        {
+          "title": "Oswald (TV series)",
+          "sent_id": 1,
+          "text": " It first aired on August 20, 2001 in the United States.",
+          "annotation": "present in context; omitted from upstream supporting_facts"
+        }
+      ],
+      "decision_zh": "改为Oswald，并明确问该节目的美国首播日期，避免错误暗示Tiny TV在该日期播出。"
+    },
+    {
+      "source_id": "hotpotqa/5a8dd3935542995a26add3f2",
+      "finding": "question_answer_type_mismatch",
+      "before": {
+        "reference": "One Love",
+        "target_answers": [
+          "One Love"
+        ],
+        "question": " Which song on the fourth studio album by French DJ David Guetta feature vocals by Kelly Rowland on the song When Love Takes Over?"
+      },
+      "after": {
+        "reference": "One Love",
+        "target_answers": [
+          "One Love"
+        ],
+        "question": "What is the title of the fourth studio album by French DJ David Guetta that includes \"When Love Takes Over\", featuring vocals by Kelly Rowland?"
+      },
+      "reason_zh": "题干以Which song提问，Kelly Rowland演唱的歌是When Love Takes Over；One Love是专辑名称，同名歌曲则是Estelle演唱。题干与答案对象类型冲突。",
+      "evidence": [
+        {
+          "title": "When Love Takes Over",
+          "sent_id": 0,
+          "text": "\"When Love Takes Over\" is a song by French DJ-music producer David Guetta with vocals by Kelly Rowland from his fourth studio album, \"One Love\"."
+        },
+        {
+          "title": "One Love (David Guetta album)",
+          "sent_id": 0,
+          "text": "One Love is the fourth studio album by French DJ David Guetta, first released in the United Kingdom on 24 August 2009 through Virgin Records."
+        }
+      ],
+      "decision_zh": "选择问专辑，保留One Love；题干明确album。歌曲题已把When Love Takes Over写入问题，直接把它作为gold会形成题干含答案。"
+    },
+    {
+      "source_id": "hotpotqa/5a7e1f3f5542997cc2c47524",
+      "finding": "non_exhaustive_reference",
+      "before": {
+        "reference": "composer and conductor",
+        "target_answers": [
+          "composer and conductor"
+        ],
+        "question": "Bernhard Stavenhagen and Franz Liszt, share which occupations?"
+      },
+      "after": {
+        "reference": "pianist, composer and conductor",
+        "target_answers": [
+          "pianist, composer and conductor",
+          "pianist, composer, conductor",
+          "pianist, conductor and composer",
+          "pianist, conductor, composer",
+          "composer, pianist and conductor",
+          "composer, pianist, conductor",
+          "composer, conductor and pianist",
+          "composer, conductor, pianist",
+          "conductor, pianist and composer",
+          "conductor, pianist, composer",
+          "conductor, composer and pianist",
+          "conductor, composer, pianist"
+        ],
+        "question": "Which three occupations do Bernhard Stavenhagen and Franz Liszt share, according to the passages? List all three."
+      },
+      "reason_zh": "两段原文都列出pianist、composer、conductor；参考答案只列后两项。参考列出的职业是真的，但不是唯一充分答案。",
+      "evidence": [
+        {
+          "title": "Bernhard Stavenhagen",
+          "sent_id": 0,
+          "text": "Bernhard Stavenhagen (24 November 1862 – 25 December 1914) was a German pianist, composer and conductor."
+        },
+        {
+          "title": "Franz Liszt",
+          "sent_id": 0,
+          "text": "Franz Liszt (] ; Hungarian: \"Liszt Ferencz\" , in modern usage \"Liszt Ferenc\", ] ; October 22, 1811July 31, 1886) was a prolific 19th-century Hungarian composer, virtuoso pianist, conductor, music teacher, arranger, organist, philanthropist, author, nationalist and a Franciscan tertiary."
+        }
+      ],
+      "decision_zh": "明确要求完整三项。只接受三项完整集合的6种顺序，含末项and/无and两种列举形式；共12个完整答案，原两项子集不再接受。使用现有多参考答案严格EM，未改评分代码。"
+    },
+    {
+      "source_id": "hotpotqa/5a808d785542996402f6a54e",
+      "finding": "award_vs_nomination",
+      "before": {
+        "reference": "Emmy Award",
+        "target_answers": [
+          "Emmy Award"
+        ],
+        "question": "What award was given to an American actor known for having played the straight-faced anchorman Jim Dial on \"Murphy Brown\" and a guest star in  the 11th episode from the second season of the Fox animated series \"Family Guy\" ?"
+      },
+      "after": {
+        "reference": "Emmy Award",
+        "target_answers": [
+          "Emmy Award"
+        ],
+        "question": "For which award was the American actor who played Jim Dial on \"Murphy Brown\" and guest-starred in the 11th episode of the second season of \"Family Guy\" nominated for his performance on \"Murphy Brown\"?"
+      },
+      "reason_zh": "题目写award was given，原文写earned a nomination。Television Academy人物页也列1次提名。Emmy Award这个奖项名本身并非错误，授奖前提错误。",
+      "evidence": [
+        {
+          "title": "A Picture is Worth 1,000 Bucks",
+          "sent_id": 1,
+          "text": " It is the 18th episode of \"Family Guy\" to be aired."
+        },
+        {
+          "title": "Charles Kimbrough",
+          "sent_id": 0,
+          "text": "Charles Kimbrough (born May 23, 1936) is an American actor known for having played the straight-faced anchorman Jim Dial on \"Murphy Brown\"."
+        },
+        {
+          "title": "Charles Kimbrough",
+          "sent_id": 1,
+          "text": " In 1990, his performance in the role earned him a nomination for an Emmy Award for \"Outstanding Supporting Actor in a Comedy Series\"."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5a7a7b5155429941d65f2672",
+      "finding": "missing_question_predicate",
+      "before": {
+        "reference": "February 18, 1965",
+        "target_answers": [
+          "February 18, 1965"
+        ],
+        "question": "When was the performer of the song \"Lil Ghetto Boy\"?"
+      },
+      "after": {
+        "reference": "February 18, 1965",
+        "target_answers": [
+          "February 18, 1965"
+        ],
+        "question": "When was the performer of \"Lil Ghetto Boy\", the song sampled in \"Things Done Changed\", born?"
+      },
+      "reason_zh": "When was the performer ...缺少born等事件谓语。标签是Dr. Dre出生日期；Things Done Changed明确提到其Lil Ghetto Boy。Donny Hathaway的Little Ghetto Boy是另一首歌，原预测还混入生卒范围。",
+      "evidence": [
+        {
+          "title": "Things Done Changed",
+          "sent_id": 3,
+          "text": " The hook of the song is a sample from Biz Markie's song \"The Vapors\", when he says \"Back in the day\", and Dr. Dre's song \"Lil Ghetto Boy\" (from his 1992 album \"The Chronic\"), sampling Dre's line: \"Things done changed on this side/ Remember they used to thump, but now they blast, right?\""
+        },
+        {
+          "title": "Dr. Dre",
+          "sent_id": 0,
+          "text": "Andre Romelle Young (born February 18, 1965), better known by his stage name Dr. Dre, is an American rapper, record producer, and entrepreneur."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5ac2f46a5542996773102655",
+      "finding": "party_vs_coalition",
+      "before": {
+        "reference": "National Democratic Alliance",
+        "target_answers": [
+          "National Democratic Alliance"
+        ],
+        "question": "Which Indian political party represented in the Indian vice-presidential election, 2012 has Narenda Modi as its leader?"
+      },
+      "after": {
+        "reference": "National Democratic Alliance",
+        "target_answers": [
+          "National Democratic Alliance"
+        ],
+        "question": "According to the passages, which Indian political alliance represented in the 2012 Indian vice-presidential election had Narendra Modi as its leader?"
+      },
+      "reason_zh": "题目问political party，gold NDA在证据中明确是coalition of political parties。BJP是领导联盟的党，两者相关但不是别名。",
+      "evidence": [
+        {
+          "title": "Indian vice-presidential election, 2012",
+          "sent_id": 2,
+          "text": " The other prime candidate was the NDA's Jaswant Singh."
+        },
+        {
+          "title": "National Democratic Alliance (India)",
+          "sent_id": 0,
+          "text": "The National Democratic Alliance (NDA) is a centre-right coalition of political parties in India."
+        },
+        {
+          "title": "National Democratic Alliance (India)",
+          "sent_id": 6,
+          "text": " Its leader, Narendra Modi, was sworn in as Prime Minister of India on 26 May 2014."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5ae1fec25542997283cd231c",
+      "finding": "reversed_trip_direction",
+      "before": {
+        "reference": "Moose Creek",
+        "target_answers": [
+          "Moose Creek"
+        ],
+        "question": "The 1950 British Columbia B-36 crash involved an aircraft that was en route to the Air Force base just southeast of what Alaska town?"
+      },
+      "after": {
+        "reference": "Moose Creek",
+        "target_answers": [
+          "Moose Creek"
+        ],
+        "question": "The aircraft involved in the 1950 British Columbia B-36 crash had departed from an Air Force base just southeast of which Alaska town?"
+      },
+      "reason_zh": "问题写en route to阿拉斯加基地；原文是from Eielson(Alaska) to Carswell(Texas)。gold Moose Creek定位的是出发基地。原预测Fairbanks也漏读just southeast对应Moose Creek的限定关系。",
+      "evidence": [
+        {
+          "title": "1950 British Columbia B-36 crash",
+          "sent_id": 2,
+          "text": " The B-36 had been en route from Eielson Air Force Base near Fairbanks, Alaska to Carswell AFB in Fort Worth, Texas, more than 3000 miles south-east, on a mission that included a simulated nuclear attack on San Francisco."
+        },
+        {
+          "title": "Eielson Air Force Base",
+          "sent_id": 0,
+          "text": "Eielson Air Force Base (AFB) (IATA: EIL, ICAO: PAEI, FAA LID: EIL) is a United States Air Force base located approximately 26 miles (42 km) southeast of Fairbanks, Alaska and just southeast of Moose Creek, Alaska."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5a88ffd95542995153361245",
+      "finding": "misattached_award_premise",
+      "before": {
+        "reference": "Brian Helgeland",
+        "target_answers": [
+          "Brian Helgeland"
+        ],
+        "question": "Paul Greengrass was nominated for an Academy Award for the 2010 movie made from a screenplay written by whom?"
+      },
+      "after": {
+        "reference": "Brian Helgeland",
+        "target_answers": [
+          "Brian Helgeland"
+        ],
+        "question": "Who wrote the screenplay for the 2010 film directed by Paul Greengrass mentioned in the passages?"
+      },
+      "reason_zh": "把United 93(2006)的奥斯卡导演提名挂到Green Zone(2010)。Brian Helgeland确实是后者编剧，但前提不成立；此题本轮EM为1。",
+      "evidence": [
+        {
+          "title": "Paul Greengrass",
+          "sent_id": 3,
+          "text": " Other films he has directed include three in the \"Bourne\" action/thriller series: \"The Bourne Supremacy\" (2004), \"The Bourne Ultimatum\" (2007), and \"Jason Bourne\" (2016); \"United 93\" (2006), for which he won the BAFTA Award for Best Director, and received an Academy Award for Best Director nomination, \"Green Zone\" (2010) and \"Captain Phillips\" (2013)."
+        },
+        {
+          "title": "Green Zone (film)",
+          "sent_id": 1,
+          "text": " The storyline was conceived from a screenplay written by Brian Helgeland, based on a 2006 non-fiction book \"Imperial Life in the Emerald City\" by journalist Rajiv Chandrasekaran."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5a76abf65542993569682c7d",
+      "finding": "negation_reversed",
+      "before": {
+        "reference": "John Napier",
+        "target_answers": [
+          "John Napier"
+        ],
+        "question": "Who was the Scottish mathematician, physicist and astronomer who is credited for introducing \"natural\" logarithmic function?"
+      },
+      "after": {
+        "reference": "John Napier",
+        "target_answers": [
+          "John Napier"
+        ],
+        "question": "After which Scottish mathematician, physicist and astronomer is the Napierian logarithm named?"
+      },
+      "reason_zh": "Napierian logarithm段落明确写Napier did not introduce this natural logarithmic function；问题却说credited for introducing。按所给原文，题干反转了否定关系。模型复现John Napier获得EM=1。",
+      "evidence": [
+        {
+          "title": "Napierian logarithm",
+          "sent_id": 1,
+          "text": " Napier did not introduce this \"natural\" logarithmic function, although it is named after him."
+        },
+        {
+          "title": "John Napier",
+          "sent_id": 0,
+          "text": "John Napier of Merchiston ( ; 1 February, 1550 – 4 April 1617); also signed as Neper, Nepair; nicknamed Marvellous Merchiston) was a Scottish landowner known as a mathematician, physicist, and astronomer."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5a80b3a65542992bc0c4a7ba",
+      "finding": "casualties_as_deaths",
+      "before": {
+        "reference": "Verona",
+        "target_answers": [
+          "Verona"
+        ],
+        "question": "What city is a tourist destination and also near the area where over 10,000 soldiers died?"
+      },
+      "after": {
+        "reference": "Verona",
+        "target_answers": [
+          "Verona"
+        ],
+        "question": "According to the passages, what city is a tourist destination and is near the site of a battle where combined Austrian losses and French casualties exceeded 10,000?"
+      },
+      "reason_zh": "证据提供奥军losses超过5500、法军至少5000 casualties；题目把合计损失/伤亡改成over 10,000 soldiers died。伤亡不能直接当死亡人数。Verona这个地点仍能匹配，故原EM=1。",
+      "evidence": [
+        {
+          "title": "Order of battle for the Battle of Caldiero (1805)",
+          "sent_id": 0,
+          "text": "The armies of the First French Empire and the Austrian Empire fought the Battle of Caldiero from 29 to 31 October 1805 just east of Verona in Italy."
+        },
+        {
+          "title": "Order of battle for the Battle of Caldiero (1805)",
+          "sent_id": 3,
+          "text": " Austrian losses were over 5,500, while the French suffered at least 5,000 casualties."
+        },
+        {
+          "title": "Verona",
+          "sent_id": 0,
+          "text": "Verona (] ; Venetian: \"Verona\" or \"Veròna\") is a city on the Adige river in Veneto, Italy, with approximately 265,000 inhabitants and one of the seven provincial capitals of the region."
+        },
+        {
+          "title": "Verona",
+          "sent_id": 3,
+          "text": " It is one of the main tourist destinations in northern Italy, owing to its artistic heritage, several annual fairs, shows, and operas, such as the lyrical season in the Arena, the ancient amphitheater built by the Romans."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5abaf81f55429939ce03dd7c",
+      "finding": "governor_vs_lieutenant_governor",
+      "before": {
+        "reference": "November 22, 1966",
+        "target_answers": [
+          "November 22, 1966"
+        ],
+        "question": "When was the American politician and Governor of Oklahoma died in the city which is is home to the main campus of Oklahoma State University?"
+      },
+      "after": {
+        "reference": "November 22, 1966",
+        "target_answers": [
+          "November 22, 1966"
+        ],
+        "question": "On what date did the American politician who served as Lieutenant Governor of Oklahoma and died in the city that is home to the main campus of Oklahoma State University die?"
+      },
+      "reason_zh": "James E. Berry原文职务为Lieutenant Governor，题干写Governor。日期标签是该副州长的死亡日期，原EM=1。",
+      "evidence": [
+        {
+          "title": "James E. Berry",
+          "sent_id": 0,
+          "text": "James Edward Berry (October 2, 1881, near Oak Grove, Jackson County, Missouri – November 22, 1966, Stillwater, Oklahoma) was an American politician who served as the Lieutenant Governor of Oklahoma from 1935 to 1955."
+        },
+        {
+          "title": "Stillwater, Oklahoma",
+          "sent_id": 0,
+          "text": "Stillwater is a city in north east Oklahoma at the intersection of US-177 and State Highway 51."
+        },
+        {
+          "title": "Stillwater, Oklahoma",
+          "sent_id": 6,
+          "text": " Stillwater is home to the main campus of Oklahoma State University, as well as a branch of Northern Oklahoma College, Meridian Technology Center, and the Oklahoma Department of Career and Technology Education."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5ae3642d5542991a06ce99b4",
+      "finding": "venue_as_city",
+      "before": {
+        "reference": "Pontins",
+        "target_answers": [
+          "Pontins"
+        ],
+        "question": "What is the name shared between a city in Prestatyn, Wales and a company operating holiday parks in the UK"
+      },
+      "after": {
+        "reference": "Pontins",
+        "target_answers": [
+          "Pontins"
+        ],
+        "question": "What name is shared by the venue in Prestatyn, Wales that hosted Pro Challenge Series – Event 2 and a company operating holiday parks in the UK?"
+      },
+      "reason_zh": "来源说比赛在Pontins in Prestatyn举办，Pontins是经营度假园区的公司名称。题干将Pontins表述成a city in Prestatyn，证据不支持这种实体类型。",
+      "evidence": [
+        {
+          "title": "Pro Challenge Series – Event 2",
+          "sent_id": 0,
+          "text": "The Pro Challenge Series – Event 2 was a six-red snooker tournament that took place between 31 August and 1 September 2009 at Pontins in Prestatyn, Wales."
+        },
+        {
+          "title": "Pontins",
+          "sent_id": 0,
+          "text": "Pontins is the trading name of Britannia Jinky Jersey Ltd, a company operating holiday parks in the UK."
+        }
+      ]
+    },
+    {
+      "source_id": "hotpotqa/5a83458755429966c78a6b66",
+      "finding": "taxonomic_rank_confusion",
+      "before": {
+        "reference": "trees",
+        "target_answers": [
+          "trees"
+        ],
+        "question": "Lodoicea and Nothofagus, are genus of what mutual species?"
+      },
+      "after": {
+        "reference": "trees",
+        "target_answers": [
+          "trees"
+        ],
+        "question": "What plant growth form do Lodoicea and Nothofagus have in common?"
+      },
+      "reason_zh": "问题说两个genus的mutual species，标签却是生长形态trees。tree不是生物学species。模型又把任务改为比较family并回答无共同类别，两边都偏离清楚的提问。",
+      "evidence": [
+        {
+          "title": "Lodoicea",
+          "sent_id": 0,
+          "text": "Lodoicea, commonly known as the sea coconut, coco de mer, or double coconut, is a monotypic genus in the palm family."
+        },
+        {
+          "title": "Nothofagus",
+          "sent_id": 0,
+          "text": "Nothofagus, also known as the southern beeches, is a genus of 43 species of trees and shrubs native to the Southern Hemisphere in southern South America (Chile, Argentina) and Australasia (east and southeast Australia, New Zealand, New Guinea and New Caledonia)."
+        }
+      ],
+      "decision_zh": "改问生长形态，保留trees。原材料中的palm需要基本植物常识；外部核验只用于裁决，不添加到模型输入。",
+      "external_evidence": {
+        "url": "https://powo.science.kew.org/taxon/668084-1",
+        "publisher": "Royal Botanic Gardens, Kew",
+        "checked_on": "2026-09-28",
+        "summary_zh": "Kew将Lodoicea唯一物种L. maldivica的生长形态列为tree。"
+      }
+    }
+  ]
+}

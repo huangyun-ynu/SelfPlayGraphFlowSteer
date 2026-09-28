@@ -1617,7 +1617,7 @@ def test_routed_executor_obeys_solver_model_choice_for_each_agent() -> None:
     minimax = MockBackend([response, response])
     grok = MockBackend([response])
     executor = RoutedModelAgentExecutor({"minimax": minimax, "grok": grok}, ("minimax", "grok"))
-    assert executor.version == ("solver-routed-model-agent-v21-qa-request-credit:minimax,grok")
+    assert executor.version == ("solver-routed-model-agent-v23-student-text-actions-hotpot-evidence-first:minimax,grok")
 
     first = executor.execute(
         task="task",

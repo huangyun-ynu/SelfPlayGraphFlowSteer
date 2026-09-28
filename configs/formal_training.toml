@@ -1,3 +1,5 @@
+# SWE baseline: swe-65of128-20260928 (65/128 = 50.78125%); dataset-scoped v3.
+# Hotpot baseline: hotpot-8672-20260928 (111/128 strict EM); evidence-first v1, v2.2.
 # Canonical deployment configuration for the seven-dataset formal PATS run.
 # Credentials are loaded from the repository .env and are never stored here.
 [models.proposer]
@@ -42,6 +44,7 @@ pool_member_queue_wait_s = 0.5
 
 # Dataset candidates: the Director selects each Worker model; no fixed-route remapping.
 [runtime_routing.dataset_worker_routes]
+swe_bench = ["gpt"]
 webshop = ["gpt", "grok", "gemini", "deepseek", "minimax"]
 
 [runtime_routing.endpoint_pools]
@@ -51,6 +54,7 @@ gemini = ["gemini", "gemini2"]
 gpt_judge = ["gpt_judge", "gpt_judge_eco"]
 
 [canvas]
+submission_journal_dir = "state/formal-training-swe65-v1/submissions"
 # Predictive admission protection is disabled; hard token and wall-clock limits remain.
 remaining_time_admission_enabled = false
 remaining_token_admission_enabled = false
@@ -66,6 +70,14 @@ webshop = 350000
 alfworld = 350000
 healthbench_professional = 240000
 swe_bench = 350000
+
+[canvas.worker_token_budget_by_dataset.swe_bench]
+policy = "reported_usage_threshold_v1"
+start_threshold = 350000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
 
 [solver_skillbank]
 path = "state/formal-training-output-contract-v2/runtime_state/director_skillbank.v2.json"
@@ -169,20 +181,20 @@ worker_guidance_policy = "factual_memory_v1"
 # pinned dataset revision are provisioned for the formal run.
 [swe]
 enabled = true
-repo_cache_root = "state/formal-training-output-contract-v2/swe/repo-cache"
-workspace_root = "state/formal-training-output-contract-v2/swe/workspaces"
-artifact_store_root = "state/formal-training-output-contract-v2/private/swe/artifacts"
-verifier_registry_path = "state/formal-training-output-contract-v2/private/swe/verifier-registry.json"
-lifecycle_log_path = "state/formal-training-output-contract-v2/private/swe/lifecycle.jsonl"
-verifier_log_path = "state/formal-training-output-contract-v2/private/swe/verifier-client.jsonl"
+repo_cache_root = "state/pats-formal-20260912/swe/repo-cache"
+workspace_root = "state/formal-training-swe65-v1/swe/workspaces"
+artifact_store_root = "state/formal-training-swe65-v1/private/swe/artifacts"
+verifier_registry_path = "state/formal-training/private/swe/verifier-registry.json"
+lifecycle_log_path = "state/formal-training-swe65-v1/private/swe/lifecycle.jsonl"
+verifier_log_path = "state/formal-training-swe65-v1/private/swe/verifier-client.jsonl"
 verifier_host = "43.134.20.27"
 verifier_user = "sweeval"
-verifier_identity_file = "state/formal-training-output-contract-v2/private/swe/identity"
-verifier_known_hosts_file = "state/formal-training-output-contract-v2/private/swe/known_hosts"
+verifier_identity_file = "state/formal-training/private/swe/identity"
+verifier_known_hosts_file = "state/formal-training/private/swe/known_hosts"
 # Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
 # TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
-cvm_auto_start = false
-cvm_auto_stop = false
+cvm_auto_start = true
+cvm_auto_stop = true
 cvm_region = "ap-singapore"
 cvm_instance_id = "ins-5n1zolfw"
 cvm_secret_id_env = "TENCENTCLOUD_SECRET_ID"
@@ -392,3 +404,15 @@ timeout_s = 240.0
 max_tokens = 16384
 managed_locally = false
 frozen = true
+
+[runtime_routing.dataset_endpoint_pools.swe_bench]
+gpt = ["gpt_student", "gpt"]
+
+[canvas.submission_protocol_by_dataset]
+swe_bench = "unified_task_result_v1"
+
+[runtimes.gpt.max_concurrency_by_dataset]
+swe_bench = 5
+
+[runtimes.gpt_student.max_concurrency_by_dataset]
+swe_bench = 10

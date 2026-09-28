@@ -1,12 +1,16 @@
 """A tested task_result patch is independent of legacy output selection."""
 
 import copy
+import json
+from types import SimpleNamespace
 
 import pytest
 
 from selfplay_graph_flowsteer.contracts import AgentArtifact, CodeArtifactRef
 from selfplay_graph_flowsteer.outcome_admission import terminal_policy_failure
 from selfplay_graph_flowsteer.runtime import _enforce_artifact_integrity
+from selfplay_graph_flowsteer.submission_contract import receipt_error
+from selfplay_graph_flowsteer.worker_usage_ledger import WorkerUsageLedger
 
 from .test_swe_execution_admission import BudgetedExecutor, make_canvas
 from .test_unified_submission import add, step
@@ -89,6 +93,39 @@ def test_graph_only_blocker_does_not_trigger_candidate_rerun(tmp_path):
     assert canvas.submission_receipt.artifact_id == candidate.artifact_id
 
 
+def test_last_legal_request_overshoot_keeps_tested_patch_submittable(tmp_path):
+    class Executor(BudgetedExecutor):
+        def execute(self, **kwargs):
+            original = super().execute(**kwargs)
+            return _tested_patch() if kwargs["node"].agent_id == "b" else original
+
+    canvas = make_canvas(tmp_path, Executor(charge=False))
+    add(canvas, "a", "subtask")
+    add(canvas, "b", "task_result")
+    assert step(canvas, {"action": "delete_agent", "target": "a"}).accepted
+    ledger = WorkerUsageLedger(tmp_path / "usage.sqlite3", question_attempt_id=canvas.run_id,
+                               threshold=10)
+    attempt = ledger.begin(route="gpt", agent_id="b", execution_id="1", request={})
+    ledger.settle(attempt, input_tokens=9, output_tokens=2)
+    canvas.runtime.worker_usage_ledger = ledger
+    canvas.total_tokens = 11
+    assert canvas.control_snapshot()["allowed_actions"] == ["finish"]
+    assert canvas.submission_assessment("b")["submit_ready"]
+    accepted = step(canvas, {"action": "finish", "target": "b"}, True)
+    assert accepted.accepted
+    receipt = canvas.submission_receipt
+    assert receipt.worker_tokens_used == 11
+    assert receipt.worker_budget_policy == "reported_usage_threshold_v1"
+    run = SimpleNamespace(
+        finished=True, graph=canvas.graph.to_dict(),
+        turns=[SimpleNamespace(call_id=receipt.director_call_id, accepted=True,
+                               model_action=json.dumps({"action": "finish", "target": "b"}))],
+    )
+    assert receipt_error(receipt, run=run, events=canvas.history,
+                         run_id=canvas.run_id, dataset="swe_bench") is None
+    ledger.close()
+
+
 @pytest.mark.parametrize("additional_error", [None, "transport_failure", "action_execution_failed"])
 def test_shared_budget_error_mapping_needs_independent_terminal_evidence(additional_error):
     failure_codes = ["total_action_budget_exhausted"]
@@ -109,3 +146,17 @@ def test_shared_budget_error_mapping_needs_independent_terminal_evidence(additio
     assert terminal_policy_failure("swe_bench", **{**args, "rejection_codes": []}) is None
     assert terminal_policy_failure("swe_bench", **{**args, "terminal": False}) is None
     assert terminal_policy_failure("swe_bench", **args, infrastructure_failure=True) is None
+
+
+def test_reported_usage_terminal_reason_keeps_unknown_distinct():
+    args = dict(
+        terminal=True, artifacts={}, output_agent=None, rounds=2, max_rounds=24,
+        worker_tokens=350010, worker_token_limit=350000,
+        worker_budget_policy="reported_usage_threshold_v1", worker_dispatch_valid=True,
+    )
+    assert terminal_policy_failure(
+        "swe_bench", rejection_codes=["worker_usage_threshold_reached"], **args,
+    )["code"] == "worker_usage_threshold_reached"
+    assert terminal_policy_failure(
+        "swe_bench", rejection_codes=["worker_usage_unsettled_limit"], **args,
+    ) is None

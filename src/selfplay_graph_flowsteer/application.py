@@ -113,6 +113,7 @@ from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
 from .webshop_native import NativeWebShopLifecycle
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
 from .webshop_profiles import M02_PROFILE, section_memory_limit
+from .webshop_evidence import EVIDENCE_PROFILES
 
 
 class GraphEvaluationIncompleteError(RuntimeError):
@@ -131,7 +132,7 @@ class GraphEvaluationBackendError(RuntimeError):
 REMOTE_RUNTIME_MAX_CONCURRENCY = 16
 _REMOTE_RUNTIME_20_CONCURRENCY_MODELS = frozenset({"gpt-6-astra"})
 _REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES = ("minimax",)
-_REMOTE_RUNTIME_40_CONCURRENCY_PREFIXES = ("deepseek",)
+_REMOTE_RUNTIME_50_CONCURRENCY_PREFIXES = ("deepseek",)
 
 
 def _allowed_physical_gpu_ids() -> set[int]:
@@ -233,8 +234,8 @@ class FixedRuntimeConfig:
             raise ValueError("runtime dataset concurrency overrides must be positive")
         model_name = self.served_model.casefold()
         remote_limit = (
-            40
-            if model_name.startswith(_REMOTE_RUNTIME_40_CONCURRENCY_PREFIXES)
+            50
+            if model_name.startswith(_REMOTE_RUNTIME_50_CONCURRENCY_PREFIXES)
             else 30
             if model_name.startswith(_REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES)
             else (
@@ -379,6 +380,17 @@ class WebShopConfig:
 
     def validate(self) -> None:
         section_memory_limit(self.compatibility_profile)
+        if (self.compatibility_profile in EVIDENCE_PROFILES) != (self.worker_guidance_policy == "public_evidence_v1"):
+            raise ValueError("public evidence guidance and compatibility profile must be enabled together")
+        if self.compatibility_profile in EVIDENCE_PROFILES and (
+            self.worker_execution_policy != "graph_tools_v1"
+            or self.search_observation_mode != "legacy"
+            or self.max_observation_chars != 0
+            or not self.staged_commit_enabled
+            or self.env_feedback_enabled
+            or self.native_conversation_history
+        ):
+            raise ValueError("public evidence experiments require the same graph tools and observation settings as M02")
         if self.compatibility_profile == M02_PROFILE and (
             self.worker_execution_policy != "graph_tools_v1"
             or self.worker_memory_policy != "factual_memory_v1"
@@ -413,7 +425,7 @@ class WebShopConfig:
         if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
             raise ValueError(
                 "webshop.worker_guidance_policy must be baseline, laser_checklist_v1, "
-                "or merged_checklist_v1"
+                "merged_checklist_v1, or public_evidence_v1"
             )
         if not self.enabled:
             return
@@ -638,6 +650,7 @@ class AdaptiveApplicationConfig:
     # the exact Director selection.
     dataset_route_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     runtime_endpoint_pools: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    dataset_endpoint_pools: dict[str, dict[str, tuple[str, ...]]] = field(default_factory=dict)
     endpoint_pool_retry_attempts: int = 2
     endpoint_pool_retry_backoff_s: float = 1.0
     endpoint_pool_member_queue_wait_s: float = 0.5
@@ -735,6 +748,8 @@ class AdaptiveApplicationConfig:
         self.retrieval.validate()
         self.aime_actions.validate()
         self.webshop.validate()
+        if self.webshop.compatibility_profile in EVIDENCE_PROFILES and self.canvas.submission_protocol == "unified_task_result_v1":
+            raise ValueError("public evidence experiments require the single-owner WebShop lifecycle")
         self.alfworld.validate()
         self.swe.validate()
         self.director_reward.validate()
@@ -788,6 +803,14 @@ class AdaptiveApplicationConfig:
             # each physical backend supplies its own served model at dispatch.
             if len({item.reasoning_effort for item in configs}) != 1:
                 raise ValueError("endpoint pool must use the same reasoning effort")
+        for dataset, pools in self.dataset_endpoint_pools.items():
+            if not canonical_dataset_name(dataset):
+                raise ValueError("dataset endpoint pool requires a dataset")
+            for logical, members in pools.items():
+                if (logical not in self.runtime_endpoint_pools or len(members) < 2
+                        or len(set(members)) != len(members)
+                        or set(members) - set(self.runtime_endpoint_pools[logical])):
+                    raise ValueError("invalid dataset endpoint pool: " + logical)
         if (
             self.endpoint_pool_retry_attempts < 0
             or self.endpoint_pool_retry_backoff_s < 0
@@ -997,7 +1020,14 @@ class AdaptiveApplicationConfig:
         # PATS audits/refines the actual Director variant, including dataclass
         # replacements made by async collection. It has no independent override.
         object.__setattr__(self, "pats", replace(
-            self.pats, director_prompt_variant="v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant
+            self.pats,
+            director_prompt_variant="v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
+            director_prompt_variant_by_dataset={
+                canonical_dataset_name(dataset): (
+                    "v3" if protocol == "unified_task_result_v1" else self.director_prompt_variant
+                )
+                for dataset, protocol in self.canvas.submission_protocol_by_dataset.items()
+            },
         ))
 
     def model_manifest(self) -> dict[str, Any]:
@@ -1035,6 +1065,10 @@ class AdaptiveApplicationConfig:
                 "endpoint_pools": {
                     key: list(value) for key, value in self.runtime_endpoint_pools.items()
                 },
+                "dataset_endpoint_pools": {
+                    dataset: {key: list(members) for key, members in pools.items()}
+                    for dataset, pools in self.dataset_endpoint_pools.items()
+                },
                 "endpoint_pool_retry_attempts": self.endpoint_pool_retry_attempts,
                 "endpoint_pool_retry_backoff_s": self.endpoint_pool_retry_backoff_s,
                 "endpoint_pool_member_queue_wait_s": (self.endpoint_pool_member_queue_wait_s),
@@ -1048,6 +1082,10 @@ class AdaptiveApplicationConfig:
                 "max_total_tokens_by_dataset": {
                     canonical_dataset_name(dataset): int(limit)
                     for dataset, limit in sorted(self.canvas.max_total_tokens_by_dataset.items())
+                },
+                "worker_token_budget_by_dataset": {
+                    canonical_dataset_name(dataset): dict(policy)
+                    for dataset, policy in sorted(self.canvas.worker_token_budget_by_dataset.items())
                 },
                 "structural_exploration_policy": (self.canvas.structural_exploration_policy),
                 "bidirectional_revision_policy": (self.canvas.bidirectional_revision_policy),
@@ -1085,6 +1123,7 @@ class AdaptiveApplicationConfig:
             "director_reward": asdict(self.director_reward),
             "director_prompt": {
                 "variant": "v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
+                "variant_by_dataset": dict(self.pats.director_prompt_variant_by_dataset),
                 "thinking_by_dataset": dict(self.director_thinking_by_dataset),
             },
             "healthbench_judge_audit": {
@@ -1136,6 +1175,11 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
     )
     if not isinstance(raw_dataset_token_budgets, dict):
         raise ValueError("canvas.max_total_tokens_by_dataset must be a TOML table")
+    raw_usage_policies = canvas.get("worker_token_budget_by_dataset", {})
+    if not isinstance(raw_usage_policies, dict) or any(
+        not isinstance(value, dict) for value in raw_usage_policies.values()
+    ):
+        raise ValueError("canvas.worker_token_budget_by_dataset must contain dataset tables")
     if bool(canvas.get("enforce_flowsteer_structure", False)):
         raise ValueError(
             "canvas.enforce_flowsteer_structure is deprecated: fixed role/topology gates "
@@ -1216,6 +1260,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             str(key): tuple(str(member) for member in value)
             for key, value in runtime_routing.get("endpoint_pools", {}).items()
         },
+        dataset_endpoint_pools={
+            canonical_dataset_name(dataset): {
+                str(logical): tuple(str(member) for member in members)
+                for logical, members in pools.items()
+            }
+            for dataset, pools in runtime_routing.get("dataset_endpoint_pools", {}).items()
+        },
         endpoint_pool_retry_attempts=int(runtime_routing.get("pool_retry_attempts", 2)),
         endpoint_pool_retry_backoff_s=float(runtime_routing.get("pool_retry_backoff_s", 1.0)),
         endpoint_pool_member_queue_wait_s=float(
@@ -1228,6 +1279,10 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
         route_health_cooldown_s=float(runtime_routing.get("health_cooldown_s", 600.0)),
         canvas=CanvasConfig(
             submission_protocol=str(canvas.get("submission_protocol", "legacy")),
+            submission_protocol_by_dataset={
+                canonical_dataset_name(dataset): str(protocol)
+                for dataset, protocol in canvas.get("submission_protocol_by_dataset", {}).items()
+            },
             submission_journal_dir=str(_path(canvas.get("submission_journal_dir"), root, "state/submissions")),
             max_recovery_executions=int(canvas.get("max_recovery_executions", 2)),
             action_budget_policy=str(canvas.get("action_budget_policy", "phase_split_v1")),
@@ -1240,6 +1295,10 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             max_total_tokens_by_dataset={
                 canonical_dataset_name(dataset): int(limit)
                 for dataset, limit in raw_dataset_token_budgets.items()
+            },
+            worker_token_budget_by_dataset={
+                canonical_dataset_name(dataset): dict(policy)
+                for dataset, policy in raw_usage_policies.items()
             },
             relay_max_chars=int(canvas.get("relay_max_chars", 4000)),
             feedback_max_chars=int(canvas.get("feedback_max_chars", 6000)),
@@ -2512,6 +2571,11 @@ def create_adaptive_application(
                     pool_retry_attempts=config.endpoint_pool_retry_attempts,
                     retry_backoff_s=config.endpoint_pool_retry_backoff_s,
                     member_queue_wait_s=config.endpoint_pool_member_queue_wait_s,
+                    members_by_dataset={
+                        dataset: pools[logical]
+                        for dataset, pools in config.dataset_endpoint_pools.items()
+                        if logical in pools
+                    },
                 )
                 # Install the shared rollout clock on the pool wrapper too,
                 # not only on its physical clients.

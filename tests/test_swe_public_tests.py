@@ -15,6 +15,7 @@ from selfplay_graph_flowsteer.swe_public_recipes import RECIPES, PublicTestRecip
 from selfplay_graph_flowsteer.swe_public_tests import (
     PublicTestError,
     environment_status,
+    require_public_test_environments,
     resolve_target,
     run_public_test,
 )
@@ -80,6 +81,43 @@ def test_unknown_version_and_missing_environment_are_explicit(tmp_path):
     assert not called
 
 
+def test_preflight_reports_all_missing_versions_without_starting_workspace(tmp_path):
+    rows = [{"repo": "django/django", "version": version} for version in ("3.1", "3.1", "999")]
+    with pytest.raises(PublicTestError, match=r"\(2/2\)") as error:
+        require_public_test_environments(tmp_path, rows)
+    assert "test_repository_version_unsupported" in str(error.value)
+    assert "test_environment_not_prepared" in str(error.value)
+    assert "prepare_swe_public_tests.py" in str(error.value)
+    life = SWEWorkspaceLifecycle(repo_cache_root=tmp_path / "cache", workspace_root=tmp_path / "work",
+        artifact_store=CodeArtifactStore(tmp_path / "artifacts"), public_test_environment_root=tmp_path)
+    with pytest.raises(PublicTestError, match="not ready"):
+        life.bind_task(TaskSpec("fixture", "Fix", metadata={"dataset": "swe_bench",
+            "instance_id": "django__django-1", "repo": "django/django", "version": "3.1",
+            "base_commit": "a" * 40}))
+    assert life.created_workspace_count == 0
+
+
+def test_preflight_rejects_stale_recipe_and_missing_interpreter(tmp_path):
+    recipe = RECIPES["django/django", "3.1"]
+    directory = tmp_path / "django__django--3.1"
+    (directory / "venv/bin").mkdir(parents=True)
+    python = directory / "venv/bin/python"
+    python.touch()
+    manifest = {"repo": "django/django", "version": "3.1", "smoke_passed": True,
+                "recipe_sha256": recipe.fingerprint}
+    (directory / "ready.json").write_text(json.dumps(manifest))
+    require_public_test_environments(tmp_path, [manifest])
+    manifest["recipe_sha256"] = "stale"
+    (directory / "ready.json").write_text(json.dumps(manifest))
+    with pytest.raises(PublicTestError):
+        require_public_test_environments(tmp_path, [manifest])
+    manifest["recipe_sha256"] = recipe.fingerprint
+    (directory / "ready.json").write_text(json.dumps(manifest))
+    python.unlink()
+    with pytest.raises(PublicTestError):
+        require_public_test_environments(tmp_path, [manifest])
+
+
 @pytest.mark.parametrize("output", [
     {"status": "error", "error": {"code": "test_environment_not_prepared"}},
     {"status": "error", "error": {"code": "stale_workspace_version"}},
@@ -113,6 +151,27 @@ def test_actual_test_failures_remain_usable_evidence(returncode):
     assert artifact.swe_progress["test_failure_count"] == returncode
 
 
+def test_restored_patch_test_is_evidence_only_for_restored_version():
+    artifact = _tested_patch()
+    artifact.react_trace = artifact.react_trace[1:2]
+    artifact.react_trace[0]["observation"]["output"].update(
+        workspace_version=1, returncode=0, test_executed=True,
+    )
+    artifact.swe_progress = {"trusted_initial_continuation": {
+        "artifact_ref": {"artifact_sha256": "a" * 64}, "workspace_version": 1,
+    }}
+    node = AgentNode("b", "fix", metadata={"result_scope": "task_result"})
+    _finalize_swe_progress(artifact, node=node)
+    assert artifact.swe_progress["commit_ready"]
+    assert artifact.swe_progress["test_after_latest_edit"]
+    artifact.react_trace[0]["observation"]["output"]["workspace_version"] = 2
+    artifact.swe_progress = {"trusted_initial_continuation": {
+        "artifact_ref": {"artifact_sha256": "a" * 64}, "workspace_version": 1,
+    }}
+    _finalize_swe_progress(artifact, node=node)
+    assert not artifact.swe_progress["commit_ready"]
+
+
 def test_real_pytest_observes_current_patch_and_leaves_workspace_clean(tmp_path, monkeypatch):
     """Use real pip/pytest in an isolated venv, with a failing then repaired source."""
     repo = tmp_path / "cache/example/repo"
@@ -125,6 +184,14 @@ def test_real_pytest_observes_current_patch_and_leaves_workspace_clean(tmp_path,
         "import pytest\n@pytest.fixture(autouse=True)\ndef broken():\n"
         "    raise RuntimeError('missing dependency fixture')\n"
         "def test_never_entered():\n    assert False\n")
+    (repo / "tests/test_nested_root.py").write_text(
+        "import subprocess, sys\n"
+        "def test_nested_project_uses_its_own_root(tmp_path):\n"
+        "    (tmp_path / 'test_generated.py').write_text('def test_ok(): pass\\n')\n"
+        "    result = subprocess.run([sys.executable, '-m', 'pytest', '--collect-only'],\n"
+        "        cwd=tmp_path, text=True, capture_output=True)\n"
+        "    assert result.returncode == 0, result.stdout + result.stderr\n"
+        "    assert 'rootdir: ' + str(tmp_path) in result.stdout, result.stdout\n")
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     subprocess.run(["git", "-C", str(repo), "-c", "user.name=Fixture", "-c", "user.email=a@b.invalid",
@@ -163,6 +230,8 @@ def test_real_pytest_observes_current_patch_and_leaves_workspace_clean(tmp_path,
         setup_failure = life.test("public_tests", "tests/test_setup_failure.py", workspace_version=1)
         assert setup_failure["status"] == "error" and not setup_failure["test_executed"]
         assert setup_failure["tests_run"] == 0 and setup_failure["setup_errors"] == 1
+        nested = life.test("public_tests", "tests/test_nested_root.py", workspace_version=1)
+        assert nested["test_executed"] and nested["returncode"] == 0, nested
     finally:
         life.end_execution()
     assert life.result_for("a")["code_artifact_ref"]["changed_files"] == ["answer.py"]
