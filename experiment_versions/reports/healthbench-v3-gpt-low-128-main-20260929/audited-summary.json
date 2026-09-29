@@ -1,0 +1,73 @@
+{
+  "schema": "healthbench_v3_128_audited_v1",
+  "source_commit": "9803f058b7306c7bf2a3d5b874edb3e4db16acd6",
+  "tasks": 128,
+  "initial_outcomes": {
+    "scored": 120,
+    "scoring_pending": 1,
+    "policy_failure": 5,
+    "unsubmitted_unknown": 2
+  },
+  "infrastructure_retries": 1,
+  "frozen_answer_rescores": 1,
+  "aggregation": "clip(mean(all 128 scores), 0, 1); missing-as-zero convention for unsubmitted; observed rubric means reported separately",
+  "scored_tasks": 122,
+  "planned_criteria": 258,
+  "scored_criteria": 249,
+  "counts": {
+    "finish_without_worker_execution": 122,
+    "v3_receipts": 122,
+    "criteria_with_matching_answer_receipts": 249,
+    "complete_director_context_verified": 122,
+    "multiturn_cases": 27,
+    "threshold_passed": 69,
+    "positive_criteria": 207,
+    "negative_criteria": 42,
+    "positive_criteria_met": 149,
+    "negative_criteria_met": 17,
+    "policy_failures": 5,
+    "unsubmitted_unknown": 1
+  },
+  "length_adjusted_score": 0.4367852198940921,
+  "raw_rubric_score": 0.5390740214565921,
+  "mean_answer_characters": 5650.319672131148,
+  "length_adjusted_score_observed": 0.45826646021675255,
+  "raw_rubric_score_observed": 0.565585858577408,
+  "baseline_length_adjusted_score": 0.4695926396327035,
+  "baseline_raw_rubric_score": 0.5500278240077036,
+  "baseline_mean_answer_characters": 4735.890625,
+  "adjusted_change_points": -3.28074197386114,
+  "raw_change_points": -1.0953802551111447,
+  "worker_requests_in_selected_trajectories": 264,
+  "worker_routes": {
+    "gpt_eco": 53,
+    "gpt": 113,
+    "gpt_student": 98
+  },
+  "worker_models": {
+    "gpt-5.5": 166,
+    "gpt-5.5-2": 98
+  },
+  "judge_models_by_final_criterion": {
+    "gpt-5.5-2": 247,
+    "gpt-5.5": 2
+  },
+  "judge_errors": {
+    "http_4xx": 6
+  },
+  "source_unchanged": true,
+  "independent_score_formula_verified": true,
+  "dataset_sha256": "991ed13ac248a3670e4caf7bdc83a770548c4209562c67a034631d4f0432042b",
+  "initial_records_sha256": "b4c46b01b1584c241136ce340d8b19acbc503c3b795ba3115d84d0534d658df1",
+  "baseline_records_sha256": "8f2da5dd9519b7076678896b521e5acef36f1da9beaa626f788621df9da526d9",
+  "recovery_records_sha256": "2b4e1ed8edd1acb9ef7c6e5b68f63b3a9e87ee0eaeb394ca2ad07a1438c3e84a",
+  "frozen_answer_rescore_records_sha256": "8005146f42b5368610f9544c57bab3e731faa61d39a706f02f67a488e23ff9d0",
+  "failure_reasons": {
+    "director_context_budget_exhausted": 5,
+    "director_no_progress_exhausted": 1
+  },
+  "baseline_threshold_pass_count": 75,
+  "mean_length_penalty_points_all_128": 10.228880156250003,
+  "baseline_mean_length_penalty_points_all_128": 8.043518437500008,
+  "completed_at": "2026-09-29T15:01:47.472312+00:00"
+}
