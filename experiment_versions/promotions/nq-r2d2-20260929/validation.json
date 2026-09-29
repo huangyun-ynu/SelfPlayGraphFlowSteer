@@ -1,0 +1,31 @@
+{
+  "pytest": {
+    "result": "613 passed",
+    "elapsed_s": 15.09,
+    "log_sha256": "04040a4213fdf51203b1d161833738f2c6394cf076020dfe3ef47b59e0a27266",
+    "command": "python -m pytest -q --tb=short tests/test_nq*.py tests/test_corpus_retrieval_batching.py tests/test_dense_retrieval_service.py tests/test_retrieval_service.py tests/test_webshop*.py tests/test_formal_qa_baselines.py tests/test_application.py tests/test_runtime.py tests/test_hotpot_answer_contract.py tests/test_alf_swe_formal_promotion.py tests/test_swe_formal_promotion.py tests/test_public_distribution.py tests/test_shared_action_budget.py tests/test_student_action_protocol.py tests/test_alfworld*.py tests/test_unified*.py tests/test_worker_usage*.py tests/test_finish_submission_contract.py tests/test_submission_grade_boundary.py"
+  },
+  "webshop_golden_requests": {
+    "channels": 7,
+    "worker_requests": 17,
+    "passed": true
+  },
+  "bash_syntax": {
+    "passed": true,
+    "files": [
+      "scripts/formal/environment.sh",
+      "scripts/formal/run_experiment.sh",
+      "scripts/formal/run_retrieval_service.sh"
+    ]
+  },
+  "full_asset_hash_check": true,
+  "live_retrieval_smoke": true,
+  "language_model_calls": 0,
+  "train_pool_conversion_audit": "training-pool-check.json",
+  "train_pool_conversion_is_launch_readiness_check": false,
+  "eval_pool": {
+    "rows": 128,
+    "questions_ids_and_references_preserved": true
+  },
+  "model_accuracy_evaluation_run": false
+}

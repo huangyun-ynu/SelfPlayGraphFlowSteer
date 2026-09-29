@@ -348,6 +348,8 @@ class AdaptiveWorkflowSolver:
         director_enable_thinking: bool | None = None,
         director_thinking_by_dataset: dict[str, bool] | None = None,
         required_nq_frozen_top_k: int = 0,
+        nq_evidence_mode: str | None = None,
+        nq_policy: Any | None = None,
         director_tokenizer: Any | None = None,
         post_director_hook: Callable[[TaskSpec, GraphCanvas, DirectorRun], None] | None = None,
     ) -> None:
@@ -373,6 +375,8 @@ class AdaptiveWorkflowSolver:
             for dataset, enabled in (director_thinking_by_dataset or {}).items()
         }
         self.required_nq_frozen_top_k = required_nq_frozen_top_k
+        self.nq_evidence_mode = nq_evidence_mode
+        self.nq_policy = nq_policy
         self.director_tokenizer = director_tokenizer
         self.post_director_hook = post_director_hook
         self.active_canvas: GraphCanvas | None = None
@@ -431,10 +435,35 @@ class AdaptiveWorkflowSolver:
                 "recovered": not after_risks,
                 "worker_model_calls": recovery.execution.worker_model_calls_total if recovery.execution else 0,
             }
-        return self.finalize_answer(
+        submission = self.finalize_answer(
             task, artifact.answer if artifact else "",
             raw_summary=artifact.summary if artifact else "",
         )
+        if self.nq_evidence_mode == "corpus_tool" and canonical_dataset_name(
+            task.metadata.get("dataset")
+        ) == "nq_open":
+            check = self.runtime.validate_nq_submission(str(canvas.graph.output_agent or ""))
+            task.metadata["nq_corpus_submission"] = dict(check)
+            status = str(check.get("status", ""))
+            if status == "insufficient_evidence" and check.get("valid"):
+                return AnswerSubmission(
+                    raw_answer=submission.raw_answer,
+                    # FINISH receipts bind a nonempty immutable answer snapshot.
+                    # Keep the explicit abstention sentinel; its answerability
+                    # status is recorded above and receives zero below.
+                    submitted_answer="insufficient_evidence",
+                    method="nq_insufficient_evidence_v1",
+                    changed=submission.raw_answer != "insufficient_evidence",
+                    valid=True,
+                    detail=str(check.get("reason", "")),
+                )
+            if not check.get("valid"):
+                return replace(
+                    submission,
+                    valid=False,
+                    detail=str(check.get("reason") or "invalid_evidence_submission"),
+                )
+        return submission
 
     def solve(self, task: TaskSpec, *, run_id: str) -> AdaptiveSolverResult:
         try:
@@ -450,9 +479,29 @@ class AdaptiveWorkflowSolver:
             raise
 
     def _solve(self, task: TaskSpec, *, run_id: str) -> AdaptiveSolverResult:
+        nq_task = canonical_dataset_name(task.metadata.get("dataset")) == "nq_open"
+        if nq_task and self.nq_evidence_mode is not None:
+            actual_mode = str(task.metadata.get("evidence_mode", "")).strip().casefold()
+            if actual_mode != self.nq_evidence_mode:
+                raise ValueError(
+                    f"NQ task evidence_mode={actual_mode!r} conflicts with configured "
+                    f"{self.nq_evidence_mode!r}"
+                )
+            if self.nq_evidence_mode == "corpus_tool":
+                from .nq_corpus_tasks import validate_corpus_task
+
+                validate_corpus_task(
+                    {"id": task.task_id, "prompt": task.prompt, "metadata": task.metadata}
+                )
+                self.runtime.configure_nq_corpus(
+                    task_id=task.task_id,
+                    policy=self.nq_policy,
+                    run_id=run_id,
+                    trajectory_id=f"{run_id}:{self.runtime.seed}:{task.task_id}",
+                )
         if (
             self.required_nq_frozen_top_k
-            and canonical_dataset_name(task.metadata.get("dataset")) == "nq_open"
+            and nq_task
         ):
             from .nq_frozen_context import validate_frozen_context
 
@@ -606,6 +655,8 @@ class AdaptiveWorkflowSolver:
                 for candidate in lifecycle.recoverable_code_artifacts()
             ]
         receipt = canvas.submission_receipt
+        if nq_task and self.nq_evidence_mode == "corpus_tool":
+            task.metadata["nq_corpus_evidence_audit"] = self.runtime.nq_evidence_audit()
         frozen_run = copy.deepcopy(run) if receipt is not None else None
         if self.post_director_hook is not None:
             before_artifacts = snapshot_hash({key: value.to_dict() for key, value in self.runtime.artifacts.items()})
@@ -939,7 +990,12 @@ class AdaptiveWorkflowSolver:
         if text_primary:
             verification = None
             scoring_error = ""
-            if receipt is not None and self.verifier is not None:
+            if receipt is not None and receipt.normalization_version == "nq_insufficient_evidence_v1":
+                verification = VerificationResult(
+                    0.0, False, "nq_corpus_abstention_v1",
+                    "answerability=insufficient_evidence; NQ-open abstentions receive zero",
+                )
+            elif receipt is not None and self.verifier is not None:
                 # Retry only the immutable submitted answer, never the Worker graph.
                 for attempt in range(2):
                     try:

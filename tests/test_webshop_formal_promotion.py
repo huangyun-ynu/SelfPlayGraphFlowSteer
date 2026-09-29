@@ -170,7 +170,8 @@ def test_real_application_routes_director_choice_and_enables_qwen_thinking(chose
         config, skillbank_enabled=False, pats=replace(config.pats, enabled=False),
         persist_runtime_updates=False, verifier="none",
         trace_path=tmp_path / "traces.jsonl", route_health_path=tmp_path / "health.json",
-        retrieval=replace(config.retrieval, enabled=False, hotpotqa_search_enabled=False),
+        retrieval=replace(config.retrieval, enabled=False, nq_evidence_mode=None,
+                          hotpotqa_search_enabled=False),
         **{name: replace(getattr(config, name), enabled=False)
            for name in ("aime_actions", "alfworld", "swe")},
     )

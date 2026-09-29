@@ -28,12 +28,20 @@ def public_document(document: object) -> dict[str, Any] | None:
         return None
     # Public passages may legitimately contain the correct answer. Never redact
     # based on a reference value or filter/reorder by gold relevance annotations.
-    return {
+    projected = {
         key: value
         for key in ("id", "title", "text", "contents")
         if isinstance(value := document.get(key), str)
         or (key == "id" and isinstance(value, int) and not isinstance(value, bool))
     }
+    # These fields identify public corpus rows, never evaluation annotations.
+    corpus_id = document.get("corpus_id")
+    if isinstance(corpus_id, str):
+        projected["corpus_id"] = corpus_id
+    row = document.get("faiss_row")
+    if isinstance(row, int) and not isinstance(row, bool) and row >= 0:
+        projected["faiss_row"] = row
+    return projected
 
 
 def public_search_results(results: list) -> list[list[dict[str, Any]]]:
@@ -51,13 +59,18 @@ def public_search_results(results: list) -> list[list[dict[str, Any]]]:
             if document is None:
                 continue
             item: dict[str, Any] = {"document": document}
-            score = hit.get("score")
-            if (
-                isinstance(score, (float, int))
-                and not isinstance(score, bool)
-                and math.isfinite(score)
-            ):
-                item["score"] = score
+            for key in ("score", "dense_score", "reranker_score"):
+                score = hit.get(key)
+                if (
+                    isinstance(score, (float, int))
+                    and not isinstance(score, bool)
+                    and math.isfinite(score)
+                ):
+                    item[key] = score
+            for key in ("faiss_row", "dense_rank"):
+                value = hit.get(key)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    item[key] = value
             hits.append(item)
         projected.append(hits)
     return projected

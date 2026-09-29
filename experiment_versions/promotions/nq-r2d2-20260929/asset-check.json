@@ -1,0 +1,33 @@
+{
+  "assets": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-data/retrieval/r2d2-pruned-e5-v1",
+  "verified_against_running_service": true,
+  "asset_identity": {
+    "corpus": {
+      "repo": "local/R2D2-pruned-NQ",
+      "sha256": "a3628bc632895bebe4edd8aefba1ae5bc115acb8f13b2f25821cd68043007669",
+      "bytes": 1194430571,
+      "source_archive_sha256": "bb7b4e375c23a66a06d20775cca0ffd718de29bcd642487048e32f80dc2d2e0e"
+    },
+    "index": {
+      "repo": "local/R2D2-E5-FlatIP",
+      "sha256": "f6dd966f17dbbe7c438dc9a4113139a1709e5e5567c40a4bd8750e0866d059d3",
+      "bytes": 5228952621
+    },
+    "encoder": {
+      "repo": "intfloat/e5-base-v2",
+      "revision": "f52bf8ec8c7124536f0efb74aca902b2995e5bcd",
+      "files_sha256": {
+        "config.json": "01cc39aa39538a8179aa131c8a16adc03b506c92009f091502e4eb0c702f5f78",
+        "model.safetensors": "d0d559c47d5f71b1d280b13b62a2657f3e3bc70c0786f9ab91a36545e6a8f693",
+        "tokenizer.json": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+        "tokenizer_config.json": "ae83fa6ca0333117ff12606020af925d648667ef70d92ff7f27d781ba0ca4544",
+        "special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+        "vocab.txt": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3"
+      },
+      "query_prefix": "query: ",
+      "max_length": 256,
+      "pooling": "attention_mask_mean",
+      "l2_normalize": true
+    }
+  }
+}

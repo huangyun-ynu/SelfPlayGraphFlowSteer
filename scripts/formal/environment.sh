@@ -39,15 +39,17 @@ fi
 export PATH="$SPGFS_VENV/bin:$PATH"
 export SPGFS_FORMAL_TASK_POOL="${SPGFS_FORMAL_TASK_POOL:-$ROOT/state/formal-data/validated_task_pool.jsonl}"
 export SPGFS_RETRIEVAL_INDEX="${SPGFS_RETRIEVAL_INDEX:-$ROOT/state/formal-data/retrieval/nq_open_wikipedia.sqlite3}"
-# Formal NQ-open runs use the pinned Search-R1 Wiki-18
-# E5/FAISS corpus.  The online Wikipedia backend remains available only when
+# Formal NQ-open runs use the pinned R2D2 1,702,133-passage
+# E5/FAISS corpus. The online Wikipedia backend remains available only when
 # explicitly requested for diagnostics.
 export SPGFS_RETRIEVAL_BACKEND="${SPGFS_RETRIEVAL_BACKEND:-faiss}"
-export SPGFS_RETRIEVAL_PORT="${SPGFS_RETRIEVAL_PORT:-18010}"
+export SPGFS_RETRIEVAL_PORT="${SPGFS_RETRIEVAL_PORT:-19012}"
 export SPGFS_WIKIPEDIA_CACHE="${SPGFS_WIKIPEDIA_CACHE:-$ROOT/state/retrieval/wikipedia-v1}"
-export SPGFS_SEARCHR1_DATA="${SPGFS_SEARCHR1_DATA:-$ROOT/state/formal-data/retrieval/searchr1}"
+export SPGFS_SEARCHR1_DATA="${SPGFS_SEARCHR1_DATA:-$ROOT/state/formal-data/retrieval/r2d2-pruned-e5-v1}"
 export SPGFS_SEARCHR1_INDEX="${SPGFS_SEARCHR1_INDEX:-$SPGFS_SEARCHR1_DATA/e5_Flat.index}"
-export SPGFS_SEARCHR1_CORPUS="${SPGFS_SEARCHR1_CORPUS:-$SPGFS_SEARCHR1_DATA/wiki-18.jsonl}"
+export SPGFS_SEARCHR1_CORPUS="${SPGFS_SEARCHR1_CORPUS:-$SPGFS_SEARCHR1_DATA/r2d2.jsonl}"
+export SPGFS_RETRIEVAL_CORPUS_SHA256="${SPGFS_RETRIEVAL_CORPUS_SHA256:-a3628bc632895bebe4edd8aefba1ae5bc115acb8f13b2f25821cd68043007669}"
+export SPGFS_RETRIEVAL_INDEX_SHA256="${SPGFS_RETRIEVAL_INDEX_SHA256:-f6dd966f17dbbe7c438dc9a4113139a1709e5e5567c40a4bd8750e0866d059d3}"
 export SPGFS_SEARCHR1_MODEL="${SPGFS_SEARCHR1_MODEL:-$ROOT/../models/e5-base-v2}"
 export SPGFS_RETRIEVAL_PYTHON="${SPGFS_RETRIEVAL_PYTHON:-$ROOT/../.venvs/spgfs-pats-gpu/bin/python}"
 export SPGFS_RETRIEVAL_DEPS="${SPGFS_RETRIEVAL_DEPS:-$ROOT/state/retrieval-deps}"

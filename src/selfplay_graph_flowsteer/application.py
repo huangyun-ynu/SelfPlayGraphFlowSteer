@@ -13,6 +13,8 @@ import uuid
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
+from urllib.request import ProxyHandler, build_opener
 
 from .adaptive import AdaptiveSolverResult, AdaptiveWorkflowSolver
 from .agent_tools import (
@@ -309,6 +311,36 @@ class FixedRuntimeConfig:
 
 
 @dataclass(frozen=True)
+class NQPolicyConfig:
+    """Trusted limits for a question-only NQ rollout over the pinned corpus."""
+
+    profile: str = "nq-dense8-v1"
+    expected_identity_sha256: str = ""
+    min_nonempty_searches_before_answer: int = 1
+    max_search_calls_per_task: int = 4
+    require_evidence_refs: bool = True
+    evidence_token_budget: int = 12000
+    max_submission_repairs: int = 1
+    allow_web_fallback: bool = False
+
+    def validate(self) -> None:
+        if not self.profile.strip():
+            raise ValueError("retrieval.nq_policy.profile cannot be empty")
+        if self.expected_identity_sha256 and not re.fullmatch(
+            r"[0-9a-f]{64}", self.expected_identity_sha256
+        ):
+            raise ValueError("retrieval.nq_policy.expected_identity_sha256 must be SHA-256")
+        if self.min_nonempty_searches_before_answer < 1:
+            raise ValueError("NQ corpus mode requires at least one nonempty search")
+        if self.max_search_calls_per_task < self.min_nonempty_searches_before_answer:
+            raise ValueError("NQ search budget is below the required nonempty searches")
+        if self.evidence_token_budget <= 0 or self.max_submission_repairs < 0:
+            raise ValueError("NQ evidence token and repair budgets are invalid")
+        if not self.require_evidence_refs or self.allow_web_fallback:
+            raise ValueError("NQ corpus mode requires citations and forbids web fallback")
+
+
+@dataclass(frozen=True)
 class RetrievalConfig:
     enabled: bool = False
     service_url: str = "http://127.0.0.1:8010/retrieve"
@@ -319,10 +351,32 @@ class RetrievalConfig:
     hotpotqa_search_enabled: bool = False
     # Nonzero requires precomputed inline NQ evidence, prepared before rollouts.
     nq_frozen_top_k: int = 0
+    # None retains old experiment behavior; new NQ experiments choose a mode explicitly.
+    nq_evidence_mode: str | None = None
+    nq_policy: NQPolicyConfig = field(default_factory=NQPolicyConfig)
 
     def validate(self) -> None:
+        if self.nq_evidence_mode not in {None, "provided_context_inline", "corpus_tool"}:
+            raise ValueError("retrieval.nq_evidence_mode is unsupported")
+        self.nq_policy.validate()
         if self.nq_frozen_top_k < 0:
             raise ValueError("retrieval.nq_frozen_top_k must be non-negative")
+        if self.nq_evidence_mode == "provided_context_inline" and self.nq_frozen_top_k < 1:
+            raise ValueError("inline NQ mode requires retrieval.nq_frozen_top_k > 0")
+        if self.nq_evidence_mode == "corpus_tool":
+            if not self.enabled or self.nq_frozen_top_k:
+                raise ValueError("NQ corpus_tool requires retrieval.enabled and nq_frozen_top_k=0")
+            if self.nq_policy.profile in {"nq-dense8-v1", "nq-minilm-rrf8-v1"} and self.top_k != 8:
+                raise ValueError("NQ top8 corpus profiles require retrieval.top_k=8")
+            parsed = urlsplit(self.service_url)
+            if (
+                parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+                or parsed.path != "/retrieve" or parsed.username or parsed.password
+                or parsed.query or parsed.fragment
+            ):
+                raise ValueError("NQ corpus_tool requires a local HTTP /retrieve service")
+            if not self.nq_policy.expected_identity_sha256:
+                raise ValueError("NQ corpus_tool requires a pinned expected_identity_sha256")
         if self.hotpotqa_search_enabled and not self.enabled:
             raise ValueError("HotpotQA search requires retrieval.enabled")
         if not self.enabled:
@@ -1194,6 +1248,11 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
     verifier = payload.get("verifier", {})
     resources = payload.get("resources", {})
     retrieval = payload.get("retrieval", {})
+    if not isinstance(retrieval, dict):
+        raise ValueError("retrieval must be a TOML table")
+    nq_policy = retrieval.get("nq_policy", {})
+    if not isinstance(nq_policy, dict):
+        raise ValueError("retrieval.nq_policy must be a TOML table")
     aime_actions = payload.get("aime_actions", payload.get("python_tool", {}))
     webshop = payload.get("webshop", {})
     alfworld = payload.get("alfworld", {})
@@ -1419,6 +1478,20 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             max_tool_rounds=int(retrieval.get("max_tool_rounds", 3)),
             hotpotqa_search_enabled=bool(retrieval.get("hotpotqa_search_enabled", False)),
             nq_frozen_top_k=int(retrieval.get("nq_frozen_top_k", 0)),
+            nq_evidence_mode=(
+                str(retrieval["nq_evidence_mode"]).strip().casefold()
+                if "nq_evidence_mode" in retrieval else None
+            ),
+            nq_policy=NQPolicyConfig(
+                profile=str(nq_policy.get("profile", "nq-dense8-v1")).strip(),
+                expected_identity_sha256=str(nq_policy.get("expected_identity_sha256", "")).strip(),
+                min_nonempty_searches_before_answer=int(nq_policy.get("min_nonempty_searches_before_answer", 1)),
+                max_search_calls_per_task=int(nq_policy.get("max_search_calls_per_task", 4)),
+                require_evidence_refs=bool(nq_policy.get("require_evidence_refs", True)),
+                evidence_token_budget=int(nq_policy.get("evidence_token_budget", 12000)),
+                max_submission_repairs=int(nq_policy.get("max_submission_repairs", 1)),
+                allow_web_fallback=bool(nq_policy.get("allow_web_fallback", False)),
+            ),
         ),
         aime_actions=AIMEActionConfig(
             enabled=bool(aime_actions.get("enabled", False)),
@@ -2045,6 +2118,8 @@ class AdaptiveSolverApplication:
                     "mace_window_audit",
                     "worker_usage",
                     "alfworld_task_binding",
+                    "nq_corpus_submission",
+                    "nq_corpus_evidence_audit",
                 }
                 or key.startswith("_runtime_")
             ):
@@ -2081,6 +2156,21 @@ class AdaptiveSolverApplication:
             self.runtime.seed = int(seed)
             action_registry = getattr(self.solver, "action_registry", None)
             action_adapter = action_registry.resolve(task) if action_registry is not None else None
+            nq_corpus = (
+                canonical_dataset_name(task.metadata.get("dataset", "")) == "nq_open"
+                and self.config.retrieval.nq_evidence_mode == "corpus_tool"
+            )
+            if nq_corpus:
+                from .nq_corpus_tasks import validate_corpus_task
+
+                validate_corpus_task({"id": task.task_id, "prompt": task.prompt, "metadata": task.metadata})
+                # Counterfactual training branches need their own search budget
+                # and evidence; primary-trajectory citations cannot be reused.
+                attempt_id = f"{task.metadata['judge_evaluation_scope']}:{uuid.uuid4().hex}"
+                self.runtime.configure_nq_corpus(
+                    task_id=task.task_id, policy=self.config.retrieval.nq_policy,
+                    run_id=attempt_id, trajectory_id=attempt_id,
+                )
             lifecycle_tools = getattr(self.runtime.executor, "tools", {})
             if action_adapter is not None and action_adapter.adapter_id == "webshop":
                 active_webshop_lifecycles = webshop_lifecycles(lifecycle_tools)
@@ -2347,7 +2437,28 @@ class AdaptiveSolverApplication:
                 else None
             )
             prediction = submission.submitted_answer if submission else output
-            verification = self.solver.verifier.verify(task, prediction)
+            if nq_corpus:
+                from .observability import VerificationResult
+
+                nq_check = self.runtime.validate_nq_submission(str(graph.output_agent))
+                self.last_graph_evaluation["nq_corpus_submission"] = nq_check
+                audit = self.runtime.nq_evidence_audit()
+                self.last_graph_evaluation["nq_corpus_evidence_audit"] = audit
+                if any(call["status"] in {"error", "pending"} for call in audit["calls"]):
+                    raise GraphEvaluationIncompleteError("NQ counterfactual retrieval did not complete")
+                if not nq_check.get("valid"):
+                    verification = VerificationResult(
+                        0.0, False, "nq_invalid_evidence_submission", str(nq_check.get("reason", "")),
+                    )
+                elif nq_check.get("status") == "insufficient_evidence":
+                    prediction = "insufficient_evidence"
+                    verification = VerificationResult(
+                        0.0, False, "nq_corpus_abstention_v1", "NQ corpus evidence is insufficient",
+                    )
+                else:
+                    verification = self.solver.verifier.verify(task, prediction)
+            else:
+                verification = self.solver.verifier.verify(task, prediction)
             task_score = float(verification.score)
             if (
                 canonical_dataset_name(task.metadata.get("dataset", ""))
@@ -2381,6 +2492,31 @@ class AdaptiveSolverApplication:
                 self.runtime.full_graph_replay = previous_full_replay
 
 
+def _validate_nq_corpus_service(retrieval: RetrievalConfig) -> dict[str, Any]:
+    """Bind a corpus rollout to the exact local FAISS service selected by config."""
+
+    parsed = urlsplit(retrieval.service_url)
+    health_url = parsed._replace(path="/health", query="", fragment="").geturl()
+    try:
+        with build_opener(ProxyHandler({})).open(
+            health_url, timeout=min(5.0, retrieval.timeout_s)
+        ) as response:
+            health = json.load(response)
+    except Exception as exc:
+        raise ValueError(f"NQ corpus retrieval service is unavailable: {health_url}") from exc
+    identity = str(health.get("identity_sha256", ""))
+    if (
+        health.get("status") != "ok"
+        or health.get("schema") != "spgfs-searchr1-e5-faiss-v1"
+        or health.get("profile_id") != retrieval.nq_policy.profile
+        or not isinstance(health.get("asset_identity"), dict)
+        or not re.fullmatch(r"[0-9a-f]{64}", identity)
+        or identity != retrieval.nq_policy.expected_identity_sha256
+    ):
+        raise ValueError("NQ corpus retrieval service identity/profile mismatch")
+    return health
+
+
 def create_adaptive_application(
     config: AdaptiveApplicationConfig,
     *,
@@ -2396,6 +2532,8 @@ def create_adaptive_application(
     director_enable_thinking: bool | None = None,
 ) -> AdaptiveSolverApplication:
     config.validate()
+    if config.retrieval.nq_evidence_mode == "corpus_tool" and not mock:
+        _validate_nq_corpus_service(config.retrieval)
     route_health = RouteHealthStore(
         config.route_health_path, cooldown_s=config.route_health_cooldown_s
     )
@@ -2543,6 +2681,7 @@ def create_adaptive_application(
     action_registry = default_dataset_action_registry(
         tools,
         hotpotqa_search_enabled=config.retrieval.hotpotqa_search_enabled,
+        nq_evidence_mode=config.retrieval.nq_evidence_mode,
         aime_budgets=(
             config.aime_actions.max_initial_calls,
             config.aime_actions.max_revision_calls,
@@ -2786,6 +2925,8 @@ def create_adaptive_application(
             config.director_thinking_by_dataset if director_enable_thinking is None else {}
         ),
         required_nq_frozen_top_k=config.retrieval.nq_frozen_top_k,
+        nq_evidence_mode=config.retrieval.nq_evidence_mode,
+        nq_policy=config.retrieval.nq_policy,
         director_tokenizer=director_tokenizer,
     )
     return AdaptiveSolverApplication(

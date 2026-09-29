@@ -40,6 +40,18 @@ def selected_output_instruction(
             "question in public_task_context using the HotpotQA answer contract, including "
             "all requested hops, comparisons, and list members. "
         )
+    if canonical_dataset_name(dataset) == "nq_open":
+        return (
+            "You are the selected output Agent for the original public NQ question in "
+            "public_task_context. Submit one directly responsive short answer in answer, "
+            "using only visible evidence. Match the type asked for: who needs a person or "
+            "group, when needs a date, where needs a place, and a requested letter needs "
+            "only the letter. If the question asks for one answer but a passage lists "
+            "several valid candidates, choose one best-supported candidate; explain ties "
+            "or alternatives in summary. Include multiple items only when the question "
+            "explicitly asks for multiple items. Never copy a whole evidence sentence, "
+            "score, or explanation into answer. Do not infer private reference answers."
+        )
     if short_answer_qa or is_short_qa_dataset(dataset):
         return (
             "You are the selected output Agent. Your answer is submitted for the original "

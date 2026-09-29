@@ -1,0 +1,93 @@
+# Standalone NQ-open corpus evaluation; formal training uses formal_training.toml.
+# Asset identity is pinned to the local R2D2/E5/FAISS dense profile.
+# API credentials are read from DEEPSEEK_API_KEY in the local .env.
+
+[models.proposer]
+base_url = "http://127.0.0.1:18601/v1"
+served_model = "Qwen3.5-9B"
+base_model_path = "models/Qwen3.5-9B"
+checkpoint_path = "state/nq-corpus-eval/checkpoints/proposer"
+trainable = true
+enable_thinking = true
+
+[models.solver]
+base_url = "http://127.0.0.1:18602/v1"
+served_model = "Qwen3.5-9B"
+base_model_path = "models/Qwen3.5-9B"
+checkpoint_path = "state/nq-corpus-eval/checkpoints/solver"
+trainable = true
+enable_thinking = true
+
+[runtime]
+name = "deepseek"
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+served_model = "deepseek-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+enable_thinking = false
+reasoning_effort = "low"
+max_concurrency = 24
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtime_routing]
+worker_routes = ["deepseek"]
+skill_distiller = "deepseek"
+health_state_path = "state/nq-corpus-eval/route_health.json"
+
+[director]
+prompt_variant = "v2.2"
+
+[canvas]
+max_agents = 4
+max_rounds = 24
+relay_max_chars = 1000
+remaining_time_admission_enabled = false
+remaining_token_admission_enabled = false
+
+[canvas.max_total_tokens_by_dataset]
+nq_open = 240000
+
+[retrieval]
+enabled = true
+service_url = "http://127.0.0.1:19012/retrieve"
+top_k = 8
+timeout_s = 240.0
+max_tool_rounds = 3
+hotpotqa_search_enabled = false
+nq_evidence_mode = "corpus_tool"
+nq_frozen_top_k = 0
+
+[retrieval.nq_policy]
+profile = "nq-dense8-v1"
+expected_identity_sha256 = "f8129c07a8c438a559bc4983f11dd1c8d48bc362a6035455cb8c20d6b28c9c9e"
+min_nonempty_searches_before_answer = 1
+max_search_calls_per_task = 4
+require_evidence_refs = true
+evidence_token_budget = 12000
+max_submission_repairs = 1
+allow_web_fallback = false
+
+[answer_submission]
+enabled = true
+
+[solver_skillbank]
+enabled = false
+usage = "off"
+
+[trace]
+path = "state/nq-corpus-eval/traces.jsonl"
+
+[verifier]
+mode = "flowsteer_qa"
+
+[resources]
+# Local GPU allocation for this standalone evaluation configuration.
+allocated_gpu_ids = [1]
+proposer_gpu_id = 1
+solver_gpu_id = 1
+runtime_gpu_id = 1

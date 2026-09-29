@@ -4,6 +4,10 @@ import argparse
 import json
 import re
 import sqlite3
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -91,6 +95,122 @@ class RetrievalIndex:
 class RetrievalServer(ThreadingHTTPServer):
     request_queue_size = 128
     index: RetrievalIndex
+    batcher: RetrievalBatcher | None = None
+
+    def server_close(self) -> None:
+        if self.batcher is not None:
+            self.batcher.close()
+        super().server_close()
+
+
+class RetrievalOverloaded(RuntimeError):
+    """The bounded retrieval queue has no free slots."""
+
+
+class RetrievalTimedOut(RuntimeError):
+    """Queueing plus retrieval exceeded the service deadline."""
+
+
+@dataclass
+class _QueuedQuery:
+    query: str
+    top_k: int
+    ready: threading.Event = field(default_factory=threading.Event)
+    result: list[dict[str, Any]] | None = None
+    error: Exception | None = None
+    cancelled: bool = False
+
+
+class RetrievalBatcher:
+    """Collect queries across HTTP requests for one encoder and FAISS call."""
+
+    def __init__(
+        self, index: Any, *, batch_size: int = 8, max_wait_ms: int = 20,
+        max_pending: int = 128, timeout_s: float = 240.0,
+    ) -> None:
+        if batch_size < 1 or max_wait_ms < 0 or max_pending < batch_size or timeout_s <= 0:
+            raise ValueError("invalid retrieval batcher limits")
+        self.index = index
+        self.batch_size = batch_size
+        self.max_wait_s = max_wait_ms / 1000
+        self.max_pending = max_pending
+        self.timeout_s = timeout_s
+        self._condition = threading.Condition()
+        self._queue: deque[_QueuedQuery] = deque()
+        self._outstanding = 0
+        self._closed = False
+        self._worker = threading.Thread(target=self._run, name="retrieval-batcher", daemon=True)
+        self._worker.start()
+
+    def search_batch(self, queries: list[str], top_k: int) -> list[list[dict[str, Any]]]:
+        if not queries:
+            return []
+        pending = [_QueuedQuery(query, top_k) for query in queries]
+        with self._condition:
+            if self._closed:
+                raise RuntimeError("retrieval batcher is closed")
+            if self._outstanding + len(pending) > self.max_pending:
+                raise RetrievalOverloaded("retrieval queue is full")
+            self._queue.extend(pending)
+            self._outstanding += len(pending)
+            self._condition.notify_all()
+        deadline = time.monotonic() + self.timeout_s
+        try:
+            results = []
+            for item in pending:
+                if not item.ready.wait(max(0.0, deadline - time.monotonic())):
+                    raise RetrievalTimedOut("retrieval request timed out")
+                if item.error is not None:
+                    raise RuntimeError("retrieval batch failed") from item.error
+                assert item.result is not None
+                results.append(item.result)
+            return results
+        except (RetrievalTimedOut, RuntimeError):
+            # The worker drops queued entries and eventually releases in-flight slots.
+            with self._condition:
+                for item in pending:
+                    item.cancelled = True
+                self._condition.notify_all()
+            raise
+
+    def _run(self) -> None:
+        while True:
+            with self._condition:
+                while not self._queue and not self._closed:
+                    self._condition.wait()
+                if self._closed and not self._queue:
+                    return
+                deadline = time.monotonic() + self.max_wait_s
+                while len(self._queue) < self.batch_size and not self._closed:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    self._condition.wait(remaining)
+                batch = [self._queue.popleft() for _ in range(min(self.batch_size, len(self._queue)))]
+                active = [item for item in batch if not item.cancelled]
+            if active:
+                try:
+                    results = self.index.search_batch(
+                        [item.query for item in active], max(item.top_k for item in active)
+                    )
+                    if len(results) != len(active):
+                        raise RuntimeError("retrieval result count does not match query count")
+                    for item, result in zip(active, results, strict=True):
+                        item.result = result[:item.top_k]
+                except Exception as exc:  # propagate search failures to each waiting request
+                    for item in active:
+                        item.error = exc
+            with self._condition:
+                self._outstanding -= len(batch)
+                for item in batch:
+                    item.ready.set()
+                self._condition.notify_all()
+
+    def close(self) -> None:
+        with self._condition:
+            self._closed = True
+            self._condition.notify_all()
+        self._worker.join(timeout=5)
 
 
 class RetrievalHandler(BaseHTTPRequestHandler):
@@ -100,14 +220,20 @@ class RetrievalHandler(BaseHTTPRequestHandler):
         if self.path != "/health":
             self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
-        self._send(
-            HTTPStatus.OK,
-            {
-                "status": "ok",
-                "schema": self.server.index.schema,
-                "document_count": self.server.index.document_count,
-            },
-        )
+        health = {
+            "status": "ok",
+            "schema": self.server.index.schema,
+            "document_count": self.server.index.document_count,
+        }
+        if hasattr(self.server.index, "health_identity"):
+            health.update(self.server.index.health_identity)
+        if self.server.batcher is not None:
+            health["batching"] = {
+                "batch_size": self.server.batcher.batch_size,
+                "max_wait_ms": int(self.server.batcher.max_wait_s * 1000),
+                "max_pending": self.server.batcher.max_pending,
+            }
+        self._send(HTTPStatus.OK, health)
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/retrieve":
@@ -130,11 +256,22 @@ class RetrievalHandler(BaseHTTPRequestHandler):
                 or not 1 <= top_k <= 20
             ):
                 raise ValueError("invalid retrieval request")
-            result = [self.server.index.search(query, top_k) for query in queries]
+            if self.server.batcher is not None:
+                result = self.server.batcher.search_batch(queries, top_k)
+            elif hasattr(self.server.index, "search_batch"):
+                result = self.server.index.search_batch(queries, top_k)
+            else:
+                result = [self.server.index.search(query, top_k) for query in queries]
             if payload.get("return_scores", False) is False:
                 result = [[hit["document"] for hit in group] for group in result]
         except (ValueError, TypeError, json.JSONDecodeError) as exc:
             self._send(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            return
+        except RetrievalOverloaded as exc:
+            self._send(HTTPStatus.SERVICE_UNAVAILABLE, {"error": str(exc), "retryable": True})
+            return
+        except RetrievalTimedOut as exc:
+            self._send(HTTPStatus.GATEWAY_TIMEOUT, {"error": str(exc), "retryable": True})
             return
         except RuntimeError as exc:
             self._send(HTTPStatus.BAD_GATEWAY, {"error": str(exc)})

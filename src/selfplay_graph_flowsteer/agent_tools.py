@@ -782,8 +782,14 @@ class SearchServiceTool:
         }
 
     def execute(self, arguments: dict[str, Any]) -> str:
-        if self.rollout_deadline is not None:
-            self.rollout_deadline.check("retrieval_request_start")
+        return self.execute_with_deadline(arguments, deadline=self.rollout_deadline)
+
+    def execute_with_deadline(
+        self, arguments: dict[str, Any], *, deadline: RolloutDeadline | None,
+    ) -> str:
+        """Explicit trajectory context avoids mutating a shared search client."""
+        if deadline is not None:
+            deadline.check("retrieval_request_start")
         queries = arguments.get("queries", arguments.get("query_list", arguments.get("query")))
         if isinstance(queries, str):
             queries = [queries]
@@ -806,21 +812,25 @@ class SearchServiceTool:
             method="POST",
         )
         timeout_s = self.timeout_s
-        if self.rollout_deadline is not None:
+        if deadline is not None:
             timeout_s = min(
                 timeout_s,
-                self.rollout_deadline.request_budget_s("retrieval_request"),
+                deadline.request_budget_s("retrieval_request"),
             )
         try:
             with urlopen(request, timeout=timeout_s) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"local retrieval service failed: {exc}") from exc
-        if self.rollout_deadline is not None:
-            self.rollout_deadline.check("retrieval_request_complete")
+        if deadline is not None:
+            deadline.check("retrieval_request_complete")
+        if not isinstance(body, dict):
+            raise RuntimeError("local retrieval service returned an invalid response")
         results = body.get("result")
         if not isinstance(results, list):
             raise RuntimeError("local retrieval service returned no result list")
+        if len(results) != len(queries):
+            raise RuntimeError("local retrieval service returned mismatched query/result counts")
         from .public_evidence import public_search_results
 
         return json.dumps(

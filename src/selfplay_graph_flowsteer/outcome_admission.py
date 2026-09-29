@@ -136,8 +136,29 @@ def terminal_policy_failure(
     risks = set(selected.get("integrity_risks", ()))
     selected_evidence = selected.get("runtime_tool_evidence", {})
     selected_errors = set(selected_evidence.get("failure_codes", ()))
+    nq_evidence = selected_evidence.get("nq_corpus", {})
     reason = ""
-    if risks == {"terminal_protocol_failure"}:
+    if (
+        dataset == "nq_open"
+        and nq_evidence.get("schema") == "nq_corpus_evidence_v1"
+        and nq_evidence.get("status") == "invalid_evidence_submission"
+        and nq_evidence.get("valid") is False
+        and nq_evidence.get("submission_repairs_used", -1) >= nq_evidence.get("max_submission_repairs", 1)
+        and nq_evidence.get("reason") in {
+            "missing_final_json", "empty_answer", "invalid_field_type", "generic_acknowledgement",
+            "answerability_must_be_supported_or_insufficient_evidence",
+            "nonempty_corpus_search_required", "evidence_reference_required",
+            "invalid_evidence_reference_shape", "evidence_not_visible_to_agent",
+            "evidence_quote_required", "quote_not_in_returned_document",
+            "evidence_refs_must_be_array", "insufficient_evidence_requires_empty_refs",
+            "insufficient_evidence_requires_sentinel_answer", "corpus_search_required_before_abstention",
+        }
+    ):
+        # The runtime ledger proves an exhausted evidence protocol. The earlier
+        # infrastructure/tool-failure guards still take precedence; a failed
+        # retrieval service can never be converted into a model-policy zero.
+        reason = "nq_invalid_evidence_submission"
+    elif risks == {"terminal_protocol_failure"}:
         reason = ("aime_worker_final_protocol_policy_failure" if dataset == "aime"
                   else "answer_protocol_repair_exhausted")
     elif (dataset == "aime" and "terminal_tool_failure" in risks

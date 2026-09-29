@@ -162,6 +162,13 @@ class DatasetActionRegistry:
 
     def resolve(self, task: TaskSpec) -> DatasetActionAdapter | None:
         dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+        if dataset == "nq_open" and str(
+            task.metadata.get("evidence_mode", "")
+        ).strip().casefold() == "corpus_tool":
+            adapter = self._by_id.get("nq_open_corpus")
+            if adapter is None:
+                raise ValueError("NQ corpus_tool requires its local search Action adapter")
+            return adapter
         # Frozen-context NQ keeps the canonical dataset name (so metrics and
         # budgets remain comparable) but deliberately has no runtime search.
         if dataset == "nq_open" and str(
@@ -186,6 +193,7 @@ def default_dataset_action_registry(
     *,
     aime_budgets: tuple[int, int, int] = (3, 1, 4),
     retrieval_initial_budget: int = 3,
+    nq_evidence_mode: str | None = None,
     hotpotqa_search_enabled: bool = False,
     webshop_budgets: tuple[int, int, int] = (12, 4, 16),
     webshop_staged_commit: bool = True,
@@ -200,6 +208,8 @@ def default_dataset_action_registry(
     available_set = set(available)
     if hotpotqa_search_enabled and "search" not in available_set:
         raise ValueError("HotpotQA search baseline requires the search Action")
+    if nq_evidence_mode == "corpus_tool" and "search" not in available_set:
+        raise ValueError("NQ corpus_tool requires the search Action")
     adapters: list[DatasetActionAdapter] = [
         DatasetActionAdapter(
             adapter_id="healthbench_professional",
@@ -257,6 +267,17 @@ def default_dataset_action_registry(
             )
         )
     if "search" in available_set:
+        if nq_evidence_mode == "corpus_tool":
+            adapters.append(
+                DatasetActionAdapter(
+                    adapter_id="nq_open_corpus",
+                    datasets=("nq_open_corpus",),
+                    action_names=("search",),
+                    initial_action_budget=retrieval_initial_budget,
+                    revision_action_budget=1,
+                    total_action_budget=retrieval_initial_budget + 1,
+                )
+            )
         adapters.append(
             DatasetActionAdapter(
                 adapter_id="retrieval_qa",

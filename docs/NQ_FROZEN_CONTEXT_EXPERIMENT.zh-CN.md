@@ -1,5 +1,9 @@
 # NQ 固定证据实验
 
+> 历史对照：2026-09-29 起正式 NQ 已切换为 R2D2 语料运行时检索。
+> 本文保留冻结证据实验的复现入口；当前正式设置见
+> [NQ 正式同步记录](NQ_R2D2_FORMAL_PROMOTION_20260929.zh-CN.md)。
+
 这个实验把 FiD 风格的 top-k passages 在运行前写入数据的 `prompt`，并在 `metadata.context_documents` 保留同一份证据。`provided_context_inline` 模式下不提供 NQ `search` Action，也不会调用 `/retrieve`。
 
 准备数据：

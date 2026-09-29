@@ -1,5 +1,10 @@
 # Formal Training 配置与凭据说明
 
+> 2026-09-29 NQ 更新：正式 NQ 已切换到 R2D2 的 **1,702,133 段**语料库，
+> 使用 E5/FAISS 在求解时执行 `search`，每次 top-8、每题共享最多 4 次检索。
+> 输入只保留公开问题，答案必须引用本轨迹可见证据。配置、资产指纹和验证见
+> [NQ 正式同步记录](NQ_R2D2_FORMAL_PROMOTION_20260929.zh-CN.md)。
+
 > 2026-09-29 更新：ALFWorld 与 SWE 的真实失败轨迹修复版已共同纳入正式训练。
 > 两者使用数据集级 v3 与实际 usage 发送阈值；ALFWorld 题目取自环境 reset，
 > 启用当前成功候选保护。反事实执行使用独立 usage 账户。详情见
@@ -32,7 +37,7 @@ scripts/formal/run_experiment.sh
 Director 正式入口默认采用 `SPGFS_DIRECTOR_CONTEXT_MODE=append_only`，增量保留历史 thinking、动作和反馈；关系概率审计明细只存离线。训练默认 `--raw-policy-backward-mode timeline`，按真实 token 前缀检查合并，失败时回退逐调用。可通过 `SPGFS_DIRECTOR_CONTEXT_MODE`、`SPGFS_RAW_POLICY_BACKWARD_MODE` 显式覆盖。详见 [Director 增量式上下文说明](DIRECTOR_INCREMENTAL_CONTEXT_20260927.zh-CN.md)。
 
 本配置包含：本地 Qwen3.5-9B Proposer/Solver、GPT 路由池、Skill Refiner、Grok、Gemini、
-DeepSeek、MiniMax、Search-R1 检索、WebShop sidecar、ALFWorld，以及远程 SWE verifier。
+DeepSeek、MiniMax、R2D2/E5/FAISS 检索、WebShop sidecar、ALFWorld，以及远程 SWE verifier。
 正式启动还要求新鲜的 `state/formal-training/route_report.json`；报告超过 1,800 秒会被拒绝。
 
 正式训练的**轨迹并发为 24**：入口 `--workers 24` 与课程配置 `rollout_workers=24` 一致。
@@ -152,6 +157,8 @@ GPT endpoint 池为 `gpt,gpt_eco,gpt_student`，共用排队、健康冷却、�
 | Solver 模型 | `models/Qwen3.5-9B`，本地服务 `127.0.0.1:18602/v1` |
 | 冻结 Runtime | `127.0.0.1:18603/v1` |
 | SkillBank embedding | `models/e5-base-v2` |
+| NQ 检索服务 | R2D2 / E5 / FAISS，`127.0.0.1:19012/retrieve` |
+| NQ 语料与索引 | `state/formal-data/retrieval/r2d2-pruned-e5-v1/r2d2.jsonl`、同目录 `e5_Flat.index` |
 | ALFWorld | `assets/alfworld-data/json_2.1.1` |
 | WebShop 源码 | `assets/webshop/source` |
 | WebShop Python | `assets/webshop/venv/bin/python` |

@@ -1,0 +1,30 @@
+{
+  "service_url": "http://127.0.0.1:19012/retrieve",
+  "document_count": 1702133,
+  "identity_sha256": "f8129c07a8c438a559bc4983f11dd1c8d48bc362a6035455cb8c20d6b28c9c9e",
+  "profile": "nq-dense8-v1",
+  "returned_passages": 8,
+  "ids": [
+    "r2d2:69496",
+    "r2d2:69498",
+    "r2d2:641825",
+    "r2d2:79740",
+    "r2d2:69499",
+    "r2d2:18039",
+    "r2d2:69495",
+    "r2d2:79735"
+  ],
+  "evidence_ids": [
+    "ev_0001",
+    "ev_0002",
+    "ev_0003",
+    "ev_0004",
+    "ev_0005",
+    "ev_0006",
+    "ev_0007",
+    "ev_0008"
+  ],
+  "elapsed_s": 0.543,
+  "source_checkout": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer",
+  "model_calls": 0
+}

@@ -1,5 +1,10 @@
 # 实验源码版本
 
+> 2026-09-29：main 的 NQ 已切换到 R2D2 1,702,133 段语料运行时检索。
+> 切换前正式版保存为 `experiment/nq-frozen-before-corpus-20260929`（`68b9ead`）；
+> 独立 NQ 实验副本继续保留。来源与验证见
+> [NQ 正式同步记录](../docs/NQ_R2D2_FORMAL_PROMOTION_20260929.zh-CN.md)。
+
 > 2026-09-29：ALFWorld / SWE 修复版已共同设为本地正式训练版本
 > `alf-swe-statefix-20260929`。来源、归档和训练接入见
 > [正式同步记录](../docs/ALF_SWE_FORMAL_PROMOTION_20260929.zh-CN.md)。远端发布状态以 push 核验为准。

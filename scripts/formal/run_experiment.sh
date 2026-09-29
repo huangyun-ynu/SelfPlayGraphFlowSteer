@@ -24,6 +24,35 @@ if [[ ! -f "$SPGFS_FORMAL_TASK_POOL" ]]; then
   printf 'Formal task pool does not exist: %s\n' "$SPGFS_FORMAL_TASK_POOL" >&2
   exit 2
 fi
+FORMAL_CONFIG="${SPGFS_FORMAL_CONFIG:-configs/formal_training.toml}"
+if [[ ! -f "$FORMAL_CONFIG" ]]; then
+  printf 'Formal config does not exist: %s\n' "$FORMAL_CONFIG" >&2
+  exit 2
+fi
+IFS=$'\t' read -r NQ_EVIDENCE_MODE NQ_CORPUS_PROFILE NQ_CORPUS_IDENTITY NQ_RETRIEVAL_PORT < <(
+  python - "$FORMAL_CONFIG" <<'PY'
+import sys
+import tomllib
+from urllib.parse import urlsplit
+
+with open(sys.argv[1], 'rb') as handle:
+    retrieval = tomllib.load(handle).get('retrieval', {})
+policy = retrieval.get('nq_policy', {})
+mode = retrieval.get('nq_evidence_mode') or ('provided_context_inline' if retrieval.get('nq_frozen_top_k', 0) else 'legacy')
+port = urlsplit(retrieval.get('service_url', '')).port or 18010
+print('\t'.join((mode, policy.get('profile', 'nq-dense8-v1'), policy.get('expected_identity_sha256', ''), str(port))))
+PY
+)
+if [[ "$NQ_EVIDENCE_MODE" == "corpus_tool" ]]; then
+  if [[ "${SPGFS_RETRIEVAL_BACKEND:-}" != "faiss" ]]; then
+    printf 'NQ corpus_tool requires SPGFS_RETRIEVAL_BACKEND=faiss.\n' >&2
+    exit 2
+  fi
+  export SPGFS_RETRIEVAL_PORT="$NQ_RETRIEVAL_PORT"
+  export SPGFS_RETRIEVAL_PROFILE="$NQ_CORPUS_PROFILE"
+  export SPGFS_RETRIEVAL_IDENTITY_SHA256="$NQ_CORPUS_IDENTITY"
+  export SPGFS_ENABLE_LOCAL_RETRIEVAL=1
+fi
 
 # Reject stale raw release indices and held-out goals before starting services
 # or updating parameters, including when a cached combined task pool is supplied.
@@ -133,17 +162,26 @@ if ! webshop_healthy; then
   fi
 fi
 
-# Freeze NQ evidence once per public question, before Proposer/Solver collection.
-# All other rows and their train/eval identities are preserved by the preparer.
-FORMAL_QA_TASK_POOL="state/formal-training-output-contract-v2/qa-baseline/task_pool.jsonl"
-python -m selfplay_graph_flowsteer.nq_frozen_context \
-  --config configs/formal_training.toml \
-  --input "$SPGFS_FORMAL_TASK_POOL" \
-  --output "$FORMAL_QA_TASK_POOL"
+# Keep preparation aligned with the configured NQ evidence mode.
+# Non-NQ rows retain their train/eval identities and original contents.
+if [[ "$NQ_EVIDENCE_MODE" == "corpus_tool" ]]; then
+  FORMAL_QA_TASK_POOL="state/formal-training-output-contract-v2/qa-corpus/task_pool.jsonl"
+  python -m selfplay_graph_flowsteer.nq_corpus_tasks \
+    --input "$SPGFS_FORMAL_TASK_POOL" --output "$FORMAL_QA_TASK_POOL" \
+    --profile "$NQ_CORPUS_PROFILE" --identity-sha256 "$NQ_CORPUS_IDENTITY"
+elif [[ "$NQ_EVIDENCE_MODE" == "provided_context_inline" ]]; then
+  FORMAL_QA_TASK_POOL="state/formal-training-output-contract-v2/qa-baseline/task_pool.jsonl"
+  python -m selfplay_graph_flowsteer.nq_frozen_context \
+    --config "$FORMAL_CONFIG" \
+    --input "$SPGFS_FORMAL_TASK_POOL" \
+    --output "$FORMAL_QA_TASK_POOL"
+else
+  FORMAL_QA_TASK_POOL="$SPGFS_FORMAL_TASK_POOL"
+fi
 
 python scripts/formal/wandb_direct_exec.py -- \
 python -m selfplay_graph_flowsteer selfplay-experiment \
-  --config configs/formal_training.toml \
+  --config "$FORMAL_CONFIG" \
   --task-pool "$FORMAL_QA_TASK_POOL" \
   --curriculum-profile configs/curriculum/formal_3500.toml \
   --output state/formal-training-output-contract-v2/experiment \

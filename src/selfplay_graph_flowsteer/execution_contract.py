@@ -123,6 +123,8 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "benchmark_reporting",
             "qa_metrics",
             "qa_submission",
+            "nq_evidence",
+            "nq_corpus_tasks",
             "aime_submission",
             "outcome_metrics",
             "rollouts",

@@ -230,7 +230,9 @@ def test_baseline_formatter_does_not_choose_new_answer_from_evidence():
     assert result.method == "qa_deterministic_extraction"
 
 
-@pytest.mark.parametrize("name", ["formal_training.toml", "formal_training_h200.local.toml", "formal_eval_h200.local.toml"])
+# Test the versioned formal config; host-local historical H200 files can use
+# older Director settings and are not repository fixtures.
+@pytest.mark.parametrize("name", ["formal_training.toml"])
 def test_formal_configs_keep_director_model_choice_and_qwen_thinking(name, monkeypatch):
     config = load_adaptive_config(Path("configs") / name, validate=False)
     monkeypatch.setenv("SPGFS_ALLOWED_PHYSICAL_GPUS", ",".join(map(str, config.allocated_gpu_ids)))
@@ -246,19 +248,20 @@ def test_formal_configs_keep_director_model_choice_and_qwen_thinking(name, monke
     assert config.proposer_model.enable_thinking is True
     assert config.solver_model.enable_thinking is True
     assert config.worker_runtime_routes == ("gpt", "grok", "gemini", "deepseek", "minimax")
-    assert config.retrieval.nq_frozen_top_k == 8
-    assert not config.retrieval.enabled
+    assert config.retrieval.nq_frozen_top_k == 0
+    assert config.retrieval.enabled
+    assert config.retrieval.nq_evidence_mode == "corpus_tool"
     assert not config.retrieval.hotpotqa_search_enabled
-    registry = default_dataset_action_registry(())
-    for dataset, metadata in (
-        ("nq_open", {"evidence_mode": "provided_context_inline"}),
-        ("hotpotqa", {}),
+    registry = default_dataset_action_registry(("search",), nq_evidence_mode="corpus_tool")
+    for dataset, metadata, expected_actions in (
+        ("nq_open", {"evidence_mode": "corpus_tool"}, ("search",)),
+        ("hotpotqa", {}, ()),
     ):
         adapter = registry.resolve(TaskSpec(
             dataset, "Read the supplied evidence.", metadata={"dataset": dataset, **metadata},
         ))
         assert adapter is not None
-        assert adapter.action_names == ()
+        assert adapter.action_names == expected_actions
     assert config.answer_submission.enabled
     assert vars(config.answer_submission) == {"enabled": True}
     assert config.skillbank_enabled  # Formal training still learns skills.
@@ -318,7 +321,7 @@ def test_fresh_route_qualification_preserves_and_requires_dataset_targets(tmp_pa
         _apply_fresh_route_report(config, args)
 
 
-def test_application_wires_thinking_and_frozen_evidence_and_explicit_override(tmp_path, monkeypatch):
+def test_application_wires_thinking_and_corpus_evidence_and_explicit_override(tmp_path, monkeypatch):
     config = load_adaptive_config("configs/formal_training.toml", validate=False)
     monkeypatch.setenv("SPGFS_ALLOWED_PHYSICAL_GPUS", ",".join(map(str, config.allocated_gpu_ids)))
     config = replace(config, skillbank_enabled=False, route_health_path=tmp_path / "health.json",
@@ -327,7 +330,9 @@ def test_application_wires_thinking_and_frozen_evidence_and_explicit_override(tm
     app = create_adaptive_application(config, mock=True)
     assert app.solver.director_thinking_by_dataset == config.director_thinking_by_dataset
     assert app.solver.director_enable_thinking is True
-    assert app.solver.required_nq_frozen_top_k == 8
+    assert app.solver.required_nq_frozen_top_k == 0
+    assert app.solver.nq_evidence_mode == "corpus_tool"
+    assert app.solver.nq_policy == config.retrieval.nq_policy
     app.close()
     app = create_adaptive_application(config, mock=True, director_enable_thinking=False)
     assert app.solver.director_thinking_by_dataset == {}
@@ -355,6 +360,19 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
     ])
     backends = {route: MockBackend(['{"answer":"Final Answer: A Person","evidence":[]}'] * 4)
                 for route in config.runtime_pool()}
+    if dataset == "nq_open":
+        from selfplay_graph_flowsteer.agent_tools import SearchServiceTool
+
+        answer = json.dumps({"answer": "Final Answer: A Person", "answerability": "supported",
+                             "evidence_refs": [{"evidence_id": "ev_0001", "quote": "A Person wrote the book."}]})
+        for backend in backends.values():
+            backend.responses.clear()
+            backend.responses.extend([json.dumps({"action_call": {"name": "search", "arguments": {"query": "book"}}}), answer] + [answer] * 4)
+        monkeypatch.setattr(SearchServiceTool, "execute_with_deadline", lambda *args, **kwargs:
+            json.dumps({"queries": ["book"], "result": [[{"document": {
+                "id": "r2d2:fixture", "title": "Book", "contents": "A Person wrote the book.",
+            }}]]}))
+    monkeypatch.setattr(app_module, "_validate_nq_corpus_service", lambda retrieval: {})
     for route, backend in backends.items():
         backend.config = _runtime_gateway_config(config.runtime_pool()[route], {"worker": 0.0}, route_name=route)
     monkeypatch.setattr(app_module, "_create_runtime_backend",
@@ -364,10 +382,7 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
     metadata = {"dataset": dataset}
     prompt = question
     if dataset == "nq_open":
-        docs = _fetch(question, service_url="unused", top_k=8)
-        prompt += "\n" + "\n".join(doc["text"] for doc in docs)
-        metadata.update(original_question=question, context_documents=docs,
-                        evidence_mode="provided_context_inline")
+        metadata.update(original_question=question, evidence_mode="corpus_tool")
     try:
         result = app.solve(prompt, task_id="formal-qa-synthetic", metadata=metadata)
         assert app.solver.answer_finalizer is not None

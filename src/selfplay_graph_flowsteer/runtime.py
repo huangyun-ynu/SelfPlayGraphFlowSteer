@@ -47,6 +47,7 @@ from .output_contract import (
     selected_output_instruction,
     worker_output_role_changes_input,
 )
+from .nq_evidence import NQEvidenceContext, corpus_answer_instruction
 from .qa_submission import is_short_qa_dataset
 from .submission_contract import SUBMISSION_CONTRACT_VERSION
 from .student_action_protocol import (
@@ -424,6 +425,7 @@ class ModelAgentExecutor:
     deadline_monotonic: float | None = None
     rollout_deadline: RolloutDeadline | None = None
     budget_scope: str | None = None
+    nq_evidence_context: NQEvidenceContext | None = None
     webshop_worker_guidance_policy: str = "baseline"
     webshop_worker_memory_policy: str = "factual_memory_v1"
     webshop_worker_execution_policy: str = "graph_tools_v1"
@@ -440,6 +442,7 @@ class ModelAgentExecutor:
     def reset(self) -> None:
         self.budget_ledger.reset()
         self.budget_scope = None
+        self.nq_evidence_context = None
 
     def set_budget_scope(self, scope: str | None) -> None:
         self.budget_scope = scope
@@ -504,6 +507,8 @@ class ModelAgentExecutor:
         allowed_tools = {
             name: self.tools[name] for name in node.allowed_tools if name in self.tools
         }
+        if self.nq_evidence_context is not None:
+            allowed_tools = {name: tool for name, tool in allowed_tools.items() if name == "search"}
         action_adapter = str(node.metadata.get("action_adapter", ""))
         stateless_environment_owner: str | None = None
         if action_adapter == "webshop":
@@ -703,6 +708,10 @@ class ModelAgentExecutor:
             if effective_allowed_tools is not None
             else {name: self.tools[name] for name in node.allowed_tools if name in self.tools}
         )
+        if self.nq_evidence_context is not None:
+            # The trusted task mode defines the complete external information
+            # surface. A node cannot add web/Python/other Actions to this mode.
+            allowed_tools = {name: tool for name, tool in allowed_tools.items() if name == "search"}
         action_specs = [action_spec_from_tool(tool) for tool in allowed_tools.values()]
         action_adapter = str(node.metadata.get("action_adapter", ""))
         webshop_strategy_variant = (
@@ -901,6 +910,12 @@ class ModelAgentExecutor:
             # Director's bounded responsibility p_v. The caller renders q from the
             # trusted public TaskSpec; verifier-only payloads are not part of it.
             context["public_task_context"] = task
+        if self.nq_evidence_context is not None:
+            context["public_task_context"] = task
+            context["corpus_evidence"] = self.nq_evidence_context.begin_agent(
+                node.agent_id,
+                [packet.artifact_id for packet in [*upstream, *peers, *([prior] if prior else [])]],
+            )
         instruction = (
             "Revise the prior_artifact after comparing it with the peer_packets. "
             "Preserve correct parts, resolve disagreements using the available evidence, and "
@@ -1010,6 +1025,8 @@ class ModelAgentExecutor:
             webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
             local_environment_result=is_unified_node(node) and not is_task_result(node),
         )
+        if self.nq_evidence_context is not None:
+            instruction += corpus_answer_instruction()
         # Keep guidance out of environment observations and the Director prompt.
         # The same conditional checklist survives state updates and owner revisions.
         if action_adapter == "webshop" and not stateless_environment_owner:
@@ -1482,6 +1499,27 @@ class ModelAgentExecutor:
                     "action_count": len(calls),
                 })
             if not calls:
+                if self.nq_evidence_context is not None and selected_output_agent:
+                    corpus_validation = self.nq_evidence_context.validate(node.agent_id, response.text)
+                    if corpus_validation.get("reason") in {
+                        "nonempty_corpus_search_required", "corpus_search_required_before_abstention",
+                    } and self.nq_evidence_context.claim_repair():
+                        protocol_diagnostics.append(_protocol_response_diagnostic(
+                            response, stage="nq_evidence_repair",
+                            rejection_reason=corpus_validation["reason"],
+                        ))
+                        messages.extend([
+                            {"role": "assistant", "content": response.text},
+                            {"role": "user", "content": (
+                                "The corpus submission contract rejected this response: "
+                                + corpus_validation["reason"]
+                                + ". The Action phase is still open under the same remaining "
+                                "budgets. Search the local corpus before submitting a supported "
+                                "answer or an evidence-insufficient result. This is the one "
+                                "bounded evidence-protocol repair for this trajectory."
+                            )},
+                        ])
+                        continue
                 if test_recovery_active:
                     protocol_diagnostics.append(_protocol_response_diagnostic(
                         response, stage="swe_test_recovery_action_required",
@@ -1864,7 +1902,36 @@ class ModelAgentExecutor:
                                     # can follow a remote mutation and must defer later calls.
                                     if stateful_batch:
                                         selected_index = batch_index
-                                    output = allowed_tools[action_name].execute(arguments)
+                                    nq_call_id = None
+                                    if self.nq_evidence_context is not None and action_name == "search":
+                                        nq_call_id = self.nq_evidence_context.reserve_search(
+                                            node.agent_id, str(arguments.get("query", ""))
+                                        )
+                                    try:
+                                        duplicate = (
+                                            self.nq_evidence_context.skip_duplicate_search(nq_call_id)
+                                            if nq_call_id is not None else None
+                                        )
+                                        if duplicate is not None:
+                                            output = json.dumps(duplicate, ensure_ascii=False)
+                                        else:
+                                            tool = allowed_tools[action_name]
+                                            contextual_execute = getattr(tool, "execute_with_deadline", None)
+                                            output = (
+                                                contextual_execute(arguments, deadline=self.rollout_deadline)
+                                                if nq_call_id is not None and callable(contextual_execute)
+                                                else tool.execute(arguments)
+                                            )
+                                            if nq_call_id is not None:
+                                                output = json.dumps(self.nq_evidence_context.record_search(
+                                                    nq_call_id, _structured_tool_output(output)
+                                                ), ensure_ascii=False)
+                                        if nq_call_id is not None:
+                                            context["corpus_evidence"] = self.nq_evidence_context.public_context(node.agent_id)
+                                    except Exception as exc:
+                                        if nq_call_id is not None:
+                                            self.nq_evidence_context.record_failure(nq_call_id, type(exc).__name__)
+                                        raise
                                     observation = {
                                         "name": action_name,
                                         "status": "ok",
@@ -2209,6 +2276,23 @@ class ModelAgentExecutor:
                 call_observations=message_call_observations,
                 native_calling=native_calling,
             )
+            if self.nq_evidence_context is not None:
+                context["corpus_evidence"] = self.nq_evidence_context.public_context(node.agent_id)
+                # Rebuild bounded corpus context, prioritizing recent passages.
+                # The full tool observations remain in react_trace and the audit;
+                # old passages cannot crowd all new query results out of input.
+                context["corpus_search_observations"] = [
+                    {"action": call.name,
+                     "status": observation.get("output", {}).get("status", observation.get("status"))
+                         if isinstance(observation.get("output"), dict) else observation.get("status"),
+                     "error": observation.get("error"),
+                     "call_id": observation.get("output", {}).get("call_id")
+                         if isinstance(observation.get("output"), dict) else None,
+                     "guidance": observation.get("output", {}).get("guidance")
+                         if isinstance(observation.get("output"), dict) else None}
+                    for call, observation in call_observations
+                ]
+                messages = [messages[0], {"role": "user", "content": json.dumps(context, ensure_ascii=False)}]
             if action_adapter in {"alfworld", "webshop"} and call_observations:
                 # Stateful environment IDs are scoped to the latest observation.
                 # Retain that state as the sole action context instead of
@@ -2374,6 +2458,49 @@ class ModelAgentExecutor:
             token_out += recovery_token_out
             protocol_diagnostics.extend(recovery_diagnostics)
         assert response is not None
+        if self.nq_evidence_context is not None and selected_output_agent:
+            validation = self.nq_evidence_context.validate(node.agent_id, response.text)
+            if not validation["valid"] and self.nq_evidence_context.claim_repair():
+                # One evidence-protocol correction, subject to the same token
+                # credit and deadline. Never synthesize or choose an answer.
+                repair_messages = [
+                    {"role": "system", "content": corpus_answer_instruction()},
+                    {"role": "user", "content": json.dumps({
+                        "public_task_context": task,
+                        "corpus_evidence": self.nq_evidence_context.public_context(node.agent_id),
+                        "previous_response": response.text,
+                        "rejection_reason": validation["reason"],
+                        "instruction": "Correct the final JSON using only the visible evidence. No new Actions are available in this repair.",
+                    }, ensure_ascii=False)},
+                ]
+                try:
+                    with worker_finalization_request():
+                        repaired = self._generate_with_credit(
+                            repair_messages,
+                            credit_limit=(execution_credit - token_in - token_out if execution_credit is not None else None),
+                            pre_reserved_closure_tokens=closure_reserve(),
+                            cap_output=submission_credit or full_graph_credit,
+                            role=self.role, actions=(), max_tokens=2048, enable_thinking=False,
+                        )
+                    token_in += repaired.token_in
+                    token_out += repaired.token_out
+                    backend_request_events.extend(_response_backend_request_events(repaired))
+                    self._check_deadline()
+                    validation = self.nq_evidence_context.validate(node.agent_id, repaired.text)
+                    protocol_diagnostics.append(_protocol_response_diagnostic(
+                        repaired, stage="nq_evidence_repair",
+                        rejection_reason=None if validation["valid"] else validation["reason"],
+                    ))
+                    protocol_diagnostics[-1]["previous_response"] = response.text
+                    response = repaired
+                except RequestTokenCreditExceeded as exc:
+                    token_in += exc.credit.token_in
+                    token_out += exc.credit.token_out
+                    backend_request_events.extend(exc.request_events)
+                    protocol_diagnostics.append({
+                        "stage": "nq_evidence_repair", "accepted": False,
+                        "rejection_reason": "request_token_credit_exhausted", "no_request_dispatched": True,
+                    })
         source_ids = [
             packet.artifact_id
             for packet in [*([prior] if prior is not None else []), *upstream, *peers]
@@ -2401,6 +2528,7 @@ class ModelAgentExecutor:
                 "initial_nonfinal",
                 "environment_action_required",
                 "swe_repository_evidence_required",
+                "nq_evidence_repair",
             }
             and artifact.answer
             not in {WORKER_PROTOCOL_FAILURE_SENTINEL, WORKER_BACKEND_FAILURE_SENTINEL}
@@ -2418,6 +2546,10 @@ class ModelAgentExecutor:
         artifact.react_trace = react_trace
         artifact.protocol_diagnostics = protocol_diagnostics
         artifact.backend_request_events = backend_request_events
+        if self.nq_evidence_context is not None:
+            artifact.runtime_tool_evidence["nq_corpus"] = self.nq_evidence_context.validate(
+                node.agent_id, artifact.raw_response, require_submission=selected_output_agent,
+            )
         if action_adapter == "webshop":
             sync_webshop_journal()
             stalled = finalization_reason == "webshop_semantic_no_progress_fuse"
@@ -2959,10 +3091,12 @@ class RoutedModelAgentExecutor:
         self.deadline_monotonic: float | None = None
         self.rollout_deadline: RolloutDeadline | None = None
         self.budget_scope: str | None = None
+        self.nq_evidence_context: NQEvidenceContext | None = None
 
     def reset(self) -> None:
         self.budget_ledger.reset()
         self.budget_scope = None
+        self.nq_evidence_context = None
 
     def set_budget_scope(self, scope: str | None) -> None:
         self.budget_scope = scope
@@ -3039,6 +3173,7 @@ class RoutedModelAgentExecutor:
                 deadline_monotonic=self.deadline_monotonic,
                 rollout_deadline=self.rollout_deadline,
                 budget_scope=self.budget_scope,
+                nq_evidence_context=self.nq_evidence_context,
             ).execute(
                 task=task,
                 node=node,
@@ -3136,6 +3271,7 @@ class MultiAgentRuntime:
         self._stale_artifacts: set[str] = set()
         self._execution_token_remaining: int | None = None
         self.worker_usage_ledger: WorkerUsageLedger | None = None
+        self.nq_evidence_context: NQEvidenceContext | None = None
 
     def reset(self) -> None:
         self.close_worker_usage_ledger()
@@ -3150,6 +3286,7 @@ class MultiAgentRuntime:
         self._last_input_payloads.clear()
         self._artifact_input_bindings.clear()
         self._stale_artifacts.clear()
+        self.nq_evidence_context = None
         reset_executor = getattr(self.executor, "reset", None)
         if callable(reset_executor):
             reset_executor()
@@ -3170,6 +3307,39 @@ class MultiAgentRuntime:
             key: value for key, value in self._artifact_input_bindings.items() if key in graph.nodes
         }
         self._stale_artifacts.intersection_update(graph.nodes)
+
+    def configure_nq_corpus(
+        self, *, task_id: str, policy: object,
+        run_id: str | None = None, trajectory_id: str | None = None,
+    ) -> None:
+        """Call once after reset for a trusted corpus_tool TaskSpec."""
+        if self.nq_evidence_context is not None:
+            raise RuntimeError("NQ corpus context already configured for this trajectory")
+        self.nq_evidence_context = NQEvidenceContext(
+            task_id=task_id, policy=policy, run_id=run_id, trajectory_id=trajectory_id,
+        )
+        self.executor.nq_evidence_context = self.nq_evidence_context
+
+    def nq_evidence_status(self, agent_id: str) -> dict[str, Any]:
+        artifact = self.artifacts.get(agent_id)
+        if self.nq_evidence_context is None:
+            return {"valid": True, "status": "not_applicable", "reason": ""}
+        if artifact is None:
+            return {"valid": False, "status": "invalid_evidence_submission", "reason": "missing_artifact"}
+        return copy.deepcopy(artifact.runtime_tool_evidence.get("nq_corpus", {}))
+
+    def validate_nq_submission(self, agent_id: str) -> dict[str, Any]:
+        if self.nq_evidence_context is None:
+            return {"valid": True, "status": "not_applicable", "reason": ""}
+        artifact = self.artifacts.get(agent_id)
+        if artifact is None:
+            return {"valid": False, "status": "invalid_evidence_submission", "reason": "missing_artifact"}
+        result = self.nq_evidence_context.validate(agent_id, artifact.raw_response)
+        artifact.runtime_tool_evidence["nq_corpus"] = result
+        return copy.deepcopy(result)
+
+    def nq_evidence_audit(self) -> dict[str, Any]:
+        return self.nq_evidence_context.audit() if self.nq_evidence_context else {}
 
     @property
     def native_webshop(self) -> bool:
@@ -3977,6 +4147,13 @@ class MultiAgentRuntime:
         self._artifact_seq += 1
         artifact.artifact_id = f"artifact_{self._artifact_seq}"
         artifact.agent_id = agent_id
+        if self.nq_evidence_context is not None:
+            result = self.nq_evidence_context.validate(
+                agent_id, artifact.raw_response,
+                require_submission=is_task_result(node, legacy_selected=bool(node.metadata.get("_runtime_is_output_agent", False))),
+            )
+            artifact.runtime_tool_evidence["nq_corpus"] = result
+            self.nq_evidence_context.bind_artifact(artifact.artifact_id, result)
         if (artifact.answer not in {
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
@@ -4376,6 +4553,11 @@ class MultiAgentRuntime:
                 "bidirectional_always_one_wave_v1" if revision else "initial_pass_v1"
             ),
         }
+        if self.nq_evidence_context is not None:
+            # No cross-Agent semantic-cache reuse: evidence visibility is scoped
+            # to graph packets and own observations, not only prompt equality.
+            payload["nq_corpus_trajectory"] = self.nq_evidence_context.trajectory_id
+            payload["nq_corpus_agent"] = node.agent_id
         if (self.native_webshop or is_unified_node(node)) and node.metadata.get("action_adapter") == "webshop":
             payload["native_sessions"] = [
                 lifecycle.cache_signature(node.agent_id)
@@ -6856,6 +7038,12 @@ def _finalization_recovery_messages(
     }
     if "public_task_context" in visible_context:
         recovery_context["public_task_context"] = visible_context["public_task_context"]
+    if "corpus_evidence" in visible_context:
+        recovery_context["corpus_evidence"] = visible_context["corpus_evidence"]
+        recovery_context["artifact_schema"].update(
+            answerability="supported or insufficient_evidence",
+            evidence_refs="array of {evidence_id, quote} objects from visible corpus evidence",
+        )
     if action_adapter == "alfworld":
         # A persistent episode can already be terminal when this execution starts,
         # leaving no new Actions. Preserve its public observations through the
@@ -7005,6 +7193,7 @@ def _finalization_recovery_messages(
                 "must be JSON arrays, even for one entry (wrap the entry in an array). "
                 "summary must be a string and confidence must be a numeric value, not a string."
                 + swe_requirement
+                + (" " + corpus_answer_instruction() if "corpus_evidence" in visible_context else "")
             ),
         },
         {

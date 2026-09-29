@@ -1,0 +1,53 @@
+{
+  "schema": "nq_r2d2_formal_promotion_v1",
+  "date": "2026-09-29",
+  "main_before": "68b9ead27f45bafc6c5a0300f4900eb79e298a6d",
+  "backup_branch": "experiment/nq-frozen-before-corpus-20260929",
+  "source_branch": "codex/nq-corpus-only-20260928",
+  "source_commit": "f7d1fcdee07e3fb26baa18da9eb3dafc665054c5",
+  "pilot_manifest": "SelfPlayGraphFlowSteer-nq-corpus-only/state/nq-r2d2-pilot-20260929/inference/results/run_manifest.json",
+  "pilot_manifest_sha256": "91d7d1f8ac618e123daec24ab15a0d177099f81ec13818d619f9b7b38899c71e",
+  "pilot_core_matches_source_commit": {
+    "runtime": "737dae75556cd24b96e4bf0e3a0c22460accb64f0b9888e7e3dfbaf5c75ea4f2",
+    "application": "80456d41497e53595196afb0495a4a570b2b8ef143899a71ecf2fb0638de6941",
+    "adaptive": "22f97169a892c860f74fd8779cb357c7e840d3cc554ce3480e0fedf06986da2e",
+    "answer_submission": "0fa56993d0fc2288b7d5c46eaef99bd49e0b29af6f6b8c9c22359b3538ee06eb",
+    "output_contract": "365639d248d79d982fcb4b99869206ca39a9c499e0474aaa13acd51c3ca0b41e",
+    "canvas": "4b0cd22839867eba07b096a0d6146d6ca7b4f4e82070694d01aa8dcb47b27d50",
+    "execution_contract": "c37900bce0c4490c9979d523392b35dff57c2935a595bff9e111337d1e3a87e6"
+  },
+  "r2d2_support_worktree_source_sha256": {
+    "src/selfplay_graph_flowsteer/dense_retrieval_service.py": "59f08155f2fde8066ec80385315bdd1b56e25486086e76eb1f8ef584e743a295",
+    "scripts/formal/check_retrieval_service.py": "470bb4f2b262a5dbd6fff9a6a38261a032d3738e00e17458d947e7a9948f2046"
+  },
+  "formal_config": "configs/formal_training.toml",
+  "retrieval": {
+    "enabled": true,
+    "service_url": "http://127.0.0.1:19012/retrieve",
+    "top_k": 8,
+    "timeout_s": 240.0,
+    "max_tool_rounds": 3,
+    "hotpotqa_search_enabled": false,
+    "nq_frozen_top_k": 0,
+    "nq_evidence_mode": "corpus_tool",
+    "nq_policy": {
+      "profile": "nq-dense8-v1",
+      "expected_identity_sha256": "f8129c07a8c438a559bc4983f11dd1c8d48bc362a6035455cb8c20d6b28c9c9e",
+      "min_nonempty_searches_before_answer": 1,
+      "max_search_calls_per_task": 4,
+      "require_evidence_refs": true,
+      "evidence_token_budget": 12000,
+      "max_submission_repairs": 1,
+      "allow_web_fallback": false
+    }
+  },
+  "integration_adjustments": [
+    "Preserve existing dataset-scoped formal fixes during selective merge.",
+    "Initialize independent corpus evidence/search budget for training counterfactuals and enforce citation validation.",
+    "Use LF JSONL splitting to retain Unicode separators inside existing mixed-pool strings.",
+    "Pin R2D2 assets in formal launch/configuration; retain formal routes and all non-retrieval tables."
+  ],
+  "new_model_evaluation": false,
+  "training_started": false,
+  "parameter_updates": false
+}

@@ -137,17 +137,27 @@ max_initial_calls = 3
 max_revision_calls = 1
 max_total_calls = 4
 
-# NQ reads eight frozen passages embedded in each sample; HotpotQA reads Evidence.
-# Neither dataset uses online search in the formal provided-context setup.
-# Historical retrieval-enabled controls keep their own configuration.
+# NQ searches the pinned R2D2 corpus during each rollout.
+# HotpotQA continues to use its supplied Evidence; web fallback is disabled.
 [retrieval]
-enabled = false
-service_url = "http://127.0.0.1:18010/retrieve"
-top_k = 5
+enabled = true
+service_url = "http://127.0.0.1:19012/retrieve"
+top_k = 8
 timeout_s = 240.0
 max_tool_rounds = 3
 hotpotqa_search_enabled = false
-nq_frozen_top_k = 8
+nq_frozen_top_k = 0
+nq_evidence_mode = "corpus_tool"
+
+[retrieval.nq_policy]
+profile = "nq-dense8-v1"
+expected_identity_sha256 = "f8129c07a8c438a559bc4983f11dd1c8d48bc362a6035455cb8c20d6b28c9c9e"
+min_nonempty_searches_before_answer = 1
+max_search_calls_per_task = 4
+require_evidence_refs = true
+evidence_token_budget = 12000
+max_submission_repairs = 1
+allow_web_fallback = false
 
 [director]
 prompt_variant = "v2.2"
