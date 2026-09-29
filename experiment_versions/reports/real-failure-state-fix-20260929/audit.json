@@ -1,0 +1,226 @@
+{
+  "results": {
+    "alfworld": {
+      "fresh_inference": [
+        {
+          "task_id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210937_878489",
+          "previous_passed": false,
+          "passed": true,
+          "outcome": "scored",
+          "submission": "submitted",
+          "worker_tokens_exported": 151814,
+          "worker_tokens_confirmed": 151814,
+          "physical_requests": 38,
+          "unknown_usage_requests": 0,
+          "worker_models": {
+            "deepseek-flash": 38
+          },
+          "director_turns": 9,
+          "normal_thinking_turns": 8,
+          "last_rejection": null,
+          "verification": {
+            "score": 1.0,
+            "passed": true,
+            "verifier": "alfworld_environment",
+            "detail": "{\"done\": true, \"won\": true, \"official_score\": 1.0, \"steps\": 31, \"termination_reason\": \"official_success\", \"budget_truncated\": false, \"game_fingerprint\": \"712f203019fe3e9db2692ad7e1eb6e00d020bfaa3c0c19aed4c815bc52e8709b\", \"attempt_index\": 2, \"revision\": true}"
+          }
+        },
+        {
+          "task_id": "alfworld/valid_unseen/pick_heat_then_place_in_recep-Egg-None-GarbageCan-10/trial_T20190908_113432_673307",
+          "previous_passed": false,
+          "passed": false,
+          "outcome": "scored",
+          "submission": "submitted",
+          "worker_tokens_exported": 221374,
+          "worker_tokens_confirmed": 221374,
+          "physical_requests": 51,
+          "unknown_usage_requests": 0,
+          "worker_models": {
+            "deepseek-flash": 51
+          },
+          "director_turns": 5,
+          "normal_thinking_turns": 5,
+          "last_rejection": null,
+          "verification": {
+            "score": 0.0,
+            "passed": false,
+            "verifier": "alfworld_environment",
+            "detail": "{\"done\": true, \"won\": false, \"official_score\": 0.0, \"steps\": 50, \"termination_reason\": \"episode_step_budget_exhausted\", \"budget_truncated\": true, \"game_fingerprint\": \"5615cb260812ac22c6185f594f8e01bdaeec997f582ae8bf8dad1c0711f63bfc\", \"attempt_index\": 1, \"revision\": false}"
+          }
+        }
+      ],
+      "replays": {
+        "before": {
+          "source_records": "state/alfworld128-v3-c40-r50-20260929-090648/results/records.jsonl",
+          "source_records_sha256": "a9d48c91c1aafe1009193e38014bc2afa12340cfd3e1e671fd226716d1fb605b",
+          "task_id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210937_878489",
+          "dataset": "alfworld",
+          "previous_passed": false,
+          "source_prefix_events": 6,
+          "original_failed_finish_still_rejected": true,
+          "expect_fixed": false,
+          "pending_delete": {
+            "accepted": true,
+            "state": "awaiting_model",
+            "pending_agent": "agent_1",
+            "nodes": []
+          },
+          "replacement_add_accepted": false,
+          "last_round_finish_accepted": false,
+          "last_rejections": [
+            "director_action_not_allowed",
+            "director_action_not_allowed",
+            "max_rounds_exhausted"
+          ],
+          "captured_worker_executions": 2,
+          "extra_worker_executions_at_finish": 0,
+          "real_alfworld_steps_replayed": 44,
+          "receipt_payload_kind": null,
+          "external_model_calls": 0,
+          "official_new_score": null,
+          "interventions": [
+            "pending node DELETE then replacement ADD",
+            "DELETE isolated subtask then FINISH with exactly two rounds left"
+          ],
+          "historical_scores_unchanged": true
+        },
+        "after": {
+          "source_records": "state/alfworld128-v3-c40-r50-20260929-090648/results/records.jsonl",
+          "source_records_sha256": "a9d48c91c1aafe1009193e38014bc2afa12340cfd3e1e671fd226716d1fb605b",
+          "task_id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210937_878489",
+          "dataset": "alfworld",
+          "previous_passed": false,
+          "source_prefix_events": 6,
+          "original_failed_finish_still_rejected": true,
+          "expect_fixed": true,
+          "pending_delete": {
+            "accepted": true,
+            "state": "building",
+            "pending_agent": null,
+            "nodes": []
+          },
+          "replacement_add_accepted": true,
+          "last_round_finish_accepted": true,
+          "last_rejections": [
+            "director_action_not_allowed"
+          ],
+          "captured_worker_executions": 2,
+          "extra_worker_executions_at_finish": 0,
+          "real_alfworld_steps_replayed": 44,
+          "receipt_payload_kind": "episode",
+          "external_model_calls": 0,
+          "official_new_score": null,
+          "interventions": [
+            "pending node DELETE then replacement ADD",
+            "DELETE isolated subtask then FINISH with exactly two rounds left"
+          ],
+          "historical_scores_unchanged": true
+        }
+      }
+    },
+    "swe": {
+      "fresh_inference": [
+        {
+          "task_id": "swe_bench_verified_test:django__django-13786",
+          "previous_passed": false,
+          "passed": true,
+          "outcome": "scored",
+          "submission": "submitted",
+          "worker_tokens_exported": 85151,
+          "worker_tokens_confirmed": 85151,
+          "physical_requests": 11,
+          "unknown_usage_requests": 0,
+          "worker_models": {
+            "lab-gpt-5.5-2": 6,
+            "gpt-5.5": 5
+          },
+          "director_turns": 4,
+          "normal_thinking_turns": 4,
+          "last_rejection": null,
+          "verification": {
+            "score": 1.0,
+            "passed": true,
+            "verifier": "swe_outcome",
+            "detail": "status=resolved; official=True; synthetic=False"
+          }
+        }
+      ],
+      "replays": {
+        "before": {
+          "source_records": "state/swe-128-rerun-20260928-205145/results/records.jsonl",
+          "source_records_sha256": "30d4d9bfb9a7369faa1089a166c4f725be51e417effd3469aaa29676600dc488",
+          "task_id": "swe_bench_verified_test:django__django-13786",
+          "dataset": "swe_bench",
+          "previous_passed": false,
+          "source_prefix_events": 6,
+          "original_failed_finish_still_rejected": true,
+          "expect_fixed": false,
+          "pending_delete": {
+            "accepted": true,
+            "state": "awaiting_model",
+            "pending_agent": "agent_1",
+            "nodes": []
+          },
+          "replacement_add_accepted": false,
+          "last_round_finish_accepted": false,
+          "last_rejections": [
+            "director_action_not_allowed",
+            "director_action_not_allowed",
+            "max_rounds_exhausted"
+          ],
+          "captured_worker_executions": 2,
+          "extra_worker_executions_at_finish": 0,
+          "real_alfworld_steps_replayed": 0,
+          "receipt_payload_kind": null,
+          "external_model_calls": 0,
+          "official_new_score": null,
+          "interventions": [
+            "pending node DELETE then replacement ADD",
+            "DELETE isolated subtask then FINISH with exactly two rounds left"
+          ],
+          "historical_scores_unchanged": true
+        },
+        "after": {
+          "source_records": "state/swe-128-rerun-20260928-205145/results/records.jsonl",
+          "source_records_sha256": "30d4d9bfb9a7369faa1089a166c4f725be51e417effd3469aaa29676600dc488",
+          "task_id": "swe_bench_verified_test:django__django-13786",
+          "dataset": "swe_bench",
+          "previous_passed": false,
+          "source_prefix_events": 6,
+          "original_failed_finish_still_rejected": true,
+          "expect_fixed": true,
+          "pending_delete": {
+            "accepted": true,
+            "state": "building",
+            "pending_agent": null,
+            "nodes": []
+          },
+          "replacement_add_accepted": true,
+          "last_round_finish_accepted": true,
+          "last_rejections": [
+            "director_action_not_allowed"
+          ],
+          "captured_worker_executions": 2,
+          "extra_worker_executions_at_finish": 0,
+          "real_alfworld_steps_replayed": 0,
+          "receipt_payload_kind": "code_patch",
+          "external_model_calls": 0,
+          "official_new_score": null,
+          "interventions": [
+            "pending node DELETE then replacement ADD",
+            "DELETE isolated subtask then FINISH with exactly two rounds left"
+          ],
+          "historical_scores_unchanged": true
+        }
+      }
+    }
+  },
+  "historical_record_hashes_unchanged": true,
+  "cloud_final": {
+    "InstanceState": "STOPPED",
+    "StopChargingMode": "STOP_CHARGING"
+  },
+  "owned_director_stopped": true,
+  "owned_director_port_closed": true,
+  "boundary_replays_are_counterfactual_not_new_scores": true
+}

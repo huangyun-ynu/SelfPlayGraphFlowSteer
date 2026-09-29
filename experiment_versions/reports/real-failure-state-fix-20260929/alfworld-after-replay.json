@@ -1,0 +1,32 @@
+{
+  "source_records": "state/alfworld128-v3-c40-r50-20260929-090648/results/records.jsonl",
+  "source_records_sha256": "a9d48c91c1aafe1009193e38014bc2afa12340cfd3e1e671fd226716d1fb605b",
+  "task_id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210937_878489",
+  "dataset": "alfworld",
+  "previous_passed": false,
+  "source_prefix_events": 6,
+  "original_failed_finish_still_rejected": true,
+  "expect_fixed": true,
+  "pending_delete": {
+    "accepted": true,
+    "state": "building",
+    "pending_agent": null,
+    "nodes": []
+  },
+  "replacement_add_accepted": true,
+  "last_round_finish_accepted": true,
+  "last_rejections": [
+    "director_action_not_allowed"
+  ],
+  "captured_worker_executions": 2,
+  "extra_worker_executions_at_finish": 0,
+  "real_alfworld_steps_replayed": 44,
+  "receipt_payload_kind": "episode",
+  "external_model_calls": 0,
+  "official_new_score": null,
+  "interventions": [
+    "pending node DELETE then replacement ADD",
+    "DELETE isolated subtask then FINISH with exactly two rounds left"
+  ],
+  "historical_scores_unchanged": true
+}

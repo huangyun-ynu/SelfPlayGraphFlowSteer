@@ -1,0 +1,556 @@
+{
+  "alfworld": {
+    "source": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-hotpot-answer-contract/state/alfworld128-v3-c40-r50-20260929-090648/results/records.jsonl",
+    "sha256": "a9d48c91c1aafe1009193e38014bc2afa12340cfd3e1e671fd226716d1fb605b",
+    "records": 128,
+    "max_director_turns": 18,
+    "last_round_rejections": [],
+    "pending_model_deletes": [],
+    "failed": [
+      {
+        "id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210937_878489",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "director_no_progress_exhausted"
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_cool_then_place_in_recep-Tomato-None-Microwave-10/trial_T20190909_102608_318800",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_clean_then_place_in_recep-Egg-None-Microwave-10/trial_T20190909_120554_888709",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "director_context_budget_exhausted"
+      },
+      {
+        "id": "alfworld/valid_seen/look_at_obj_in_light-CD-None-DeskLamp-302/trial_T20190907_154618_526741",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_heat_then_place_in_recep-Apple-None-Fridge-10/trial_T20190906_182259_116320",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_cool_then_place_in_recep-Bread-None-CounterTop-10/trial_T20190908_091747_866951",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_and_place_simple-CreditCard-None-Drawer-227/trial_T20190909_010644_297017",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_heat_then_place_in_recep-Egg-None-GarbageCan-10/trial_T20190908_113432_673307",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "alfworld/valid_seen/pick_clean_then_place_in_recep-SoapBar-None-Toilet-410/trial_T20190906_201106_979461",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_clean_then_place_in_recep-Cloth-None-Cabinet-424/trial_T20190908_022321_380927",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_heat_then_place_in_recep-Apple-None-DiningTable-26/trial_T20190907_060234_011675",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "director_context_budget_exhausted"
+      },
+      {
+        "id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Bread-None-CounterTop-7/trial_T20190909_045605_307949",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_and_place_simple-Newspaper-None-Sofa-224/trial_T20190909_111324_949106",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "alfworld/valid_seen/pick_heat_then_place_in_recep-Plate-None-Cabinet-1/trial_T20190908_070946_578973",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_two_obj_and_place-Vase-None-Desk-204/trial_T20190906_181531_703961",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_heat_then_place_in_recep-Egg-None-CounterTop-2/trial_T20190908_122951_021026",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Tomato-None-GarbageCan-6/trial_T20190909_082934_483899",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_cool_then_place_in_recep-Pan-None-CounterTop-10/trial_T20190908_114545_244903",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_heat_then_place_in_recep-Cup-None-Cabinet-22/trial_T20190907_173251_960848",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_unseen/pick_two_obj_and_place-KeyChain-None-Safe-219/trial_T20190909_011803_423115",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "alfworld/valid_unseen/look_at_obj_in_light-Book-None-DeskLamp-308/trial_T20190908_020029_636862",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/look_at_obj_in_light-CD-None-DeskLamp-320/trial_T20190907_224451_655673",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/look_at_obj_in_light-Pillow-None-DeskLamp-302/trial_T20190909_150916_682139",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_heat_then_place_in_recep-Mug-None-SideTable-21/trial_T20190909_090729_088825",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Tomato-None-CounterTop-12/trial_T20190909_063754_216554",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Pan-None-DiningTable-7/trial_T20190908_232648_241836",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      }
+    ]
+  },
+  "swe": {
+    "source": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/swe-128-rerun-20260928-205145/results/records.jsonl",
+    "sha256": "30d4d9bfb9a7369faa1089a166c4f725be51e417effd3469aaa29676600dc488",
+    "records": 128,
+    "max_director_turns": 13,
+    "last_round_rejections": [],
+    "pending_model_deletes": [],
+    "failed": [
+      {
+        "id": "swe_bench_verified_test:django__django-11087",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-13798",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "director_no_progress_exhausted"
+      },
+      {
+        "id": "swe_bench_verified_test:scikit-learn__scikit-learn-12585",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "director_no_progress_exhausted"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-11885",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:pydata__xarray-7229",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-14631",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-21612",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-14315",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-13852",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-14531",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:pytest-dev__pytest-7521",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:psf__requests-2317",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-10999",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:matplotlib__matplotlib-26466",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pydata__xarray-6461",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-8475",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:scikit-learn__scikit-learn-14629",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pytest-dev__pytest-5840",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13128",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:matplotlib__matplotlib-20488",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:scikit-learn__scikit-learn-25931",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-12489",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-8265",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:scikit-learn__scikit-learn-25747",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:pydata__xarray-3305",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:matplotlib__matplotlib-22871",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pylint-dev__pylint-4661",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:matplotlib__matplotlib-24637",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-9591",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-11400",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-8638",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13512",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-11211",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-8056",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-16938",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pytest-dev__pytest-7205",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13195",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-14792",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pytest-dev__pytest-10051",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pydata__xarray-6992",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-18698",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-14017",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-14011",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13786",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "director_no_progress_exhausted"
+      },
+      {
+        "id": "swe_bench_verified_test:pylint-dev__pylint-6528",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:astropy__astropy-14182",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-9258",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:pytest-dev__pytest-10356",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-12325",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "director_no_progress_exhausted"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-11532",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13112",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:matplotlib__matplotlib-24177",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-15916",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13513",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-10914",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      },
+      {
+        "id": "swe_bench_verified_test:scikit-learn__scikit-learn-13328",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "director_no_progress_exhausted"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-11490",
+        "status": "unsubmitted_unknown",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_unsettled_limit"
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-14534",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-13212",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:django__django-15732",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sphinx-doc__sphinx-8551",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-15345",
+        "status": "scored",
+        "submission": "submitted",
+        "last_rejection": null
+      },
+      {
+        "id": "swe_bench_verified_test:sympy__sympy-22080",
+        "status": "policy_failure",
+        "submission": "unsubmitted",
+        "last_rejection": "worker_usage_threshold_reached"
+      }
+    ]
+  }
+}

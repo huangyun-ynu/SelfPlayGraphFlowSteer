@@ -1,0 +1,32 @@
+{
+  "source_records": "state/swe-128-rerun-20260928-205145/results/records.jsonl",
+  "source_records_sha256": "30d4d9bfb9a7369faa1089a166c4f725be51e417effd3469aaa29676600dc488",
+  "task_id": "swe_bench_verified_test:django__django-13786",
+  "dataset": "swe_bench",
+  "previous_passed": false,
+  "source_prefix_events": 6,
+  "original_failed_finish_still_rejected": true,
+  "expect_fixed": true,
+  "pending_delete": {
+    "accepted": true,
+    "state": "building",
+    "pending_agent": null,
+    "nodes": []
+  },
+  "replacement_add_accepted": true,
+  "last_round_finish_accepted": true,
+  "last_rejections": [
+    "director_action_not_allowed"
+  ],
+  "captured_worker_executions": 2,
+  "extra_worker_executions_at_finish": 0,
+  "real_alfworld_steps_replayed": 0,
+  "receipt_payload_kind": "code_patch",
+  "external_model_calls": 0,
+  "official_new_score": null,
+  "interventions": [
+    "pending node DELETE then replacement ADD",
+    "DELETE isolated subtask then FINISH with exactly two rounds left"
+  ],
+  "historical_scores_unchanged": true
+}

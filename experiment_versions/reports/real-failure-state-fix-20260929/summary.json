@@ -1,0 +1,27 @@
+{
+  "alfworld": [
+    {
+      "id": "alfworld/valid_seen/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210937_878489",
+      "passed": true,
+      "status": "scored",
+      "submission": "submitted",
+      "tokens": 151814
+    },
+    {
+      "id": "alfworld/valid_unseen/pick_heat_then_place_in_recep-Egg-None-GarbageCan-10/trial_T20190908_113432_673307",
+      "passed": false,
+      "status": "scored",
+      "submission": "submitted",
+      "tokens": 221374
+    }
+  ],
+  "swe": [
+    {
+      "id": "swe_bench_verified_test:django__django-13786",
+      "passed": true,
+      "status": "scored",
+      "submission": "submitted",
+      "tokens": 85151
+    }
+  ]
+}
