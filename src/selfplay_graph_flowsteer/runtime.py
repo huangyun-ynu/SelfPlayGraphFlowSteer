@@ -26,6 +26,12 @@ from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
 from .graph import MultiAgentGraph
 from .healthbench_protocol import healthbench_answer_instruction
 from .hotpot_answer_contract import HOTPOT_RESULT_FIELDS, hotpot_output_instruction
+from .aime_verification import (
+    POLICY as AIME_REVIEW_POLICY,
+    RESULT_FIELDS as AIME_RESULT_FIELDS,
+    REVIEW_INSTRUCTION as AIME_REVIEW_INSTRUCTION,
+    output_instruction as aime_output_instruction,
+)
 from .latency import (
     RouteLatencyEstimate,
     RouteLatencyTracker,
@@ -484,6 +490,14 @@ class ModelAgentExecutor:
         prior: RelayPacket | None = None,
     ) -> AgentArtifact:
         self._check_deadline()
+        if node.metadata.get("_runtime_aime_review"):
+            # Only the execution copy receives this allowance. The graph's
+            # ordinary tool budgets and artifact input signature stay intact.
+            node = copy.deepcopy(node)
+            review_budget = int(node.metadata["_runtime_aime_review"]["tool_budget"])
+            node.initial_tool_budget = review_budget
+            node.revision_tool_budget = review_budget
+            node.total_tool_budget = review_budget
         self._validate_dataset_actions(node)
         self._swe_request_usage = (
             [0, 0] if node.metadata.get("action_adapter") == "swe_bench" else None
@@ -897,6 +911,12 @@ class ModelAgentExecutor:
             else ""
         )
         short_answer_qa = is_short_qa_dataset(contract_dataset)
+        aime_review_policy = (node.metadata.get("aime_verification_policy", "off")
+                              if contract_dataset == "aime" or action_adapter == "aime" else "off")
+        if aime_review_policy == AIME_REVIEW_POLICY:
+            context["aime_verification_policy"] = aime_review_policy
+            if node.metadata.get("_runtime_aime_review"):
+                context["aime_review"] = copy.deepcopy(node.metadata["_runtime_aime_review"])
         selected_output_agent = is_task_result(node, legacy_selected=worker_output_role_changes_input(
             dataset=contract_dataset,
             action_adapter=action_adapter,
@@ -1016,6 +1036,8 @@ class ModelAgentExecutor:
             )
         if is_unified_node(node):
             instruction += result_instruction(node, contract_dataset or action_adapter)
+        if context.get("aime_review"):
+            instruction += AIME_REVIEW_INSTRUCTION + " "
         instruction += _worker_output_instruction(
             context["available_actions"],
             dataset=contract_dataset,
@@ -1024,6 +1046,7 @@ class ModelAgentExecutor:
             is_output_agent=selected_output_agent,
             webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
             local_environment_result=is_unified_node(node) and not is_task_result(node),
+            aime_verification_policy=aime_review_policy,
         )
         if self.nq_evidence_context is not None:
             instruction += corpus_answer_instruction()
@@ -4083,7 +4106,11 @@ class MultiAgentRuntime:
         set_budget_scope = getattr(self.executor, "set_budget_scope", None)
         if callable(set_budget_scope):
             action_adapter = str(node.metadata.get("action_adapter", ""))
-            if ActionBudgetLedger.shared_total(node):
+            if node.metadata.get("_runtime_aime_review"):
+                # One question-level review account, independent of the exhausted
+                # ordinary execution scope and stable across its internal retries.
+                set_budget_scope("aime-verification:whole-task")
+            elif ActionBudgetLedger.shared_total(node):
                 # One task account survives revisions, route changes and node
                 # deletion/recreation. Runtime.reset() alone starts a new task.
                 set_budget_scope("tool-rollout:whole-graph")
@@ -4554,6 +4581,8 @@ class MultiAgentRuntime:
                 "bidirectional_always_one_wave_v1" if revision else "initial_pass_v1"
             ),
         }
+        if node.metadata.get("_runtime_aime_review"):
+            payload["aime_review"] = copy.deepcopy(node.metadata["_runtime_aime_review"])
         if self.nq_evidence_context is not None:
             # No cross-Agent semantic-cache reuse: evidence visibility is scoped
             # to graph packets and own observations, not only prompt equality.
@@ -6530,6 +6559,7 @@ def _worker_output_instruction(
     is_output_agent: bool = False,
     webshop_worker_guidance_policy: str = "baseline",
     local_environment_result: bool = False,
+    aime_verification_policy: str = "off",
 ) -> str:
     actions = available_actions if isinstance(available_actions, list) else []
     if short_answer_qa:
@@ -6547,6 +6577,9 @@ def _worker_output_instruction(
     )
     if canonical_dataset_name(dataset) == "hotpotqa":
         output_instruction = hotpot_output_instruction(is_output_agent=is_output_agent)
+    if (aime_verification_policy == AIME_REVIEW_POLICY
+            and (canonical_dataset_name(dataset) == "aime" or action_adapter == "aime")):
+        output_instruction = aime_output_instruction(is_output_agent=is_output_agent)
     if action_adapter == "healthbench_professional":
         output_instruction = (
             "Return one final JSON object with answer, summary, confidence, evidence, "
@@ -7046,6 +7079,10 @@ def _finalization_recovery_messages(
     }
     if "public_task_context" in visible_context:
         recovery_context["public_task_context"] = visible_context["public_task_context"]
+    if visible_context.get("aime_verification_policy") == AIME_REVIEW_POLICY:
+        recovery_context["aime_verification_policy"] = AIME_REVIEW_POLICY
+        if "aime_review" in visible_context:
+            recovery_context["aime_review"] = visible_context["aime_review"]
     if "corpus_evidence" in visible_context:
         recovery_context["corpus_evidence"] = visible_context["corpus_evidence"]
         recovery_context["artifact_schema"].update(
@@ -7145,6 +7182,14 @@ def _finalization_recovery_messages(
         output_instruction += " " + role_instruction
         recovery_context["artifact_schema"] = {
             key: recovery_context["artifact_schema"][key] for key in HOTPOT_RESULT_FIELDS
+        }
+    if (visible_context.get("aime_verification_policy") == AIME_REVIEW_POLICY
+            and (canonical_dataset_name(dataset) == "aime" or action_adapter == "aime")):
+        output_instruction = aime_output_instruction(is_output_agent=is_output_agent)
+        if visible_context.get("aime_review"):
+            output_instruction += AIME_REVIEW_INSTRUCTION
+        recovery_context["artifact_schema"] = {
+            key: recovery_context["artifact_schema"][key] for key in AIME_RESULT_FIELDS
         }
     if action_adapter == "healthbench_professional":
         output_instruction = (
