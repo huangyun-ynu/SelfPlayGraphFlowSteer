@@ -3198,8 +3198,6 @@ class GraphCanvas(UnifiedSubmissionMixin):
             if self.unified:
                 from uuid import uuid4
                 graph.nodes[agent_id].metadata.update(submission_protocol=PROTOCOL, result_scope="subtask", incarnation_id=uuid4().hex, task_dataset=self.dataset)
-                if self._aime_review_enabled():
-                    graph.nodes[agent_id].metadata["aime_verification_policy"] = self.config.aime_verification_policy
             if self.action_adapter is not None:
                 configured = graph.configure_action_environment(
                     agent_id,

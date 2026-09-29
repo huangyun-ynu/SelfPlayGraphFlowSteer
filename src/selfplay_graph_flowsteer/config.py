@@ -95,8 +95,6 @@ class CanvasConfig:
     submission_journal_dir: str = "state/submissions"
     alfworld_terminal_candidate_policy: str = "off"
     max_recovery_executions: int = 2
-    aime_verification_policy: str = "off"
-    aime_verification_tool_budget: int = 2
     action_budget_policy: str = "phase_split_v1"
     webshop_action_budget_policy: str | None = None
     max_agents: int = 8
@@ -158,10 +156,6 @@ class CanvasConfig:
             raise ValueError("unknown ALFWorld terminal candidate policy")
         if self.max_recovery_executions < 0:
             raise ValueError("max_recovery_executions must be non-negative")
-        if self.aime_verification_policy not in {"off", "bounded_review_v1"}:
-            raise ValueError("unknown AIME verification policy")
-        if type(self.aime_verification_tool_budget) is not int or not 0 <= self.aime_verification_tool_budget <= 4:
-            raise ValueError("AIME verification tool budget must be an integer from 0 to 4")
         if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
             raise ValueError("unknown canvas.action_budget_policy")
         if self.webshop_action_budget_policy not in {None, "phase_split_v1", "shared_total_v1"}:

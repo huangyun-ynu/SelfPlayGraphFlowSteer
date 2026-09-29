@@ -64,7 +64,6 @@ class UnifiedSubmissionMixin:
         self.director_edits_used = 0
         self._submission_lock = threading.RLock()
         self._unified_recovery_used = 0
-        self._aime_reviews_used = 0
         self._unified_transaction = None
         self._unified_observed_snapshots = {}
         self._unified_seen_states = set()
@@ -132,9 +131,7 @@ class UnifiedSubmissionMixin:
             for key, value in self.runtime.artifacts.items() if key in self.graph.nodes}
         return snapshot_hash({"graph": graph, "state": self.state.value,
                               "pending": self.pending_agent_id,
-                              "dirty": sorted(self.dirty_agents), "results": artifacts,
-                              **({"aime_reviews_used": self._aime_reviews_used}
-                                 if self._aime_review_enabled() else {})})
+                              "dirty": sorted(self.dirty_agents), "results": artifacts})
 
     def observe_submission_candidates(self, call_id):
         self._unified_observed_snapshots[call_id] = {
@@ -276,20 +273,6 @@ class UnifiedSubmissionMixin:
                 and adapter.action_budget_policy == "shared_total_v1"
                 and self.runtime.shared_tool_budget_status(adapter.total_action_budget)["remaining"] <= 0)
 
-    def _aime_review_enabled(self):
-        from .aime_verification import POLICY
-        return self.unified and self.dataset == "aime" and self.config.aime_verification_policy == POLICY
-
-    def _aime_can_review(self, target):
-        from .runtime import artifact_integrity_failure_risks
-        node = self.graph.nodes.get(target)
-        artifact = self.runtime.artifacts.get(target)
-        return bool(self._aime_review_enabled() and self._aime_reviews_used == 0
-                    and node and node.configured and is_task_result(node) and artifact
-                    and target not in self.dirty_agents and not artifact_integrity_failure_risks(artifact)
-                    and self.runtime.artifact_matches_current_input_signature(
-                        target, task=self.worker_task, graph=self.graph))
-
     def _unified_can_run(self, target, *, admitted_action=False):
         from .canvas import CanvasState
         if (self.state in {CanvasState.FINISHED, CanvasState.FAILED}
@@ -316,8 +299,6 @@ class UnifiedSubmissionMixin:
         if (artifact_integrity_failure_risks(artifact)
                 or artifact.webshop_progress.get("state") == "needs_recovery"):
             return self._unified_recovery_used < self.config.max_recovery_executions
-        if self._aime_can_review(target):
-            return True
         from .runtime import ActionBudgetLedger
         if (ActionBudgetLedger.shared_total(node)
                 and node.allowed_tools
@@ -343,26 +324,12 @@ class UnifiedSubmissionMixin:
         target = str(action.target)
         from .runtime import artifact_integrity_failure_risks
         artifact = self.runtime.artifacts.get(target)
-        review = self._aime_can_review(target)
-        if review:
-            # A question-level allowance: prompt edits and node recreation never reset it.
-            self._aime_reviews_used += 1
-            self.graph.nodes[target].metadata["_runtime_aime_review"] = {
-                "attempt": self._aime_reviews_used,
-                "tool_budget": self.config.aime_verification_tool_budget,
-                "candidate_artifact_id": artifact.artifact_id,
-                "candidate": {"answer": artifact.answer, "summary": artifact.summary[:6000],
-                    "evidence": [str(item)[:1000] for item in artifact.evidence[:8]],
-                    "unresolved_issues": [str(item)[:1000] for item in artifact.unresolved_issues[:8]]},
-            }
         if artifact and (artifact_integrity_failure_risks(artifact)
                 or artifact.webshop_progress.get("state") == "needs_recovery"):
             self._unified_recovery_used += 1
         self.graph.nodes[target].metadata["_runtime_explicit_recovery"] = True
         self.dirty_agents.add(target)
         self.dirty_reasons.setdefault(target, set()).add("explicit_continuation")
-        if review:
-            self.dirty_reasons[target].add("aime_verification")
         try:
             report = self._execute_dirty()
         except Exception as exc:
@@ -379,15 +346,12 @@ class UnifiedSubmissionMixin:
             )
         finally:
             self.graph.nodes[target].metadata.pop("_runtime_explicit_recovery", None)
-            self.graph.nodes[target].metadata.pop("_runtime_aime_review", None)
         if report is not None and target in report.blocked_agents:
             return self._record(action, accepted=True, execution=report,
                 feedback=self._feedback(
                     f"Continuation for {target} was blocked before its Worker request; pending work remains.",
                     report))
-        return self._record(action, accepted=True, feedback=(
-            "Executed the one-time AIME review; review completion does not certify mathematical correctness."
-            if review else "Executed the bounded continuation on current inputs and resources."), execution=report)
+        return self._record(action, accepted=True, feedback="Executed the bounded continuation on current inputs and resources.", execution=report)
 
     def _unified_finish(self, action):
         from .answer_submission import AnswerFinalizer, AnswerSubmissionConfig
@@ -548,12 +512,6 @@ class UnifiedSubmissionMixin:
         parameters = self._legal_action_parameters()
         parameters.pop("set_output", None)
         assessments = {key: self.submission_assessment(key) for key in sorted(self.graph.nodes)}
-        if self._aime_review_enabled():
-            from .aime_verification import quality_warnings
-            for key, value in assessments.items():
-                artifact = self.runtime.artifacts.get(key)
-                if artifact and is_task_result(self.graph.nodes[key]):
-                    value["quality_warnings"] = quality_warnings(artifact)
         ready = [key for key, value in assessments.items() if value["submit_ready"]]
         executable = [key for key in sorted(self.graph.nodes) if self._unified_can_run(key)]
         ids = sorted(self.graph.nodes)
@@ -624,13 +582,6 @@ class UnifiedSubmissionMixin:
             "action_field_requirements": {name: list(UNIFIED_ACTION_FIELDS[name]) for name in allowed if name in UNIFIED_ACTION_FIELDS},
             "legal_action_parameters": parameters, "graph_state": self._graph_state_snapshot(),
             "result_assessments": assessments,
-            **({"aime_verification": {
-                "policy": self.config.aime_verification_policy,
-                "used": self._aime_reviews_used, "max": 1,
-                "tool_calls_per_review": self.config.aime_verification_tool_budget,
-                "targets": [key for key in executable if self._aime_can_review(key)],
-                "instruction": "Before FINISH, use the one-time RUN_AGENT review when its target is listed here. Prioritize unresolved issues, contradictions, and unproven extrema. Review availability and submit_ready do not certify correctness. After the allowance is spent, choose the best existing result or make useful graph edits within the remaining budget; do not repeat RUN_AGENT on a clean result.",
-            }} if self._aime_review_enabled() else {}),
             **({"recoverable_code_artifacts": self.runtime.recoverable_swe_candidates(),
                 "candidate_recovery_instruction": "A Worker may apply a relevant archived patch with swe_apply_artifact, validate current dependencies, and run swe_test. Archived patches alone cannot be submitted."}
                if self.dataset == "swe_bench" else {}),
