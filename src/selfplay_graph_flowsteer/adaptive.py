@@ -657,6 +657,8 @@ class AdaptiveWorkflowSolver:
         receipt = canvas.submission_receipt
         if nq_task and self.nq_evidence_mode == "corpus_tool":
             task.metadata["nq_corpus_evidence_audit"] = self.runtime.nq_evidence_audit()
+            if receipt is not None:
+                task.metadata["nq_corpus_submission"] = self.runtime.validate_nq_submission(receipt.output_agent_id)
         frozen_run = copy.deepcopy(run) if receipt is not None else None
         if self.post_director_hook is not None:
             before_artifacts = snapshot_hash({key: value.to_dict() for key, value in self.runtime.artifacts.items()})

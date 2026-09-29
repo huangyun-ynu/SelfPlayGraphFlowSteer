@@ -1338,6 +1338,7 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             submission_journal_dir=str(_path(canvas.get("submission_journal_dir"), root, "state/submissions")),
             max_recovery_executions=int(canvas.get("max_recovery_executions", 2)),
             action_budget_policy=str(canvas.get("action_budget_policy", "phase_split_v1")),
+            webshop_action_budget_policy=canvas.get("webshop_action_budget_policy"),
             max_agents=int(canvas.get("max_agents", 8)),
             max_rounds=int(canvas.get("max_rounds", 20)),
             director_budget_policy=str(canvas.get("director_budget_policy", "rounds_v1")),
@@ -2593,7 +2594,7 @@ def create_adaptive_application(
     if config.webshop.enabled:
         lifecycle_type = (
             NativeWebShopLifecycle
-            if config.webshop.worker_execution_policy == NATIVE_POLICY or config.canvas.submission_protocol == "unified_task_result_v1"
+            if config.webshop.worker_execution_policy == NATIVE_POLICY or config.canvas.for_dataset("webshop").submission_protocol == "unified_task_result_v1"
             else WebShopSessionLifecycle
         )
         webshop_lifecycle = lifecycle_type(
@@ -2695,7 +2696,8 @@ def create_adaptive_application(
         ),
         webshop_staged_commit=config.webshop.staged_commit_enabled,
         action_budget_policy=config.canvas.action_budget_policy,
-        webshop_commit_on_finish=(config.webshop.worker_execution_policy == NATIVE_POLICY or config.canvas.submission_protocol == "unified_task_result_v1"),
+        webshop_action_budget_policy=config.canvas.for_dataset("webshop").action_budget_policy,
+        webshop_commit_on_finish=(config.webshop.worker_execution_policy == NATIVE_POLICY or config.canvas.for_dataset("webshop").submission_protocol == "unified_task_result_v1"),
         alfworld_budgets=(
             config.alfworld.max_initial_calls,
             config.alfworld.max_revision_calls,

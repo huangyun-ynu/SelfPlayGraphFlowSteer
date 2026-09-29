@@ -182,16 +182,18 @@ def test_swe_pool_preflight_rejects_eco_only_and_keeps_scoped_members(tmp_path, 
     assert selected.dataset_endpoint_pools == config.dataset_endpoint_pools
 
 
-def test_formal_hotpot_keeps_8672_evaluated_module_data_and_prompt_hashes():
+def test_formal_hotpot_keeps_answer_contract_and_data_when_protocol_changes():
     root = Path(__file__).resolve().parents[1]
     provenance = json.loads((root / "experiment_versions/promotions/hotpot-8672-20260928/validation.json").read_text())
     config = load_adaptive_config(root / "configs/formal_training.toml", validate=False)
     current = config.model_manifest()["execution_semantics"]
+    legacy = execution_semantics("v2.2")
     for key, expected in provenance["promoted_worker_and_recovery_sha256"].items():
-        assert current["worker_and_recovery_sha256"][key] == expected
+        assert legacy["worker_and_recovery_sha256"][key] == expected
+        assert current["worker_and_recovery_sha256"][key] != expected  # Explicit V3 responsibility.
     source = "src/selfplay_graph_flowsteer/hotpot_answer_contract.py"
     assert hashlib.sha256((root / source).read_bytes()).hexdigest() == provenance["files"][source]["after_sha256"]
     for name in ("hotpotqa_official_test.jsonl", "hotpotqa_flowsteer_corrected_v1_128.jsonl"):
         assert hashlib.sha256((root / "data/formal/eval" / name).read_bytes()).hexdigest() == provenance["dataset_sha256"]
-    assert config.canvas.for_dataset("hotpotqa").submission_protocol == "legacy"
-    assert config.pats.variant_for_scope(resolve_scope("qa", {"dataset": "hotpotqa"})) == "v2.2"
+    assert config.canvas.for_dataset("hotpotqa").submission_protocol == "unified_task_result_v1"
+    assert config.pats.variant_for_scope(resolve_scope("qa", {"dataset": "hotpotqa"})) == "v3"

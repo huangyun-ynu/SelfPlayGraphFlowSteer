@@ -1,0 +1,114 @@
+{
+  "date": "2026-09-29",
+  "base_commit": "4678541bb06a74ea330e9c28037a2256b31e8bc1",
+  "backup_branch": "experiment/formal-before-all-v3-20260929",
+  "scope": "All seven formal datasets use V3; no new training or model evaluation",
+  "webshop_reference_commit": "fb2112dfc4afcc8b3adbcc9bbf1f934b03e07192",
+  "webshop_reference_scope": [
+    "dataset-scoped lifecycle and commit capability",
+    "local responsibility guidance",
+    "prevent new nodes after shared action exhaustion"
+  ],
+  "not_promoted": [
+    "WebShop reported-usage threshold experiment",
+    "later WebShop observation-memory experiments"
+  ],
+  "protocol_by_dataset": {
+    "aime": "unified_task_result_v1",
+    "nq_open": "unified_task_result_v1",
+    "hotpotqa": "unified_task_result_v1",
+    "healthbench_professional": "unified_task_result_v1",
+    "webshop": "unified_task_result_v1",
+    "alfworld": "unified_task_result_v1",
+    "swe_bench": "unified_task_result_v1"
+  },
+  "effective_director_variant_by_dataset": {
+    "aime": "v3",
+    "nq_open": "v3",
+    "hotpotqa": "v3",
+    "healthbench_professional": "v3",
+    "webshop": "v3",
+    "alfworld": "v3",
+    "swe_bench": "v3"
+  },
+  "submission_contract_version_by_dataset": {
+    "aime": "unified_submission_v1",
+    "nq_open": "unified_submission_v1",
+    "hotpotqa": "unified_submission_v1",
+    "healthbench_professional": "unified_submission_v1",
+    "webshop": "unified_submission_v1",
+    "alfworld": "unified_submission_v1",
+    "swe_bench": "unified_submission_v1"
+  },
+  "changed_source_sha256": {
+    "src/selfplay_graph_flowsteer/adaptive.py": "4a22751849b456e7026b5d79cdd1ba55072ebbbbfdb75b558d231effdf4a8bb1",
+    "src/selfplay_graph_flowsteer/application.py": "293d0cae2dacba9a8183364897832dfbecf5f720122d584bbcc8a09ecce6a122",
+    "src/selfplay_graph_flowsteer/canvas.py": "2ed69b7ff622c589bbe91f2f3232b6b736a252da44f18d675531fe8fe7257391",
+    "src/selfplay_graph_flowsteer/config.py": "8ee3b3cbc1a3f5819ae8b5dfba2443849ae5a8f311ba8cdb0c11b1be70e7754f",
+    "src/selfplay_graph_flowsteer/dataset_actions.py": "8d82e5f4b4c8e6340d74c3dcd3a40be438c11d15783639f2ce44e1ee6af59524",
+    "src/selfplay_graph_flowsteer/delegation.py": "b456412aa516041b072c1f0a2b33dfbd489e0c4c2d6b8ee4a071796e5b15970e",
+    "src/selfplay_graph_flowsteer/director.py": "5cb0c08f913ead2d425b8a8373bdd59617667a0db01380303496f7840da9e7c3",
+    "src/selfplay_graph_flowsteer/runtime.py": "a2888d30a4b8b2bdd008c7c4121a169fdd2ad58ad8d066b92160faf081cd8d41",
+    "src/selfplay_graph_flowsteer/unified_submission.py": "b88c7923f55fe3d77f4cf2ea6d5eb558d9ce3c25f896da62e549787227b8a8cc"
+  },
+  "configs": [
+    {
+      "path": "configs/formal_eval_h200.local.toml",
+      "before_sha256": "8a2e0ddfd2d3ebd5ef111b7a7d5348e205c93d69cf238f72314a1cf207112337",
+      "after_sha256": "8df5df3982e8345a4e265158883ac3a7dff962f1ac3cd7ca5d5211d1a4bcc144",
+      "changed_tables": [
+        "canvas"
+      ],
+      "changed_canvas_fields": [
+        "submission_journal_dir",
+        "submission_protocol_by_dataset",
+        "webshop_action_budget_policy"
+      ]
+    },
+    {
+      "path": "configs/formal_eval_worker08_main_v22.local.toml",
+      "before_sha256": "fa8a0a5f68ffd157f92b6a22bb256f041686c64104574c4dce49e15cbb8aecc0",
+      "after_sha256": "8b9d06e2ba9c4a127d33fb8b0cd47cc1772d09c72edbebd8a5b1293c0691c89f",
+      "changed_tables": [
+        "canvas"
+      ],
+      "changed_canvas_fields": [
+        "submission_journal_dir",
+        "submission_protocol_by_dataset",
+        "webshop_action_budget_policy"
+      ]
+    },
+    {
+      "path": "configs/formal_training.toml",
+      "before_sha256": "265a1f87adacca810c1bfad5a240b8170b3338df0e2a48b91ba6331612983fa0",
+      "after_sha256": "1d5d8e823ad6a59881483c3aa59230d6e664ddf89365036328a0da2937d8f67d",
+      "changed_tables": [
+        "canvas"
+      ],
+      "changed_canvas_fields": [
+        "submission_journal_dir",
+        "submission_protocol_by_dataset",
+        "webshop_action_budget_policy"
+      ]
+    },
+    {
+      "path": "configs/formal_training_h200.local.toml",
+      "before_sha256": "8a2e0ddfd2d3ebd5ef111b7a7d5348e205c93d69cf238f72314a1cf207112337",
+      "after_sha256": "8df5df3982e8345a4e265158883ac3a7dff962f1ac3cd7ca5d5211d1a4bcc144",
+      "changed_tables": [
+        "canvas"
+      ],
+      "changed_canvas_fields": [
+        "submission_journal_dir",
+        "submission_protocol_by_dataset",
+        "webshop_action_budget_policy"
+      ]
+    }
+  ],
+  "new_experiment_dir": "state/formal-training-all-v3-20260929/experiment",
+  "submission_journal_dir": "state/formal-training-all-v3-20260929/submissions",
+  "accuracy_result": null,
+  "paid_inference_launched": false,
+  "training_launched": false,
+  "pushed": false
+}

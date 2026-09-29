@@ -880,6 +880,7 @@ def compile_delegation(
     dataset: str = "",
     action_names: Iterable[str] = (),
     webshop_native: bool = False,
+    result_scope: str | None = None,
     public_task: str = "",
 ) -> tuple[DelegationCompilation | None, DelegationIssue | None]:
     """Validate, locally compact, and deterministically compile a responsibility.
@@ -925,6 +926,7 @@ def compile_delegation(
     if (
         dataset_key == "webshop"
         and not webshop_native
+        and result_scope != "subtask"
         and repaired["expected_output"] != _WEBSHOP_EXPECTED_OUTPUT
     ):
         original = repaired["expected_output"]
@@ -962,6 +964,12 @@ def compile_delegation(
         )
     )
     contract = _DATASET_OUTPUT_CONTRACTS.get(dataset_key, ())
+    if dataset_key == "webshop" and result_scope == "subtask" and not webshop_native:
+        contract = tuple((key, text) for key, text in contract if key in {
+            "public_catalog_search", "interpret_search_previews", "public_candidate_evidence", "product_option_state",
+        }) + (("local_environment_evidence",
+            "Complete the delegated local responsibility and report observed evidence and unresolved issues. "
+            "A local result does not require preparing a purchase and cannot be submitted as the complete task."),)
     if dataset_key == "webshop" and webshop_native:
         contract = (
             (
@@ -980,7 +988,9 @@ def compile_delegation(
     rule_ids = tuple(rule_id for rule_id, _text in contract)
     if contract:
         managed_contract_version = (
-            "webshop-native-graph-contract-v1"
+            "webshop-local-evidence-contract-v1"
+            if dataset_key == "webshop" and result_scope == "subtask" and not webshop_native
+            else "webshop-native-graph-contract-v1"
             if dataset_key == "webshop" and webshop_native
             else WEBSHOP_DELEGATION_CONTRACT_VERSION
             if dataset_key == "webshop"

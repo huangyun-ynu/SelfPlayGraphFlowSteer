@@ -55,7 +55,9 @@ gemini = ["gemini", "gemini2"]
 gpt_judge = ["gpt_judge", "gpt_judge_eco"]
 
 [canvas]
-submission_journal_dir = "state/formal-training-alf-swe-statefix-v1/submissions"
+# V3 WebShop sessions share the existing 16-call task budget.
+webshop_action_budget_policy = "shared_total_v1"
+submission_journal_dir = "state/formal-training-all-v3-20260929/submissions"
 alfworld_terminal_candidate_policy = "finish_only_v1"
 # Predictive admission protection is disabled; hard token and wall-clock limits remain.
 remaining_time_admission_enabled = false
@@ -430,8 +432,13 @@ frozen = true
 gpt = ["gpt_student", "gpt"]
 
 [canvas.submission_protocol_by_dataset]
-swe_bench = "unified_task_result_v1"
+aime = "unified_task_result_v1"
+nq_open = "unified_task_result_v1"
+hotpotqa = "unified_task_result_v1"
+healthbench_professional = "unified_task_result_v1"
+webshop = "unified_task_result_v1"
 alfworld = "unified_task_result_v1"
+swe_bench = "unified_task_result_v1"
 
 [runtimes.gpt.max_concurrency_by_dataset]
 swe_bench = 5

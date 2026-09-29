@@ -228,6 +228,13 @@ class UnifiedSubmissionMixin:
                 if not str(artifact.answer).strip() or str(artifact.answer) in {"WORKER_BACKEND_FAILURE", "WORKER_PROTOCOL_FAILURE"}:
                     blockers.append("answer_missing")
                 payload = {"answer": artifact.answer}
+                if self.dataset == "nq_open" and self.runtime.nq_evidence_context is not None:
+                    # Validate this target without changing the output or
+                    # invoking a Worker. Other candidates cannot lend citations.
+                    evidence = self.runtime.nq_evidence_context.validate(target, artifact.raw_response)
+                    if not evidence.get("valid"):
+                        blockers.append("nq_evidence:" + str(evidence.get("reason", "invalid_submission")))
+                    payload["nq_corpus_submission"] = evidence
             trusted_environment = (
                 (self.dataset == "webshop" and target in self.runtime.environment_commit_ready_agents())
                 or (self.dataset == "alfworld" and payload.get("environment_completed") is True)
@@ -259,6 +266,12 @@ class UnifiedSubmissionMixin:
             "submit_ready": not blockers,
             "blockers": list(dict.fromkeys(blockers)),
         }
+
+    def _webshop_shared_actions_exhausted(self):
+        adapter = self.action_adapter
+        return (self.dataset == "webshop" and adapter is not None
+                and adapter.action_budget_policy == "shared_total_v1"
+                and self.runtime.shared_tool_budget_status(adapter.total_action_budget)["remaining"] <= 0)
 
     def _unified_can_run(self, target, *, admitted_action=False):
         from .canvas import CanvasState
@@ -392,6 +405,10 @@ class UnifiedSubmissionMixin:
                     )
                     submitted_answer = submission.submitted_answer
                     normalization = submission.method
+                    nq_check = assessment["payload"].get("nq_corpus_submission", {})
+                    if nq_check.get("status") == "insufficient_evidence":
+                        submitted_answer = "insufficient_evidence"
+                        normalization = "nq_insufficient_evidence_v1"
                 else:
                     submitted_answer = json.dumps(assessment["payload"], ensure_ascii=False, sort_keys=True)
                     normalization = "runtime_result_payload_v1"
@@ -513,6 +530,8 @@ class UnifiedSubmissionMixin:
         if len(ids) >= self.config.max_agents or self.topology_edits_frozen or (
                 self.runtime_routes and self.director_round_limit is not None
                 and self.director_round_limit - self.round_index < 4):
+            allowed.remove("add_agent")
+        if self._webshop_shared_actions_exhausted() and "add_agent" in allowed:
             allowed.remove("add_agent")
         if not self.active:
             allowed = []

@@ -42,13 +42,14 @@ def test_formal_mixed_collection_and_skill_review_choose_the_same_protocol(tmp_p
                          config=replace(config.canvas, submission_journal_dir=str(tmp_path)),
                          runtime=MultiAgentRuntime(NumericRecordingExecutor()))
     director = GraphDirector(canvas=canvas, backend=MockBackend([]), prompt_variant=config.director_prompt_variant)
-    variant = 'v3' if dataset in {'alfworld', 'swe_bench'} else 'v2.2'
+    variant = 'v3'
     assert canvas.unified is (variant == 'v3')
     assert director.prompt_variant == variant
     scope = resolve_scope('qa', {'dataset': dataset})
     assert config.pats.variant_for_scope(scope) == variant
     if variant == 'v3':
         assert 'There is no SET_OUTPUT action' in review_system_prompt(config.pats.for_scope(scope), 'EXPAND')
+    if dataset in {'alfworld', 'swe_bench'}:
         assert config.canvas.worker_usage_policy(dataset)['start_threshold'] == 350000
     else:
         assert config.canvas.worker_usage_policy(dataset) is None
@@ -60,12 +61,13 @@ def test_formal_mixed_collection_and_skill_review_choose_the_same_protocol(tmp_p
 
 def test_mixed_training_accepts_both_v3_datasets_and_rejects_stale_alf_receipt():
     semantics = formal().model_manifest()['execution_semantics']
-    assert semantics['director_prompt_variant_by_dataset'] == {'alfworld': 'v3', 'swe_bench': 'v3'}
+    assert semantics['director_prompt_variant_by_dataset'] == {
+        d: 'v3' for d in ('alfworld', 'swe_bench', 'hotpotqa', 'aime', 'nq_open', 'webshop', 'healthbench_professional')}
     rows = [{'dataset': dataset, 'model_roles': {'execution_semantics': semantics},
              'submission_contract_version': version, 'training_eligible': False}
             for dataset, version in [('alfworld', 'unified_submission_v1'),
                                      ('swe_bench', 'unified_submission_v1'),
-                                     ('hotpotqa', semantics['submission_contract_version'])]]
+                                     ('hotpotqa', 'unified_submission_v1')]]
     rollouts = [SimpleNamespace(trajectory=SimpleNamespace(metadata=row)) for row in rows]
     samples = tuple(TrainingSample(str(i), str(i), (1, 2), (0, 1), 1, 0, metadata=row)
                     for i, row in enumerate(rows))

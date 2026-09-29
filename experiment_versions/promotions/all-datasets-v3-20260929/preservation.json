@@ -1,0 +1,20 @@
+{
+  "original_untracked_count": 37,
+  "original_untracked_sha256_unchanged": true,
+  "tracked_data_files_count": 35,
+  "tracked_data_sha256_unchanged": true,
+  "all_formal_non_canvas_config_tables_unchanged": true,
+  "webshop_training_rows": 444,
+  "webshop_training_sha256": "7166743ec89973e30809b5c266a094821d98a39f801a128e63d0304a8ced2d60",
+  "local_before_configs_dir": "state/all-datasets-v3-promotion-20260929/before-configs",
+  "source_archive_branch": "experiment/formal-before-all-v3-20260929",
+  "source_archive_commit": "4678541bb06a74ea330e9c28037a2256b31e8bc1",
+  "nq_retrieval_config_unchanged": true,
+  "runtime_routes_unchanged": true,
+  "token_limits_unchanged": true,
+  "webshop_action_budget": {
+    "previous": "phase_split_v1",
+    "current": "shared_total_v1",
+    "total": 16
+  }
+}

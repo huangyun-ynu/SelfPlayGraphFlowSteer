@@ -681,6 +681,19 @@ class GraphDirector:
         system_prompt = (
             base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
         )
+        if self.canvas.unified and self.canvas.dataset == "webshop":
+            # Environment completion semantics, not a search/selection strategy.
+            # The public goal can be phrased as "find" or "looking for"; its
+            # deliverable is still an environment purchase, not a shopping list.
+            system_prompt += (
+                "\nWebShop completion contract: the complete task is an environment purchase. "
+                "A list of products or specifications is subtask evidence, not task_result. "
+                "A task_result responsibility owns a purchase satisfying the original public goal. "
+                "Nodes have separate shopping sessions; graph links share evidence, not page state. "
+                "All sessions spend the same task action budget when shared_total_v1 is active. "
+                "FINISH(target) commits that task_result node's current prepared purchase; "
+                "only the environment's subsequent score establishes success.\n"
+            )
         if not self.canvas.unified and self.canvas.runtime.native_webshop and self.canvas.dataset == "webshop":
             from .webshop_native_protocol import DIRECTOR_ENVIRONMENT_HINT
 

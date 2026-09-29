@@ -184,7 +184,7 @@ python -m selfplay_graph_flowsteer selfplay-experiment \
   --config "$FORMAL_CONFIG" \
   --task-pool "$FORMAL_QA_TASK_POOL" \
   --curriculum-profile configs/curriculum/formal_3500.toml \
-  --output state/formal-training-output-contract-v2/experiment \
+  --output state/formal-training-all-v3-20260929/experiment \
   --route-report state/formal-training-output-contract-v2/route_report.json \
   --minimum-selected-routes 1 \
   --cycles "${SPGFS_FORMAL_CYCLES:-256}" --final-cycle-evaluation-only \

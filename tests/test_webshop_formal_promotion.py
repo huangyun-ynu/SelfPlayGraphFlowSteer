@@ -169,6 +169,7 @@ def test_real_application_routes_director_choice_and_enables_qwen_thinking(chose
     config = replace(
         config, skillbank_enabled=False, pats=replace(config.pats, enabled=False),
         persist_runtime_updates=False, verifier="none",
+        canvas=replace(config.canvas, submission_journal_dir=str(tmp_path / "submissions")),
         trace_path=tmp_path / "traces.jsonl", route_health_path=tmp_path / "health.json",
         retrieval=replace(config.retrieval, enabled=False, nq_evidence_mode=None,
                           hotpotqa_search_enabled=False),
@@ -179,9 +180,9 @@ def test_real_application_routes_director_choice_and_enables_qwen_thinking(chose
         '{"action":"add_agent"}',
         json.dumps({"action": "set_prompt", "target": "agent_1", "role": "Shopper",
                     "objective": "Inspect the requested item", "scope": "Public shopping pages",
-                    "expected_output": "Report findings"}),
+                    "expected_output": "Report findings", "result_scope": "task_result"}),
         json.dumps({"action": "set_model", "target": "agent_1", "runtime_route": chosen}),
-        '{"action":"set_output","target":"agent_1"}', '{"action":"finish"}',
+        '{"action":"finish","target":"agent_1"}',
     ])
     responses = [json.dumps({"action_call": {"name": "webshop_search", "arguments": {"query": "shirt"}}}),
                  json.dumps({"answer": "Inspected candidates", "evidence": ["Visible page"],

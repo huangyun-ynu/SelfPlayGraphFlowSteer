@@ -1,5 +1,10 @@
 # Formal Training 配置与凭据说明
 
+> 2026-09-29 最新协议：七个数据集全部使用 Director V3 / `unified_task_result_v1`，
+> 通过 `finish(target)` 提交，不再使用 `set_output`。训练输出切换到
+> `state/formal-training-all-v3-20260929/experiment`。数据、路由及 token 上限保留，
+> 下列旧评测成绩不代表此次 V3 重测。见 [统一 V3 记录](ALL_DATASETS_V3_FORMAL_PROMOTION_20260929.zh-CN.md)。
+
 > 2026-09-29 NQ 更新：正式 NQ 已切换到 R2D2 的 **1,702,133 段**语料库，
 > 使用 E5/FAISS 在求解时执行 `search`，每次 top-8、每题共享最多 4 次检索。
 > 输入只保留公开问题，答案必须引用本轨迹可见证据。配置、资产指纹和验证见
@@ -17,7 +22,7 @@
 > 版本来源、训练与评测设置的区别见 [SWE 正式同步记录](SWE_FORMAL_PROMOTION_20260928.zh-CN.md)。
 >
 > 同一正式版本也包含 HotpotQA **111/128（86.72% 严格 EM）** 的
-> `hotpot_evidence_first_v1` 输出契约和修订版 v1 评测数据；Hotpot 仍使用 v2.2。
+> `hotpot_evidence_first_v1` 输出契约和修订版 v1 评测数据；该成绩使用 v2.2，当前已切到 V3。
 > 详见 [Hotpot 正式同步记录](HOTPOT_FORMAL_PROMOTION_20260928.zh-CN.md)。
 
 本文档根据 `configs/formal_training.toml`、`scripts/formal/*.sh` 和当前项目目录整理，
@@ -48,11 +53,11 @@ DeepSeek 路由的请求并发上限也为 24；它与轨迹并发分别控制�
 Worker 的输入与输出，包括修订和重跑，不包含 Director tokens，也不是单次请求的输出上限。
 该设置同步至当前训练/评测配置及源码默认值；已完成实验的配置快照保留原值。
 
-WebShop 正式训练采用 M02，启用 `m02_merged_identity_v1`。2026-09-29 推理代码恢复到
-`235e670`，对应固定 DeepSeek、无 Skill、v2.2 的历史评测 **64/128（50% 完整成功）**；
-修正索引和测试集隔离后的 444 条训练数据继续保留。正式训练仍由 Director 选择逻辑模型，
-物理接口由程序轮换，Qwen thinking 开启；历史评测成绩不是训练后成绩。
-详见 [WebShop 恢复记录](WEBSHOP_MAIN_RESTORE_20260929.zh-CN.md)。
+WebShop 正式训练采用 M02，启用 `m02_merged_identity_v1`，并使用 V3 提交、各节点独立
+会话和每题共享 16 次工具动作。修正索引和测试集隔离后的 444 条训练数据继续保留。
+正式训练仍由 Director 选择逻辑模型，物理接口由程序轮换，Qwen thinking 开启。
+此前恢复的 `235e670` 对应历史 **64/128（50%）**，现存旧版本分支；当前 V3 尚未重测。
+历史来源见 [WebShop 恢复记录](WEBSHOP_MAIN_RESTORE_20260929.zh-CN.md)。
 
 本工作区当前已恢复的私密配置状态如下（只记录状态，不在文档中复制密钥正文）：
 

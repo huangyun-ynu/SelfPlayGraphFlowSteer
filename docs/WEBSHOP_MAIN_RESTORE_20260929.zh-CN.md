@@ -1,5 +1,9 @@
 # WebShop main 恢复记录（2026-09-29）
 
+> 后续按用户确认，WebShop 也已切到 V3；当前 main 不再是此处的完整历史 50% 版本。
+> 切换前版本保存于 `experiment/formal-before-all-v3-20260929`，444 条训练数据保留。
+> 见 [七数据集 V3 同步记录](ALL_DATASETS_V3_FORMAL_PROMOTION_20260929.zh-CN.md)。
+
 按用户要求，main 的 WebShop 推理实现恢复到 `235e670fd83b089489aa95e902dedffd9eda9c65`。
 该提交对应 2026-09-28 的固定 128 题评测：**64/128 完整成功（50%），126/128 已购买**，
 平均分 72.06380/100。成功条件是 `purchased && reward >= 1.0`，不是答案字符串 EM。

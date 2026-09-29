@@ -1029,7 +1029,8 @@ class ModelAgentExecutor:
             instruction += corpus_answer_instruction()
         # Keep guidance out of environment observations and the Director prompt.
         # The same conditional checklist survives state updates and owner revisions.
-        if action_adapter == "webshop" and not stateless_environment_owner:
+        if (action_adapter == "webshop" and not stateless_environment_owner
+                and (not is_unified_node(node) or is_task_result(node))):
             instruction += webshop_worker_guidance(self.webshop_worker_guidance_policy)
         prompt_context = _action_context_for_prompt(
             context,
@@ -6596,6 +6597,13 @@ def _worker_output_instruction(
             "For ALFWorld, Action use is mandatory while the environment is active: call "
             "alfworld_step instead of merely returning a command, and return the final JSON "
             "only after the latest observation reports success or termination. "
+        )
+    elif action_adapter == "webshop" and local_environment_result:
+        action_requirement = (
+            "For WebShop, use current public observations and legal target IDs to complete "
+            "your delegated local responsibility. Return its evidence when complete; a local "
+            "report does not require staging Buy Now and is not a complete task submission. "
+            "Your session and selected options belong to this node, not to another node. "
         )
     elif action_adapter == "webshop":
         memory_instruction = (

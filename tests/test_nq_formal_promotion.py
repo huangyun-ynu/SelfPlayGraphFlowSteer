@@ -39,9 +39,10 @@ def branch_app(responses, tool=None):
     )
     app = AdaptiveSolverApplication(config=config, solver=solver, runtime=runtime,
                                     skillbank=None, skill_lifecycle=None)
-    graph = MultiAgentGraph()
+    graph = MultiAgentGraph(submission_protocol=config.canvas.for_dataset("nq_open").submission_protocol)
     graph.add_agent("a")
     graph.nodes["a"] = node()
+    graph.nodes["a"].metadata.update(submission_protocol="unified_task_result_v1", result_scope="task_result")
     graph.set_output("a")
     question = "What did Curie name after Poland?"
     task = TaskSpec("nq-cf", question, reference=["Polonium"], metadata={

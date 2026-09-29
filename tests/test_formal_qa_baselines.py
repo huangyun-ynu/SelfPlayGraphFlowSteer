@@ -347,6 +347,7 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
     monkeypatch.setenv("SPGFS_ALLOWED_PHYSICAL_GPUS", ",".join(map(str, config.allocated_gpu_ids)))
     config = replace(
         config, skillbank_enabled=False, persist_runtime_updates=False, verifier="none",
+        canvas=replace(config.canvas, submission_journal_dir=str(tmp_path / "submissions")),
         route_health_path=tmp_path / "health.json", trace_path=tmp_path / "traces.jsonl",
         **{name: replace(getattr(config, name), enabled=False) for name in ("swe", "alfworld", "webshop")},
     )
@@ -354,9 +355,9 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
         '{"action":"add_agent","agent_id":"worker"}',
         json.dumps({"action": "set_prompt", "target": "worker", "role": "Answerer",
                     "objective": "Answer the question.", "scope": "Use the public evidence.",
-                    "expected_output": "Return the requested name."}),
+                    "expected_output": "Return the requested name.", "result_scope": "task_result"}),
         json.dumps({"action": "set_model", "target": "worker", "runtime_route": chosen}),
-        '{"action":"set_output","target":"worker"}', '{"action":"finish"}',
+        '{"action":"finish","target":"worker"}',
     ])
     backends = {route: MockBackend(['{"answer":"Final Answer: A Person","evidence":[]}'] * 4)
                 for route in config.runtime_pool()}

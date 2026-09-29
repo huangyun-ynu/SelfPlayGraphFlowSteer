@@ -197,6 +197,7 @@ def default_dataset_action_registry(
     hotpotqa_search_enabled: bool = False,
     webshop_budgets: tuple[int, int, int] = (12, 4, 16),
     webshop_staged_commit: bool = True,
+    webshop_action_budget_policy: str | None = None,
     webshop_commit_on_finish: bool = False,
     action_budget_policy: str = "phase_split_v1",
     alfworld_budgets: tuple[int, int, int] = (50, 50, 100),
@@ -353,6 +354,9 @@ def default_dataset_action_registry(
             )
         )
     return DatasetActionRegistry(
-        [replace(adapter, action_budget_policy=action_budget_policy) for adapter in adapters],
+        [replace(adapter, action_budget_policy=(
+            webshop_action_budget_policy if adapter.adapter_id == "webshop" and webshop_action_budget_policy
+            else action_budget_policy
+        )) for adapter in adapters],
         available_actions=available,
     )

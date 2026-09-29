@@ -64,13 +64,14 @@ def test_formal_application_preserves_history_and_complete_answer(formal_config,
         skillbank_enabled=False,
         pats=replace(formal_config.pats, enabled=False),
         persist_runtime_updates=False,
+        canvas=replace(formal_config.canvas, submission_journal_dir=str(tmp_path / "submissions")),
         trace_path=tmp_path / "traces.jsonl",
         route_health_path=tmp_path / "route_health.json",
         healthbench_judge_audit_path=tmp_path / "private/judge",
         **{
             name: replace(
                 getattr(formal_config, name), enabled=False,
-                **({"hotpotqa_search_enabled": False}
+                **({"hotpotqa_search_enabled": False, "nq_evidence_mode": None}
                    if name == "retrieval" and hasattr(formal_config.retrieval, "hotpotqa_search_enabled")
                    else {}),
             )
@@ -83,17 +84,16 @@ def test_formal_application_preserves_history_and_complete_answer(formal_config,
             "action": "set_prompt", "target": "agent_1", "role": "Responder",
             "objective": "Explain the finding using the public conversation.",
             "scope": "The supplied study and its limitation.",
-            "expected_output": "A complete response including uncertainty.",
+            "expected_output": "A complete response including uncertainty.", "result_scope": "task_result",
         }),
         '{"action":"set_model","target":"agent_1","runtime_route":"gpt"}',
-        '{"action":"set_output","target":"agent_1"}',
-        '{"action":"finish"}',
+        '{"action":"finish","target":"agent_1"}',
     ])
     answer = "The association in this synthetic study does not establish causation."
     worker = MockBackend([json.dumps({
         "answer": answer, "summary": "INTERNAL_SUMMARY_ONLY", "confidence": 0.7,
         "evidence": [], "unresolved_issues": [], "tool_summary": [],
-    })] * 2)  # Initial execution, then the existing output-role rerun.
+    })])  # V3 executes the task_result once; FINISH does not rerun it.
     judge = MockBackend([json.dumps({
         "criteria_met": True, "explanation": "The limitation is present.",
     })])

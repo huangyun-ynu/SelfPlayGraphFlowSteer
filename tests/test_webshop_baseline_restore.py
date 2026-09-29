@@ -33,12 +33,12 @@ def test_original_worker_requests_recovery_staging_and_director_surface():
         assert hashlib.sha256(encoded.encode()).hexdigest() == expected[name], name
 
 
-def test_formal_webshop_legacy_and_corrected_training_rows_are_retained():
+def test_formal_webshop_v3_retains_model_profile_and_corrected_training_rows():
     config = load_adaptive_config(ROOT / "configs/formal_training.toml", validate=False)
     shop = config.canvas.for_dataset("webshop")
     assert config.webshop.compatibility_profile == "m02_merged_identity_v1"
     assert config.webshop.worker_guidance_policy == "merged_checklist_v1"
-    assert shop.submission_protocol == "legacy" and shop.action_budget_policy == "phase_split_v1"
+    assert shop.submission_protocol == "unified_task_result_v1" and shop.action_budget_policy == "shared_total_v1"
     assert config.canvas.worker_usage_policy("webshop") is None
     assert (
         config.webshop.max_initial_calls,

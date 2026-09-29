@@ -96,6 +96,7 @@ class CanvasConfig:
     alfworld_terminal_candidate_policy: str = "off"
     max_recovery_executions: int = 2
     action_budget_policy: str = "phase_split_v1"
+    webshop_action_budget_policy: str | None = None
     max_agents: int = 8
     max_rounds: int = 20
     director_budget_policy: str = "rounds_v1"
@@ -147,8 +148,8 @@ class CanvasConfig:
         protocols = {canonical_dataset_name(key): value
                      for key, value in self.submission_protocol_by_dataset.items()}
         for dataset, protocol in protocols.items():
-            if dataset not in {"swe_bench", "alfworld"}:
-                raise ValueError("dataset submission protocol overrides support SWE and ALFWorld only")
+            if dataset not in DEFAULT_DATASET_MAX_TOTAL_TOKENS:
+                raise ValueError("dataset submission protocol override requires a supported dataset")
             if protocol not in {"legacy", "unified_task_result_v1"}:
                 raise ValueError("unsupported dataset submission_protocol")
         if self.alfworld_terminal_candidate_policy not in {"off", "finish_only_v1"}:
@@ -157,6 +158,8 @@ class CanvasConfig:
             raise ValueError("max_recovery_executions must be non-negative")
         if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
             raise ValueError("unknown canvas.action_budget_policy")
+        if self.webshop_action_budget_policy not in {None, "phase_split_v1", "shared_total_v1"}:
+            raise ValueError("unknown canvas.webshop_action_budget_policy")
         for dataset, policy in self.worker_token_budget_by_dataset.items():
             if canonical_dataset_name(dataset) not in {"swe_bench", "alfworld"} or not isinstance(policy, dict):
                 raise ValueError("reported Worker usage policy is supported for SWE and ALFWorld only")
@@ -192,8 +195,10 @@ class CanvasConfig:
         overrides = {canonical_dataset_name(key): value
                      for key, value in self.submission_protocol_by_dataset.items()}
         protocol = overrides.get(canonical_dataset_name(dataset))
-        return (replace(self, submission_protocol=protocol)
-                if protocol is not None else self)
+        changes = {"submission_protocol": protocol} if protocol is not None else {}
+        if canonical_dataset_name(dataset) == "webshop" and self.webshop_action_budget_policy:
+            changes["action_budget_policy"] = self.webshop_action_budget_policy
+        return replace(self, **changes) if changes else self
 
     def director_edit_limit(self, dataset: object) -> int | None:
         overrides = {canonical_dataset_name(key): value

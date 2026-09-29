@@ -1,0 +1,21 @@
+{
+  "kind": "offline protocol and training-boundary regression",
+  "command": "python -m pytest -q tests/test_all_datasets_v3_promotion.py tests/test_unified*.py tests/test_nq*.py tests/test_webshop*.py tests/test_alfworld*.py tests/test_alf_swe_formal_promotion.py tests/test_swe*.py tests/test_formal_qa_baselines.py tests/test_healthbench*.py tests/test_hotpot*.py tests/test_aime_submission_boundary.py tests/test_application.py tests/test_runtime.py tests/test_canvas_director.py tests/test_director*.py tests/test_shared_action_budget.py tests/test_student_action_protocol.py tests/test_finish_submission_contract.py tests/test_submission_grade_boundary.py tests/test_output_contract.py tests/test_worker_protocol_status.py tests/test_worker_usage*.py tests/test_pats_semantics.py tests/test_pats_semantic_freeze.py tests/test_pats_cli_semantics.py tests/test_public_distribution.py --deselect tests/test_canvas_director.py::test_recorded_aime16_output_switch_trace_stops_after_first_unproductive_switch",
+  "result": "1137 passed, 1 skipped, 1 deselected, 1 warning in 32.79s",
+  "passed": 1137,
+  "skipped": 1,
+  "deselected": 1,
+  "failures": 0,
+  "deselected_reason": "Legacy AIME trace replay requires a historical artifact absent on this host; not a training runtime dependency.",
+  "warning": "A CPU gradient test caused a PyTorch CUDA driver initialization warning; the test passed.",
+  "log_path": "state/all-datasets-v3-promotion-20260929/regression-tests.log",
+  "log_sha256": "33234a0001d806ebbc86ec6b6629eb01a0b859b0134c17425373ccb7ed4f432c",
+  "paid_inference": false,
+  "accuracy_evaluation": false,
+  "additional_checks": {
+    "git_diff_check": "passed",
+    "bash_syntax_run_experiment": "passed",
+    "python_compileall": "passed",
+    "formal_config_load_and_effective_variants": "4 configurations, 7 V3 dataset overrides each"
+  }
+}

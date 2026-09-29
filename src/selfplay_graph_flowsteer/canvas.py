@@ -555,6 +555,9 @@ class GraphCanvas(UnifiedSubmissionMixin):
             )
         budget_cleanup = False
         if self.unified:
+            if action.action_type is ActionType.ADD_AGENT and self._webshop_shared_actions_exhausted():
+                return self._reject_graph_action(action, code="webshop_tool_budget_exhausted",
+                    message="The task action budget is exhausted; a new shopping session cannot act.")
             protected = self._protected_alfworld_candidates()
             if protected and (action.action_type is not ActionType.FINISH or action.target not in protected):
                 return self._reject_graph_action(action, code="alfworld_terminal_candidate_protected",
@@ -3633,6 +3636,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
             dataset=self.dataset if self.managed_delegation_contracts else "",
             action_names=action_names,
             webshop_native=self.runtime.native_webshop and self.dataset == "webshop",
+            result_scope=action.result_scope if self.unified else None,
         )
         if issue is not None:
             raise DelegationValidationError(issue)
