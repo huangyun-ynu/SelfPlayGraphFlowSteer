@@ -114,7 +114,6 @@ from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
 from .webshop_native import NativeWebShopLifecycle
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
 from .webshop_profiles import M02_PROFILE, section_memory_limit
-from .webshop_evidence import EVIDENCE_PROFILES
 
 
 class GraphEvaluationIncompleteError(RuntimeError):
@@ -381,17 +380,6 @@ class WebShopConfig:
 
     def validate(self) -> None:
         section_memory_limit(self.compatibility_profile)
-        if (self.compatibility_profile in EVIDENCE_PROFILES) != (self.worker_guidance_policy == "public_evidence_v1"):
-            raise ValueError("public evidence guidance and compatibility profile must be enabled together")
-        if self.compatibility_profile in EVIDENCE_PROFILES and (
-            self.worker_execution_policy != "graph_tools_v1"
-            or self.search_observation_mode != "legacy"
-            or self.max_observation_chars != 0
-            or not self.staged_commit_enabled
-            or self.env_feedback_enabled
-            or self.native_conversation_history
-        ):
-            raise ValueError("public evidence experiments require the same graph tools and observation settings as M02")
         if self.compatibility_profile == M02_PROFILE and (
             self.worker_execution_policy != "graph_tools_v1"
             or self.worker_memory_policy != "factual_memory_v1"
@@ -426,7 +414,7 @@ class WebShopConfig:
         if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
             raise ValueError(
                 "webshop.worker_guidance_policy must be baseline, laser_checklist_v1, "
-                "merged_checklist_v1, or public_evidence_v1"
+                "or merged_checklist_v1"
             )
         if not self.enabled:
             return
@@ -752,8 +740,6 @@ class AdaptiveApplicationConfig:
         self.retrieval.validate()
         self.aime_actions.validate()
         self.webshop.validate()
-        if self.webshop.compatibility_profile in EVIDENCE_PROFILES and self.canvas.submission_protocol == "unified_task_result_v1":
-            raise ValueError("public evidence experiments require the single-owner WebShop lifecycle")
         self.alfworld.validate()
         self.swe.validate()
         self.director_reward.validate()

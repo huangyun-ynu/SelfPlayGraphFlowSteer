@@ -103,8 +103,6 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "webshop",
             "webshop_sidecar",
             "webshop_profiles",
-            "webshop_steps",
-            "webshop_evidence",
             "webshop_native_executor",
             "alfworld",
             "swebench",

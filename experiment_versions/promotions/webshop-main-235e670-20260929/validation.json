@@ -1,0 +1,41 @@
+{
+  "offline_behavior": {
+    "identical": true,
+    "channels": {
+      "director_v22": "6989c0c39c389a56ec2f62462f481061e2a8865f140d7a7e680a21c8fc092a89",
+      "empty_canvas": "be0f655a2c3bc8cbb4d568706fd03dcd6402e2f075f9e4a7c8074d31464b9874",
+      "inspection_routed_False": "118981db6d6a3dd36cef2b584736a514cb167b88483f10dcddeb582ffcc7296e",
+      "inspection_routed_True": "118981db6d6a3dd36cef2b584736a514cb167b88483f10dcddeb582ffcc7296e",
+      "pending_model_deletion": "0aac5c2b3c18bbd876091e21e60e91e95356353b534bad1c0fe8a83b09dea522",
+      "purchase_malformed_False": "7d101ee34c8ba84aee42a9f07a1d6d9086650f1a2451be412e6e83787bbaf1f2",
+      "purchase_malformed_True": "1ccbe753e8cb50271e34468eacacd721998c5440d9fd4e915902ad2ed29cc28a"
+    },
+    "worker_requests": 17,
+    "baseline_commit": "235e670fd83b089489aa95e902dedffd9eda9c65"
+  },
+  "focused_regressions": {
+    "command": "python -m pytest -q tests/test_webshop_baseline_restore.py tests/test_canvas_director.py tests/test_unified_round_and_pending_state.py tests/test_student_action_protocol.py",
+    "passed": 161,
+    "failed": 1,
+    "duration_s": 1.54,
+    "failures": [
+      {
+        "test": "tests/test_canvas_director.py::test_recorded_aime16_output_switch_trace_stops_after_first_unproductive_switch",
+        "reason": "FileNotFoundError for a preexisting local AIME trajectory fixture; no assertion ran. The test source is unchanged.",
+        "missing_fixture": "state/audits/aime30-finish-v1-deepseek-qwen-thinking-20260926/run/trajectories/064ef67eca667e6894335446.json"
+      }
+    ],
+    "scope_note": "Run after the final WebShop-specific Canvas pending-model deletion guard. All WebShop baseline, Student protocol and ALF/SWE pending-state tests passed; the sole failure is the absent AIME file."
+  },
+  "cross_dataset_regressions": {
+    "status": "passed",
+    "command": "python -m pytest -q tests/test_webshop*.py tests/test_shared_action_budget.py tests/test_runtime.py tests/test_alf_swe_formal_promotion.py tests/test_swe_formal_promotion.py tests/test_hotpot_answer_contract.py tests/test_student_action_protocol.py tests/test_alfworld*.py tests/test_swe_candidate*.py tests/test_unified*.py tests/test_worker_usage*.py tests/test_output_contract.py tests/test_selfplay_runtime.py tests/test_application.py tests/test_endpoint_pool.py",
+    "passed": 660,
+    "failed": 0,
+    "duration_s": 501.82
+  },
+  "python": "/mnt/ssd/test/codex-students/student02/.venvs/spgfs-pats-gpu/bin/python",
+  "online_evaluation_performed": false,
+  "training_started": false,
+  "diff_check": "passed"
+}

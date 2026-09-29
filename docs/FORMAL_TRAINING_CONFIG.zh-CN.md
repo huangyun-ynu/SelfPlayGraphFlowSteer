@@ -43,9 +43,11 @@ DeepSeek 路由的请求并发上限也为 24；它与轨迹并发分别控制�
 Worker 的输入与输出，包括修订和重跑，不包含 Director tokens，也不是单次请求的输出上限。
 该设置同步至当前训练/评测配置及源码默认值；已完成实验的配置快照保留原值。
 
-WebShop正式训练采用M02（合并提示＋身份修复，历史62/128、EM48.4375%、平均分73.5221），
-启用`m02_merged_identity_v1`。Director选择逻辑模型，物理接口由程序轮换；Qwen thinking开启。
-固定DeepSeek无Skill仅用于历史参考评测。详见[WebShop正式版本](WEBSHOP_BASELINE.zh-CN.md)。
+WebShop 正式训练采用 M02，启用 `m02_merged_identity_v1`。2026-09-29 推理代码恢复到
+`235e670`，对应固定 DeepSeek、无 Skill、v2.2 的历史评测 **64/128（50% 完整成功）**；
+修正索引和测试集隔离后的 444 条训练数据继续保留。正式训练仍由 Director 选择逻辑模型，
+物理接口由程序轮换，Qwen thinking 开启；历史评测成绩不是训练后成绩。
+详见 [WebShop 恢复记录](WEBSHOP_MAIN_RESTORE_20260929.zh-CN.md)。
 
 本工作区当前已恢复的私密配置状态如下（只记录状态，不在文档中复制密钥正文）：
 

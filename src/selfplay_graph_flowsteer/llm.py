@@ -1965,7 +1965,16 @@ class OpenAICompatibleBackend:
             for item in (getattr(response, "output", None) or [])
         ]
         text_parts = []
-        if text_actions:
+        # WebShop retains the 235e670 response interpretation. Keep the newer
+        # Student gateway protocol for the other datasets that adopted it.
+        student_text_actions = (
+            text_actions
+            and current_request_dataset() != "webshop"
+            and not any(
+                action.name in {"webshop_search", "webshop_click"} for action in (actions or ())
+            )
+        )
+        if student_text_actions:
             text, text_parts = response_text_parts(output_items, text)
         native_calls = []
         for item in output_items:
@@ -2027,7 +2036,7 @@ class OpenAICompatibleBackend:
                         {key: item[key] for key in ("type", "role", "channel", "status") if key in item}
                         for item in output_items
                     ],
-                } if text_actions else {}),
+                } if student_text_actions else {}),
             },
         )
         if deadline is not None:

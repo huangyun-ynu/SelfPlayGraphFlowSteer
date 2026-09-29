@@ -4,7 +4,11 @@
 > `alf-swe-statefix-20260929`。来源、归档和训练接入见
 > [正式同步记录](../docs/ALF_SWE_FORMAL_PROMOTION_20260929.zh-CN.md)。远端发布状态以 push 核验为准。
 
-> 当前WebShop正式训练实现已选择M02（合并＋身份修复），历史EM48.4375%、平均分73.5221；模型选择与接口池遵循正式训练配置。见[当前版本](../docs/WEBSHOP_BASELINE.zh-CN.md)。以下归档条目保留各自历史含义。
+> 2026-09-29：main 的 WebShop 推理实现已恢复到 `235e670`，对应历史 **64/128（50%）**；
+> 训练数据保留修正后的 444 条。恢复前 main 的完整实验副本是
+> `experiment/webshop-main-before-restore-20260929`（`ce665fb`）。
+> 来源、保存位置和验证见 [恢复记录](../docs/WEBSHOP_MAIN_RESTORE_20260929.zh-CN.md)。
+> 以下归档条目保留各自历史含义。
 
 截至 2026-09-23。指标和修改效果统一见 [实验记录](../docs/EXPERIMENT_RECORDS.zh-CN.md)。
 

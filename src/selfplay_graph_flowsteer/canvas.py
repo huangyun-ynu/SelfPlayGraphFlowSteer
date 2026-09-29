@@ -692,7 +692,10 @@ class GraphCanvas(UnifiedSubmissionMixin):
             )
         discards_pending_agent = bool(
             (self.topology_edits_frozen or self.unified)
-            and self.state in {CanvasState.AWAITING_PROMPT, CanvasState.AWAITING_MODEL}
+            and (
+                self.state is CanvasState.AWAITING_PROMPT
+                or (self.dataset != "webshop" and self.state is CanvasState.AWAITING_MODEL)
+            )
             and action.action_type is ActionType.DELETE_AGENT
             and str(action.target or action.agent_id) == self.pending_agent_id
         )
@@ -3806,22 +3809,6 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 swe_progress = artifact.swe_progress or {}
                 webshop_progress = artifact.webshop_progress or {}
                 webshop_action_budget = webshop_progress.get("action_budget") or {}
-                if webshop_progress.get("state") == "review_pending":
-                    proposal = (webshop_progress.get("purchase_review") or {}).get("proposal") or {}
-                    facts.append(
-                        f"Public WebShop proposal before staging for {agent_id}: "
-                        + json.dumps({
-                            "asin": proposal.get("asin"),
-                            "state_version": proposal.get("state_version"),
-                            "unresolved_constraints": proposal.get("unresolved_constraints", []),
-                            "checks": [{"requirement_id": check.get("requirement_id"),
-                                        "status": check.get("status"),
-                                        "references": check.get("references", [])[:1]}
-                                       for check in proposal.get("checks", []) if check.get("status") != "supported"],
-                        }, ensure_ascii=False)
-                        + ". No purchase/reward exists for this proposal. Revise the same owner "
-                        "or select it for bounded closure; stateless review does not create a shopping session."
-                    )
                 webshop_recovery = None
                 if webshop_action_budget.get("transfer_status") not in (None, "not_requested"):
                     webshop_recovery = (
@@ -4901,7 +4888,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
             "output_contract_version": OUTPUT_CONTRACT_VERSION,
             "submission_contract_version": SUBMISSION_CONTRACT_VERSION,
             "submission_status": "submitted" if self.submission_receipt else "candidate",
-            "worker_usage": worker_usage,
+            **({"worker_usage": worker_usage} if self.dataset != "webshop" else {}),
             "worker_protocol_status_version": WORKER_PROTOCOL_STATUS_VERSION,
             "worker_protocol_status": {
                 agent_id: {

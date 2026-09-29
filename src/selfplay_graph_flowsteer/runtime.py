@@ -61,8 +61,6 @@ from .webshop_budget import execution_accounting, request_budget_quote
 from .webshop_guidance import (
     MERGED_CHECKLIST_POLICY,
     MERGED_PAGE_CHECKLIST,
-    PUBLIC_EVIDENCE_POLICY,
-    PUBLIC_EVIDENCE_CHECKLIST,
     webshop_worker_guidance,
 )
 from .webshop_identity import visible_product_asin
@@ -243,8 +241,7 @@ class AgentActionUsage:
     closure_revision_transferred: int = 0
     closure_limit: int = 0
     closure_used: int = 0
-    closure_environment_remaining: int | None = 0
-    closure_environment_limit_kind: str = "unknown"
+    closure_environment_remaining: int = 0
 
 
 @dataclass
@@ -265,14 +262,11 @@ class ActionBudgetLedger:
         node: AgentNode,
         *,
         session_id: str,
-        official_remaining_steps: int | None,
-        environment_step_limit_kind: str = "finite",
+        official_remaining_steps: int,
         scope: str | None = None,
     ) -> bool:
         """Transfer unused phase capacity once; caller verifies live owner/session authority."""
-        finite = environment_step_limit_kind == "finite" and type(official_remaining_steps) is int
-        unbounded = environment_step_limit_kind == "unbounded" and official_remaining_steps is None
-        if not session_id or not (finite or unbounded):
+        if not session_id or type(official_remaining_steps) is not int:
             return False
         current = self.usage.setdefault(scope or node.agent_id, AgentActionUsage())
         if current.closure_session is not None:
@@ -289,15 +283,12 @@ class ActionBudgetLedger:
         if self.shared_total(node):
             current.closure_initial_transferred = max(0, node.total_tool_budget - current.total_used)
             current.closure_revision_transferred = 0
-        current.closure_environment_limit_kind = environment_step_limit_kind
-        current.closure_environment_remaining = max(0, official_remaining_steps) if finite else None
-        bounds = [
+        current.closure_environment_remaining = max(0, official_remaining_steps)
+        current.closure_limit = min(
             current.closure_initial_transferred + current.closure_revision_transferred,
             max(0, node.total_tool_budget - current.total_used),
-        ]
-        if current.closure_environment_remaining is not None:
-            bounds.append(current.closure_environment_remaining)
-        current.closure_limit = min(bounds)
+            current.closure_environment_remaining,
+        )
         return True
 
     def finish_webshop_closure(self, node: AgentNode, *, scope: str | None = None) -> None:
@@ -310,7 +301,6 @@ class ActionBudgetLedger:
         node: AgentNode,
         *,
         remaining_steps: object,
-        environment_step_limit_kind: str = "unknown",
         scope: str | None = None,
     ) -> None:
         current = self.usage.get(scope or node.agent_id)
@@ -321,18 +311,11 @@ class ActionBudgetLedger:
         ):
             # Missing/malformed live limits cannot create more capacity. A failed
             # request was already charged conservatively by consume().
-            if (
-                current.closure_environment_limit_kind == "unbounded"
-                and environment_step_limit_kind == "unbounded"
-                and remaining_steps is None
-            ):
-                return
             observed = max(0, remaining_steps) if type(remaining_steps) is int else 0
-            current.closure_environment_remaining = (
-                observed if current.closure_environment_remaining is None
-                else min(current.closure_environment_remaining, observed)
+            current.closure_environment_remaining = min(
+                current.closure_environment_remaining,
+                observed,
             )
-            current.closure_environment_limit_kind = "finite" if type(remaining_steps) is int else "unknown"
 
     def webshop_audit(self, node: AgentNode, *, scope: str | None = None) -> dict[str, Any]:
         current = self.usage.get(scope or node.agent_id, AgentActionUsage())
@@ -354,7 +337,6 @@ class ActionBudgetLedger:
             "environment_remaining": current.closure_environment_remaining
             if current.closure_session is not None
             else None,
-            "environment_step_limit_kind": current.closure_environment_limit_kind,
         }
 
     def remaining(
@@ -379,15 +361,12 @@ class ActionBudgetLedger:
             return {
                 "phase": min(
                     max(0, current.closure_limit - current.closure_used),
-                    current.closure_environment_remaining
-                    if current.closure_environment_remaining is not None
-                    else max(0, node.total_tool_budget - current.total_used),
+                    current.closure_environment_remaining,
                 )
                 if active
                 else 0,
                 "total": max(0, node.total_tool_budget - current.total_used),
-                **({"environment": current.closure_environment_remaining}
-                   if current.closure_environment_remaining is not None else {}),
+                "environment": current.closure_environment_remaining,
             }
         return {
             "phase": (max(0, node.total_tool_budget - current.total_used)
@@ -415,8 +394,7 @@ class ActionBudgetLedger:
             ):
                 return False, "closure_action_budget_exhausted"
             current.closure_used += 1
-            if current.closure_environment_remaining is not None:
-                current.closure_environment_remaining -= 1
+            current.closure_environment_remaining -= 1
         elif revision:
             if not self.shared_total(node) and current.revision_used >= node.revision_tool_budget:
                 return False, "revision_action_budget_exhausted"
@@ -574,7 +552,6 @@ class ModelAgentExecutor:
                         scope=self.budget_scope,
                         session_id=authority["session_id"],
                         official_remaining_steps=authority["official_remaining_steps"],
-                        environment_step_limit_kind=authority.get("environment_step_limit_kind", "finite"),
                     )
                     closure_session = authority["session_id"] if claimed else None
                     closure_transfer_status = "transferred" if claimed else "already_claimed"
@@ -1047,7 +1024,6 @@ class ModelAgentExecutor:
             {"role": "user", "content": json.dumps(prompt_context, ensure_ascii=False)},
         ]
         prompt_projection_stats: list[dict[str, int]] = []
-        webshop_request_public_contexts: list[dict[str, Any]] = []
         response = None
         token_in = token_out = 0
         qa_credit = node.metadata.get("_runtime_budget_kind") == "short_qa_request_credit_v1"
@@ -1250,7 +1226,8 @@ class ModelAgentExecutor:
         # Up to two test-only requests and one report may follow a SWE loop
         # boundary. They use the same token/Action ledger, with no new credit.
         swe_recovery_margin = 3 if action_adapter == "swe_bench" else 0
-        for interaction_round in range(max_interaction_rounds + swe_recovery_margin + STUDENT_EXECUTION_REPAIRS):
+        student_recovery_margin = 0 if action_adapter == "webshop" else STUDENT_EXECUTION_REPAIRS
+        for interaction_round in range(max_interaction_rounds + swe_recovery_margin + student_recovery_margin):
             self._check_deadline()
             if interaction_round >= max_interaction_rounds and not force_finalize:
                 force_finalize = True
@@ -1426,18 +1403,13 @@ class ModelAgentExecutor:
                 finalization_reason = "webshop_request_token_credit_exhausted"
                 break
             backend_request_events.extend(_response_backend_request_events(response))
-            if action_adapter == "webshop":
-                webshop_request_public_contexts.append(_webshop_request_public_snapshot(
-                    messages, interaction_round=interaction_round,
-                    request_events=_response_backend_request_events(response),
-                ))
             self._check_deadline()
             if self.rollout_deadline is not None:
                 self.rollout_deadline.mark_progress("worker_response")
             token_in += response.token_in
             token_out += response.token_out
             native_calling = bool(response.action_calls)
-            if (not native_calling
+            if (not native_calling and action_adapter != "webshop"
                     and response.metadata.get("text_action_protocol") == STUDENT_ACTION_PROTOCOL):
                 decoded = decode_student_response(response.text)
                 audit = _protocol_response_diagnostic(
@@ -1775,21 +1747,7 @@ class ModelAgentExecutor:
                             details=details if isinstance(details, dict) else None,
                         )
                         summary = f"{action_name}: {json.dumps(arguments, ensure_ascii=False)}"
-                        if action_adapter == "webshop" and code == "webshop_purchase_review_required":
-                            webshop_state = allowed_tools[action_name].defer_purchase_review(
-                                arguments,
-                                yield_to_director=(not revision and closure_session is None
-                                                   and node.revision_tool_budget > 0),
-                            )
-                            context["action_environment"]["state"] = webshop_state
-                            observation = {"name": action_name, "status": "ok", "output": webshop_state}
-                            review = webshop_state.get("purchase_review", {})
-                            if review.get("yield_to_director"):
-                                force_finalize = True
-                                finalization_reason = "webshop_purchase_review_pending"
-                            if stateful_batch:
-                                selected_index = batch_index
-                        elif action_adapter == "webshop":
+                        if action_adapter == "webshop":
                             webshop_semantic_no_progress_streak += 1
                             webshop_semantic_no_progress_count += 1
                             if webshop_stall_first_round is None:
@@ -1920,14 +1878,12 @@ class ModelAgentExecutor:
                                             else {}
                                         )
                                         if closure_session is not None:
-                                            from .webshop_steps import environment_step_capacity
-
-                                            limit_kind, environment_remaining = environment_step_capacity(webshop_state)
                                             self.budget_ledger.observe_webshop_steps(
                                                 node,
                                                 scope=self.budget_scope,
-                                                remaining_steps=environment_remaining,
-                                                environment_step_limit_kind=limit_kind,
+                                                remaining_steps=webshop_state.get(
+                                                    "remaining_steps"
+                                                ),
                                             )
                                         evidence_signature = _webshop_evidence_signature(
                                             webshop_state
@@ -1989,13 +1945,7 @@ class ModelAgentExecutor:
                                             webshop_semantic_no_progress_streak
                                             >= _WEBSHOP_SEMANTIC_STALL_FUSE_THRESHOLD
                                             and webshop_completion_path_fuse_deferrals < 1
-                                            and _webshop_has_feasible_completion_path(
-                                                webshop_state,
-                                                remaining_actions=min(self.budget_ledger.remaining(
-                                                    node, revision=revision, scope=self.budget_scope,
-                                                    closure_session=closure_session,
-                                                ).values()),
-                                            )
+                                            and _webshop_has_feasible_completion_path(webshop_state)
                                         ):
                                             # Re-entering a live product page can restore the
                                             # current option/purchase targets without exposing
@@ -2201,11 +2151,7 @@ class ModelAgentExecutor:
                                                 if (
                                                     webshop_completion_path_fuse_deferrals < 1
                                                     and _webshop_has_feasible_completion_path(
-                                                        current_webshop_state,
-                                                        remaining_actions=min(self.budget_ledger.remaining(
-                                                            node, revision=revision, scope=self.budget_scope,
-                                                            closure_session=closure_session,
-                                                        ).values()),
+                                                        current_webshop_state
                                                     )
                                                 ):
                                                     webshop_completion_path_fuse_deferrals += 1
@@ -2559,10 +2505,6 @@ class ModelAgentExecutor:
                 "queries_tried": list(webshop_queries[-8:]),
                 "strategy_variant": webshop_strategy_variant,
                 "products_visited": list(webshop_visited_products[-12:]),
-                "inspection_facts": [
-                    {key: value[key] for key in ("asin", "visit_count", "sections_viewed") if key in value}
-                    for value in webshop_product_inspections.values()
-                ],
                 "product_inspections": [
                     dict(value)
                     for value in list(webshop_product_inspections.values())[
@@ -2580,7 +2522,6 @@ class ModelAgentExecutor:
                 "purchase_evidence_checkpoint": copy.deepcopy(webshop_purchase_evidence_checkpoint),
                 "policy_failure": policy_failure,
                 "prompt_projection": _webshop_prompt_projection_summary(prompt_projection_stats),
-                "request_public_contexts": webshop_request_public_contexts,
             }
             if artifact.webshop_progress["state"] == "needs_recovery":
                 budget = self.budget_ledger.webshop_audit(node, scope=self.budget_scope)
@@ -2591,19 +2532,6 @@ class ModelAgentExecutor:
                     f"remaining {budget['total_remaining']}. No valid purchase is staged. "
                     "A bounded RUN_AGENT recovery may continue in the current session."
                 )
-            if finalization_reason == "webshop_purchase_review_pending":
-                review = copy.deepcopy(webshop_state.get("purchase_review", {}))
-                proposal = review.get("proposal") or {}
-                artifact.webshop_progress["state"] = "review_pending"
-                artifact.webshop_progress["purchase_review"] = review
-                artifact.answer = "purchase_review_pending"
-                artifact.summary = (
-                    "Pre-purchase review: no purchase is staged. Revise this same owner to resolve "
-                    "the public constraints or confirm a budget-limited partial choice. "
-                    + "; ".join(proposal.get("unresolved_constraints", [])[:3])
-                )
-                artifact.unresolved_issues = list(proposal.get("unresolved_constraints", []))[:8]
-                artifact.evidence = list(proposal.get("verified_requirements", []))[:12]
             if self.webshop_worker_guidance_policy != "baseline":
                 artifact.webshop_progress["worker_guidance"] = {
                     "policy": self.webshop_worker_guidance_policy,
@@ -5702,15 +5630,8 @@ def _update_webshop_product_inspections(
     if asin in product_inspections:
         del product_inspections[asin]
     product_inspections[asin] = record
-    # Keep episode facts after evicting long detail text. Their size is bounded
-    # by the episode Action budget, not by the number of retained descriptions.
-    for old_asin in list(product_inspections)[:-_WEBSHOP_PROGRESS_MAX_INSPECTIONS]:
-        old = product_inspections[old_asin]
-        product_inspections[old_asin] = {
-            key: old[key]
-            for key in ("asin", "visit_count", "sections_viewed", "available_sections")
-            if key in old
-        }
+    while len(product_inspections) > _WEBSHOP_PROGRESS_MAX_INSPECTIONS:
+        del product_inspections[next(iter(product_inspections))]
 
 
 def _annotate_webshop_search_state(
@@ -5750,13 +5671,10 @@ def _annotate_webshop_search_state(
             item["observed_option_groups"] = [str(value)[:80] for value in option_groups[:12]]
         item["candidate_evidence"] = {
             "product_identity_scope": "search_preview_plus_inspected_product_page",
-            "selectable_options_status": (
-                "recorded_from_product_page" if "observed_option_values" in record
-                else "not_retained"
-            ),
+            "selectable_options_status": "recorded_from_product_page",
             "preview_variant_can_reject_candidate": False,
             "preview_variant_can_verify_candidate": False,
-            "product_page_evidence_available": bool(record.get("product_title")),
+            "product_page_evidence_available": True,
             "product_title": record.get("product_title"),
             "product_price": record.get("product_price"),
             "observed_option_values": record.get("observed_option_values", {}),
@@ -6066,20 +5984,6 @@ def _webshop_progress_prompt(
         }
 
     prompt: dict[str, Any] = {
-        # Facts survive text projection. Only currently actionable identities
-        # need rendering; the full episode index stays in the transaction journal.
-        "inspection_facts": [
-            {
-                "asin": asin,
-                "sections_viewed": list(record.get("sections_viewed", [])),
-            }
-            for asin, record in product_inspections.items()
-            if asin == current_asin or any(
-                visible_product_asin(action) == asin
-                for action in state.get("valid_subactions", [])
-                if isinstance(action, dict)
-            )
-        ],
         "queries_tried": [str(value)[:80] for value in queries[-8:]],
         "products_visited": [str(value)[:100] for value in visited_products[-12:]],
         "product_inspections": [
@@ -6516,12 +6420,11 @@ def _worker_output_instruction(
             "The webshop_progress.state_guidance block reports public page facts, not a "
             "recommended next Action, candidate ranking, or evidence of task correctness. "
         )
-        if webshop_worker_guidance_policy in {MERGED_CHECKLIST_POLICY, PUBLIC_EVIDENCE_POLICY}:
+        if webshop_worker_guidance_policy == MERGED_CHECKLIST_POLICY:
             action_requirement = (
                 "For WebShop, Actions use target IDs from the latest observation. "
                 + memory_instruction
-                + (PUBLIC_EVIDENCE_CHECKLIST if webshop_worker_guidance_policy == PUBLIC_EVIDENCE_POLICY
-                   else MERGED_PAGE_CHECKLIST)
+                + MERGED_PAGE_CHECKLIST
             )
         else:
             action_requirement = (
@@ -6697,12 +6600,6 @@ def _prepare_action_call(
         next(spec for spec in action_specs if spec.name == name), arguments
     )
     if schema_error is not None:
-        public_repair = {}
-        if name == "webshop_click":
-            # Read-only refresh; never infer or execute a missing target.
-            rejection = _action_preflight_rejection(allowed_tools[name], {})
-            if rejection is not None:
-                public_repair = {"current_action_surface": rejection.get("details", {})}
         return (
             normalized,
             None,
@@ -6716,11 +6613,7 @@ def _prepare_action_call(
                     "retry_allowed": True,
                     "repair_instruction": (
                         "Correct the arguments to the visible JSON Schema and retry the Action."
-                        + (" Copy target_id from the current action surface and keep each "
-                           "purchase evidence item within the schema length limit."
-                           if name == "webshop_click" else "")
                     ),
-                    **public_repair,
                 },
             ),
             None,
@@ -7217,9 +7110,7 @@ def _response_backend_request_events(response: Any) -> list[dict[str, Any]]:
     return [dict(event) for event in events if isinstance(event, dict)]
 
 
-def _webshop_has_feasible_completion_path(
-    state: object, *, remaining_actions: int | None = None
-) -> bool:
+def _webshop_has_feasible_completion_path(state: object) -> bool:
     """Whether the latest public product state can still reach a purchase.
 
     This is deliberately task-agnostic: it neither decides which option groups
@@ -7231,15 +7122,7 @@ def _webshop_has_feasible_completion_path(
     payload = state if isinstance(state, dict) else {}
     if str(payload.get("page_type", "")).strip().casefold() != "product":
         return False
-    from .webshop_steps import environment_step_capacity
-
-    kind, remaining_steps = environment_step_capacity(payload)
-    if kind == "unknown":
-        return False
-    if kind == "unbounded":
-        remaining_steps = remaining_actions
-    elif type(remaining_actions) is int:
-        remaining_steps = min(remaining_steps, remaining_actions)
+    remaining_steps = payload.get("remaining_steps")
     if (
         not isinstance(remaining_steps, int)
         or isinstance(remaining_steps, bool)
@@ -7498,8 +7381,8 @@ def _annotate_webshop_product_state(
         if target_id.startswith("view_"):
             section = target_id.split(":", 1)[0].removeprefix("view_")[:40]
             item["evidence_status"] = (
-                "already_observed_and_retained" if section in viewed and section in evidence
-                else "observed_not_retained" if section in viewed
+                "already_observed_and_retained"
+                if section in viewed and section in evidence
                 else "not_yet_observed"
             )
             item["action_semantics"] = (
@@ -7507,11 +7390,7 @@ def _annotate_webshop_product_state(
                 "no new evidence."
             )
         elif target_id.startswith("previous_page:"):
-            item["navigation_effect"] = (
-                "return_to_current_product_page"
-                if payload.get("page_type") == "product_section"
-                else "return_to_search_results"
-            )
+            item["navigation_effect"] = "return_to_current_product_page"
         elif target_id.startswith("back_to_search:"):
             item["navigation_effect"] = "return_to_search"
 
@@ -7763,7 +7642,7 @@ def _webshop_sync_transaction_journal(
             "products_visited": list(visited_products[-_WEBSHOP_PROGRESS_MAX_PRODUCTS:]),
             "product_inspections": [
                 copy.deepcopy(item)
-                for item in product_inspections.values()
+                for item in list(product_inspections.values())[-_WEBSHOP_PROGRESS_MAX_INSPECTIONS:]
             ],
             "candidate_ledger": [
                 copy.deepcopy(item)
@@ -7897,41 +7776,6 @@ def _webshop_strategy_guidance(name: str) -> str:
     return _WEBSHOP_NEUTRAL_GUIDANCE
 
 
-def _webshop_request_public_snapshot(messages, *, interaction_round, request_events):
-    """Audit completed decision requests, excluding model reasoning/credentials.
-
-    This records runtime messages at backend dispatch, not provider-transformed
-    HTTP bytes. Final artifact/repair requests and failed transport attempts are
-    still tracked separately by backend_request_events.
-    """
-    context = {}
-    for message in reversed(messages):
-        if message.get("role") != "user":
-            continue
-        try:
-            value = json.loads(message.get("content", ""))
-        except (ValueError, TypeError):
-            continue
-        if isinstance(value, dict) and isinstance(value.get("action_environment"), dict):
-            context = value
-            break
-    environment = context.get("action_environment", {})
-    state = environment.get("state") or {}
-    public_state = {key: copy.deepcopy(state[key]) for key in (
-        "page_type", "page_text", "state_version", "public_task_statement", "product",
-        "selected_options", "valid_subactions", "decision_phase", "action_decision_support",
-        "public_decision", "purchase_review", "commit_pending", "purchased", "done",
-        "decision_feedback",
-    ) if key in state}
-    return {"scope": "completed_decision_request_at_runtime_dispatch", "round": interaction_round,
-            "messages_sha256": hashlib.sha256(json.dumps(messages, ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
-            "backend_event_ids": [event.get("event_id") for event in request_events if event.get("event_id")],
-            "public_task_context": context.get("public_task_context"),
-            "state": public_state, "remaining": copy.deepcopy(environment.get("remaining")),
-            "progress": copy.deepcopy(environment.get("webshop_progress")),
-            "projection_found": bool(context)}
-
-
 def _webshop_context_for_prompt(
     context: dict[str, Any], *, stats: list[dict[str, int]] | None = None
 ) -> dict[str, Any]:
@@ -7981,7 +7825,6 @@ def _webshop_context_for_prompt(
                     "queries_tried",
                     "products_visited",
                     "purchase_evidence_checkpoint",
-                    "purchase_review",
                     "policy_failure",
                 )
                 if key in progress
@@ -8076,10 +7919,7 @@ def _webshop_action_decision_support(
 ) -> list[dict[str, Any]]:
     """Describe public effects of legal Actions without ranking or choosing one."""
 
-    inspections = [
-        *progress.get("product_inspections", []),
-        *progress.get("inspection_facts", []),
-    ]
+    inspections = progress.get("product_inspections", [])
     inspected_asins = (
         {
             str(item.get("asin", "")).strip().casefold()
@@ -8118,31 +7958,20 @@ def _webshop_action_decision_support(
         }
         if kind == "open_product":
             asin = visible_product_asin(action)
-            status = action.get("inspection_status")
-            inspected = (
-                True if asin and asin in inspected_asins or status == "inspected"
-                else False if status == "not_inspected" else None
-            )
             item.update(
                 {
                     "asin": asin,
-                    "already_inspected": inspected,
-                    "may_add_product_page_evidence": inspected is not True,
+                    "already_inspected": bool(asin and asin in inspected_asins),
+                    "may_add_product_page_evidence": bool(asin and asin not in inspected_asins),
                 }
             )
         elif kind == "view_section":
             section = str(action.get("section", action.get("label", ""))).strip()
-            status = action.get("evidence_status")
-            observed = section.casefold() in viewed_sections or status in {
-                "already_observed_and_retained", "observed_not_retained"
-            }
             item.update(
                 {
                     "section": section,
-                    "already_observed": observed,
-                    "evidence_retained": status == "already_observed_and_retained",
-                    "may_add_section_evidence": not observed,
-                    "may_restore_section_context": status == "observed_not_retained",
+                    "already_observed": section.casefold() in viewed_sections,
+                    "may_add_section_evidence": section.casefold() not in viewed_sections,
                 }
             )
         elif kind == "select_option":

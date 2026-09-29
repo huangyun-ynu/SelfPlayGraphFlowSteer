@@ -1,0 +1,88 @@
+{
+  "date": "2026-09-29",
+  "purpose": "Restore only WebShop inference to the 235e670 historical 64/128 baseline; retain corrected 444-row training data and later changes for other datasets.",
+  "baseline_commit": "235e670fd83b089489aa95e902dedffd9eda9c65",
+  "main_before_restore": "ce665fbd3cd6b41e1a0a2d724d9bc58ce734e995",
+  "experiment_archive_branch": "experiment/webshop-main-before-restore-20260929",
+  "local_source_archive": "state/webshop-main-restore-20260929/before-main.tar",
+  "local_source_archive_sha256": "21075d01d5dbae32d7594ad4cdcbc80000c863ebf1fdb8fe61906812f07d740d",
+  "historical_result": {
+    "run": "state/formal-eval/webshop-main-v22-128-deepseek-c40-qwen-thinking-20260928",
+    "successes": 64,
+    "purchases": 126,
+    "total": 128,
+    "success_rate": 0.5,
+    "mean_score": 72.0638,
+    "success_condition": "purchased && reward >= 1.0",
+    "new_online_evaluation_performed": false
+  },
+  "retained_training_data": {
+    "path": "data/formal/train/webshop.jsonl",
+    "rows": 444,
+    "sha256": "7166743ec89973e30809b5c266a094821d98a39f801a128e63d0304a8ced2d60",
+    "quarantined_rows": 68,
+    "user_choice": "Retain repaired training indices and evaluation split quarantine."
+  },
+  "changed_source_sha256": {
+    "src/selfplay_graph_flowsteer/application.py": "139cd1519d033bb36c791082f0ab0922ae1847170b2f3b8eb8d6725e840b30f7",
+    "src/selfplay_graph_flowsteer/canvas.py": "7923604f398571d6aa705454b9cc6e2d8196dd8b060dbe1786754094d17e7258",
+    "src/selfplay_graph_flowsteer/execution_contract.py": "c8677903f3eba55f2bf36948bcdbb0e7850f3da2bf7b64ab4204e1787495260f",
+    "src/selfplay_graph_flowsteer/llm.py": "620e0873f8a68c4c7d3355e6d90faa544bfe039721cad4577bebaa65ca763905",
+    "src/selfplay_graph_flowsteer/runtime.py": "652b3e9a2375fec71038855799175b406cbc80e57676423d20eb3e094e0b9f98",
+    "src/selfplay_graph_flowsteer/webshop.py": "489d3656b0495bbe15d768c1f51f0ab0587b7ee93881a20a0b953ed8b3f7a728",
+    "src/selfplay_graph_flowsteer/webshop_evidence.py": null,
+    "src/selfplay_graph_flowsteer/webshop_guidance.py": "49c2d60195571dff6fea64b0c6f3f538bd9e064d0e9fd3eee90120eb3630ce0e",
+    "src/selfplay_graph_flowsteer/webshop_profiles.py": "4155b2bad83c45f8a93633937217596ea6fccdd39c0b8a1ef21979bbdb414970",
+    "src/selfplay_graph_flowsteer/webshop_sidecar.py": "84f3618f7dd109ac1246a2007cc78173d93b8adc2810ef81ae4434414dba0f33",
+    "src/selfplay_graph_flowsteer/webshop_steps.py": null
+  },
+  "existing_webshop_experiments": [
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-alf-align-v2",
+      "HEAD d3a7867037657df381ecd6e62f13d100a8084e6f",
+      "branch refs/heads/codex/webshop-purchase-path-20260929"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-alf-v3",
+      "HEAD 0d3b6b051fd738bcef0c84b826c678409fec91cd",
+      "branch refs/heads/codex/webshop-alf-v3-20260929"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-c40",
+      "HEAD 235e670fd83b089489aa95e902dedffd9eda9c65",
+      "detached"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-fixes",
+      "HEAD 8a8c8665942edd4b5a10b66357be938d416c4b98",
+      "branch refs/heads/codex/webshop-fixes-20260928"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-stage-a",
+      "HEAD 57880aec717e46b4c18ce3e21175aac778998993",
+      "detached"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-stage-b",
+      "HEAD 814a23370918972d7133a5192fbbf4a0bf559c26",
+      "detached"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-validation",
+      "HEAD 9d7283cf26a46e4b5855faae3bdca790ef1eaabe",
+      "detached"
+    ],
+    [
+      "worktree /mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-validation-v2",
+      "HEAD cf9900f3f3cf69aabfda452df0b46ce6f72d4e01",
+      "detached"
+    ]
+  ],
+  "excluded_from_restore": [
+    "Other dataset dedicated sources and shared dataset-specific fixes",
+    "Formal training and local evaluation configuration",
+    "Corrected training data, mapping manifest and launch-time data validation",
+    "Offline evaluation and label-audit tools"
+  ],
+  "remote_push_performed": false
+}
