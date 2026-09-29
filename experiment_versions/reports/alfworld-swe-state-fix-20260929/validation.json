@@ -1,0 +1,144 @@
+{
+  "date": "2026-09-29",
+  "external_api_calls": 0,
+  "stable_source_patch_id": "d465294b047530735c3f8a9badc811a20d0b724a",
+  "repositories": {
+    "alfworld_copy": {
+      "path": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-hotpot-answer-contract",
+      "baseline_commit": "4476b459cd12808f60d880d253aaaf3cfb7cd803",
+      "sources": {
+        "src/selfplay_graph_flowsteer/canvas.py": {
+          "before_sha256": "8f5c8d6a8822789d41eaf7489747c748f3091ede5fcb643037f18b05aaa1caed",
+          "after_sha256": "e8af8fbc5f8fe265ccd8c82c55bb0829ac174d980acdad87bb70dc695a9a6932"
+        },
+        "src/selfplay_graph_flowsteer/unified_submission.py": {
+          "before_sha256": "27e1204aa071c60d125e3dc5ab78959c02e56854b78c102e90be722c4ca69435",
+          "after_sha256": "5fc18a266a6864c13f4196129cbc7141753098af20525556d60321b8847933f3"
+        }
+      },
+      "new_tests_sha256": "4bce3b2ddd68f7a719a03c732ced4197ed6c05d640991c34ded1e1843028c094",
+      "new_tests_before": {
+        "passed": 6,
+        "failed": 16
+      },
+      "new_tests_after": {
+        "passed": 22,
+        "failed": 0
+      },
+      "regression": {
+        "passed": 338,
+        "failed": 1,
+        "failure_kind": "missing_preexisting_aime_trace_fixture",
+        "environment": {
+          "PYTHONPATH": "src:."
+        },
+        "argv": [
+          "/mnt/ssd/test/codex-students/student02/.venvs/spgfs-pats-gpu/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_unified_round_and_pending_state.py",
+          "tests/test_unified_submission.py",
+          "tests/test_unified_environments.py",
+          "tests/test_unified_worker_budget.py",
+          "tests/test_director_edit_budget.py",
+          "tests/test_canvas_director.py",
+          "tests/test_finish_submission_contract.py",
+          "tests/test_submission_grade_boundary.py",
+          "tests/test_swe_execution_admission.py",
+          "tests/test_swe_candidate_integrity.py",
+          "tests/test_swe_shared_token_budget.py",
+          "tests/test_alfworld_budget_cleanup.py",
+          "tests/test_alfworld_v3_usage.py",
+          "-q",
+          "--tb=short"
+        ]
+      }
+    },
+    "formal_swe": {
+      "path": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer",
+      "baseline_commit": "9642b57128312e49f9eeb5311aebecf68d05f1e5",
+      "sources": {
+        "src/selfplay_graph_flowsteer/canvas.py": {
+          "before_sha256": "581cc7241b87e46c133dd2b9c155981b4cd8ecdd3730fbdcf2eb12cd4b4dc468",
+          "after_sha256": "1e97ad26f31931e39926270224f9fce2cb5659debc0875d00ac71c385febfbf0"
+        },
+        "src/selfplay_graph_flowsteer/unified_submission.py": {
+          "before_sha256": "6b535ae945656dfa158649b2c8f205daf659c944330b81fd89d18a6a20434a6a",
+          "after_sha256": "6a033d299768d972185a5f8480b06db2f5767e6a4f4ef1f2d86630b7160ccdca"
+        }
+      },
+      "new_tests_sha256": "4bce3b2ddd68f7a719a03c732ced4197ed6c05d640991c34ded1e1843028c094",
+      "new_tests_before": {
+        "passed": 6,
+        "failed": 16
+      },
+      "new_tests_after": {
+        "passed": 22,
+        "failed": 0
+      },
+      "regression": {
+        "passed": 314,
+        "failed": 1,
+        "failure_kind": "missing_preexisting_aime_trace_fixture",
+        "environment": {
+          "PYTHONPATH": "src:."
+        },
+        "argv": [
+          "/mnt/ssd/test/codex-students/student02/.venvs/spgfs-pats-gpu/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_unified_round_and_pending_state.py",
+          "tests/test_unified_submission.py",
+          "tests/test_unified_environments.py",
+          "tests/test_unified_worker_budget.py",
+          "tests/test_director_edit_budget.py",
+          "tests/test_canvas_director.py",
+          "tests/test_finish_submission_contract.py",
+          "tests/test_submission_grade_boundary.py",
+          "tests/test_swe_execution_admission.py",
+          "tests/test_swe_candidate_integrity.py",
+          "tests/test_swe_shared_token_budget.py",
+          "-q",
+          "--tb=short"
+        ]
+      },
+      "formal_integration": {
+        "passed": 14,
+        "failed": 0,
+        "environment": {
+          "PYTHONPATH": "src:."
+        },
+        "argv": [
+          "/mnt/ssd/test/codex-students/student02/.venvs/spgfs-pats-gpu/bin/python",
+          "-m",
+          "pytest",
+          "tests/test_swe_formal_promotion.py",
+          "-q",
+          "--tb=short"
+        ]
+      }
+    }
+  },
+  "frozen_swe_sources": {
+    "state/formal-training-promotions/swe-65of128-20260928/evaluated_source/src/selfplay_graph_flowsteer/canvas.py": {
+      "before_sha256": "4e0bd6dc1387aeef1dd79e2dae192757c1bb9c714da44f290627890a6c2f6e6e",
+      "after_sha256": "4e0bd6dc1387aeef1dd79e2dae192757c1bb9c714da44f290627890a6c2f6e6e",
+      "unchanged": true
+    },
+    "state/formal-training-promotions/swe-65of128-20260928/evaluated_source/src/selfplay_graph_flowsteer/unified_submission.py": {
+      "before_sha256": "6b535ae945656dfa158649b2c8f205daf659c944330b81fd89d18a6a20434a6a",
+      "after_sha256": "6b535ae945656dfa158649b2c8f205daf659c944330b81fd89d18a6a20434a6a",
+      "unchanged": true
+    },
+    "state/formal-training-promotions/swe-65of128-20260928/release_source/src/selfplay_graph_flowsteer/canvas.py": {
+      "before_sha256": "581cc7241b87e46c133dd2b9c155981b4cd8ecdd3730fbdcf2eb12cd4b4dc468",
+      "after_sha256": "581cc7241b87e46c133dd2b9c155981b4cd8ecdd3730fbdcf2eb12cd4b4dc468",
+      "unchanged": true
+    },
+    "state/formal-training-promotions/swe-65of128-20260928/release_source/src/selfplay_graph_flowsteer/unified_submission.py": {
+      "before_sha256": "6b535ae945656dfa158649b2c8f205daf659c944330b81fd89d18a6a20434a6a",
+      "after_sha256": "6b535ae945656dfa158649b2c8f205daf659c944330b81fd89d18a6a20434a6a",
+      "unchanged": true
+    }
+  }
+}

@@ -260,9 +260,13 @@ class UnifiedSubmissionMixin:
             "blockers": list(dict.fromkeys(blockers)),
         }
 
-    def _unified_can_run(self, target):
-        if not self.active or (self.runtime.worker_usage_ledger is None
-                               and self.total_tokens >= self.config.max_total_tokens):
+    def _unified_can_run(self, target, *, admitted_action=False):
+        from .canvas import CanvasState
+        if (self.state in {CanvasState.FINISHED, CanvasState.FAILED}
+                or (not admitted_action and not self.active)):
+            return False
+        if (self.runtime.worker_usage_ledger is None
+                and self.total_tokens >= self.config.max_total_tokens):
             return False
         node = self.graph.nodes.get(target)
         if node is None or not node.configured:
@@ -300,7 +304,9 @@ class UnifiedSubmissionMixin:
 
     def _unified_run(self, action):
         from .canvas import CanvasState
-        if self.state is not CanvasState.BUILDING or not self._unified_can_run(str(action.target)):
+        # step() has admitted and charged this action's Director round already.
+        # Keep every Worker/resource check, without demanding another round.
+        if self.state is not CanvasState.BUILDING or not self._unified_can_run(str(action.target), admitted_action=True):
             return self._reject_graph_action(action, code="execution_not_admissible", message="No pending work or bounded recovery is available for this target.")
         target = str(action.target)
         from .runtime import artifact_integrity_failure_risks
@@ -442,7 +448,9 @@ class UnifiedSubmissionMixin:
             "discards_isolated_unconfigured_draft": self.pending_agent_id if any(
                 self._isolated_submission_draft(key) for key in ready) else None}
         parameters["run_agent"] = {"targets": executable}
-        parameters["delete_agent"]["targets"] = ids
+        parameters["delete_agent"]["targets"] = (
+            [self.pending_agent_id] if self.pending_agent_id and self.state in
+            {CanvasState.AWAITING_PROMPT, CanvasState.AWAITING_MODEL} else ids)
         parameters["set_layer"]["targets"] = ids
         parameters["set_prompt"]["targets"] = [self.pending_agent_id] if self.pending_agent_id else ids
         parameters["set_prompt"]["result_scopes"] = ["subtask", "task_result"]
@@ -452,14 +460,14 @@ class UnifiedSubmissionMixin:
                 self.runtime_routes and self.director_round_limit is not None
                 and self.director_round_limit - self.round_index < 4):
             allowed.remove("add_agent")
-        if self.state is CanvasState.AWAITING_PROMPT:
+        if not self.active:
+            allowed = []
+        elif self.state is CanvasState.AWAITING_PROMPT:
             allowed = ["set_prompt", "delete_agent"] + (["finish"] if ready else [])
         elif self.state is CanvasState.AWAITING_MODEL:
             allowed = ["set_model", "delete_agent"] + (["finish"] if ready else [])
         elif self.state is CanvasState.AWAITING_RELATION_CHOICE:
             allowed = ["relation_choice"]
-        elif not self.active:
-            allowed = []
         allowed = [name for name in allowed if name in {"add_agent", "relation_choice"} or bool(parameters.get(name, {}).get("targets", parameters.get(name, {}).get("relations")))]
         remaining_edits = self.director_edit_budget()["remaining"]
         if remaining_edits is not None:

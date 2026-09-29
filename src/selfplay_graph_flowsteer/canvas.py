@@ -507,6 +507,14 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 rejection_code="canvas_inactive",
             )
 
+        # Validate the admitted action against its pre-action budget. Charging
+        # the final round must not invalidate FINISH/RUN_AGENT (or ADD_AGENT's
+        # completion reserve). Post-action snapshots still use the charged
+        # counter, and the entry guard above rejects any extra Director turn.
+        action_snapshot = (
+            self.control_snapshot()
+            if self.unified and authoritative_director and action.valid else None
+        )
         if count_round:
             self.round_index += 1
         if (
@@ -671,7 +679,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
             )
         discards_pending_agent = bool(
             (self.topology_edits_frozen or self.unified)
-            and self.state is CanvasState.AWAITING_PROMPT
+            and self.state in {CanvasState.AWAITING_PROMPT, CanvasState.AWAITING_MODEL}
             and action.action_type is ActionType.DELETE_AGENT
             and str(action.target or action.agent_id) == self.pending_agent_id
         )
@@ -806,7 +814,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         )
         prompt_revision_evidence: dict[str, Any] | None = None
         if authoritative_director and not is_prompt_revision:
-            legality_error = self._director_action_legality_error(action)
+            legality_error = self._director_action_legality_error(action, snapshot=action_snapshot)
             if legality_error is not None:
                 code, message = legality_error
                 return self._reject_graph_action(action, code=code, message=message)
@@ -5121,8 +5129,11 @@ class GraphCanvas(UnifiedSubmissionMixin):
     def _director_action_legality_error(
         self,
         action: CanvasAction,
+        *,
+        snapshot: dict[str, Any] | None = None,
     ) -> tuple[str, str] | None:
-        snapshot = self.control_snapshot()
+        if snapshot is None:
+            snapshot = self.control_snapshot()
         action_name = action.action_type.value
         if action_name not in snapshot["allowed_actions"]:
             if (

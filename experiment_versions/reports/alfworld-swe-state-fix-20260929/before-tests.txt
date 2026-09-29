@@ -1,0 +1,126 @@
+FFFFFF...F.F.F.FFFFFFF                                                   [100%]
+=================================== FAILURES ===================================
+_ test_real_director_finishes_on_last_round_without_extra_worker[alfworld-False] _
+tests/test_unified_round_and_pending_state.py:92: in test_real_director_finishes_on_last_round_without_extra_worker
+    assert run.finished, [(t.action.action_type.value, t.rejection_code) for t in c.history]
+E   AssertionError: [('add_agent', None), ('set_prompt', None), ('finish', 'director_action_not_allowed'), ('invalid', 'max_rounds_exhausted')]
+E   assert False
+E    +  where False = DirectorRun(task='Move mug', finished=False, output='', graph={'version': 2, 'max_agents': 8, 'runtime_routes': [], 'a...ock_text', trajectory_schema='director_trajectory_v2_raw_policy_calls')], candidate_output='', submission_receipt=None).finished
+_ test_real_director_finishes_on_last_round_without_extra_worker[alfworld-True] _
+tests/test_unified_round_and_pending_state.py:92: in test_real_director_finishes_on_last_round_without_extra_worker
+    assert run.finished, [(t.action.action_type.value, t.rejection_code) for t in c.history]
+E   AssertionError: [('add_agent', 'director_action_not_allowed'), ('invalid', 'director_round_budget_dead_end')]
+E   assert False
+E    +  where False = DirectorRun(task='Move mug', finished=False, output='', graph={'version': 0, 'max_agents': 8, 'runtime_routes': ['deep...ock_text', trajectory_schema='director_trajectory_v2_raw_policy_calls')], candidate_output='', submission_receipt=None).finished
+_ test_real_director_finishes_on_last_round_without_extra_worker[swe_bench-False] _
+tests/test_unified_round_and_pending_state.py:92: in test_real_director_finishes_on_last_round_without_extra_worker
+    assert run.finished, [(t.action.action_type.value, t.rejection_code) for t in c.history]
+E   AssertionError: [('add_agent', None), ('set_prompt', None), ('finish', 'director_action_not_allowed'), ('invalid', 'max_rounds_exhausted')]
+E   assert False
+E    +  where False = DirectorRun(task='Fix the issue', finished=False, output='', graph={'version': 2, 'max_agents': 8, 'runtime_routes': [...ock_text', trajectory_schema='director_trajectory_v2_raw_policy_calls')], candidate_output='', submission_receipt=None).finished
+_ test_real_director_finishes_on_last_round_without_extra_worker[swe_bench-True] _
+tests/test_unified_round_and_pending_state.py:92: in test_real_director_finishes_on_last_round_without_extra_worker
+    assert run.finished, [(t.action.action_type.value, t.rejection_code) for t in c.history]
+E   AssertionError: [('add_agent', 'director_action_not_allowed'), ('invalid', 'director_round_budget_dead_end')]
+E   assert False
+E    +  where False = DirectorRun(task='Fix the issue', finished=False, output='', graph={'version': 0, 'max_agents': 8, 'runtime_routes': [...ock_text', trajectory_schema='director_trajectory_v2_raw_policy_calls')], candidate_output='', submission_receipt=None).finished
+__ test_last_round_run_executes_once_and_cannot_open_an_extra_turn[alfworld] ___
+tests/test_unified_round_and_pending_state.py:112: in test_last_round_run_executes_once_and_cannot_open_an_extra_turn
+    assert result.accepted, result.feedback
+E   AssertionError: Rejected action: run_agent is not allowed in the current Canvas state. Recovery: {"allowed_actions": [], "current_version": 2, "deterministic_recovery": "refresh_and_choose_legal_action", "legal_agent_ids": ["solver"], "reason_code": "director_action_not_allowed", "repeat_count": 1, "result_assessments": {"solver": {"agent_incarnation": "e4056759a2ea4e01b7c9b5a5c0a8c923", "artifact_id": "artifact_1", "blockers": [], "input_signature": "2cf498b5cba8720c0bd2e41d7700a0a004eaf50f95224b96df3baebac29ddbb0", "payload_hash": "ef7ff41260bc9a4e6f70ae9b503c52d73a1214f26ee2f96eae026b1824fa9d75", "payload_kind": "episode", "resource_signature": "65380e56e7484d741552ee8a70ddf7bcb9c0afa75d92ef403586c8c3465118c6", "result_scope": "task_result", "submit_ready": true, "target": "solver"}}}
+E     Actual topology: {"actual_relations": [], "candidate_relations_are_not_edges": true, "last_relation_decision": {}, "nodes": [{"configured": true, "id": "solver", "layer": 0, "result_scope": "task_result"}], "reachability_by_target": {"solver": {"graph_blockers": [], "unreachable_nodes": []}}, "submission_target": null, "task_result_agents": ["solver"], "weak_components": 1, "weakly_disconnected": false}. FINISH(target) eligibility is recorded in result_assessments.
+E     Canvas state: building; round 3/3; cumulative Worker tokens=5/32768.
+E   assert False
+E    +  where False = CanvasStep(round_index=3, action=CanvasAction(action_type=<ActionType.RUN_AGENT: 'run_agent'>, agent_id=None, target='...nvalid_repeat_count=1, topology_edits_frozen=False, event_id=':canvas:2', director_call_id='', submission_receipt=None).accepted
+__ test_last_round_run_executes_once_and_cannot_open_an_extra_turn[swe_bench] __
+tests/test_unified_round_and_pending_state.py:112: in test_last_round_run_executes_once_and_cannot_open_an_extra_turn
+    assert result.accepted, result.feedback
+E   AssertionError: Rejected action: run_agent is not allowed in the current Canvas state. Recovery: {"allowed_actions": [], "current_version": 2, "deterministic_recovery": "refresh_and_choose_legal_action", "legal_agent_ids": ["solver"], "reason_code": "director_action_not_allowed", "repeat_count": 1, "result_assessments": {"solver": {"agent_incarnation": "68afa9e4560e487698d01d1d285f4aa8", "artifact_id": "artifact_1", "blockers": ["patch_or_post_edit_test_required"], "input_signature": "e0d65299145240a91a4d9e13a2f154674fb00fc4a0fe332121fb5a9854a74e08", "payload_hash": "242dbeeaf272e9a5f8f12328e383aabf0eae99f465376b7f7fa3709d7dde4697", "payload_kind": "code_patch", "resource_signature": "6ccd51ba1a0ccb19c50394b3f6b7269b708ce8da4ad06750d0f5a0c9f748f2ff", "result_scope": "task_result", "submit_ready": false, "target": "solver"}}}
+E     Actual topology: {"actual_relations": [], "candidate_relations_are_not_edges": true, "last_relation_decision": {}, "nodes": [{"configured": true, "id": "solver", "layer": 0, "result_scope": "task_result"}], "reachability_by_target": {"solver": {"graph_blockers": [], "unreachable_nodes": []}}, "submission_target": null, "task_result_agents": ["solver"], "weak_components": 1, "weakly_disconnected": false}. FINISH(target) eligibility is recorded in result_assessments.
+E     Canvas state: building; round 3/3; cumulative Worker tokens=5/32768.
+E   assert False
+E    +  where False = CanvasStep(round_index=3, action=CanvasAction(action_type=<ActionType.RUN_AGENT: 'run_agent'>, agent_id=None, target='...nvalid_repeat_count=1, topology_edits_frozen=False, event_id=':canvas:2', director_call_id='', submission_receipt=None).accepted
+_ test_deleting_pending_node_allows_real_director_to_rebuild_and_finish[alfworld-True] _
+tests/test_unified_round_and_pending_state.py:144: in test_deleting_pending_node_allows_real_director_to_rebuild_and_finish
+    assert c.state is CanvasState.BUILDING and c.pending_agent_id is None
+E   AssertionError: assert (<CanvasState.AWAITING_MODEL: 'awaiting_model'> is <CanvasState.BUILDING: 'building'>)
+E    +  where <CanvasState.AWAITING_MODEL: 'awaiting_model'> = <selfplay_graph_flowsteer.canvas.GraphCanvas object at 0x7fb926757d10>.state
+E    +  and   <CanvasState.BUILDING: 'building'> = CanvasState.BUILDING
+_ test_deleting_pending_node_allows_real_director_to_rebuild_and_finish[swe_bench-True] _
+tests/test_unified_round_and_pending_state.py:144: in test_deleting_pending_node_allows_real_director_to_rebuild_and_finish
+    assert c.state is CanvasState.BUILDING and c.pending_agent_id is None
+E   AssertionError: assert (<CanvasState.AWAITING_MODEL: 'awaiting_model'> is <CanvasState.BUILDING: 'building'>)
+E    +  where <CanvasState.AWAITING_MODEL: 'awaiting_model'> = <selfplay_graph_flowsteer.canvas.GraphCanvas object at 0x7fb9266fc190>.state
+E    +  and   <CanvasState.BUILDING: 'building'> = CanvasState.BUILDING
+_ test_last_round_pending_delete_clears_state_but_does_not_extend_budget[alfworld-True] _
+tests/test_unified_round_and_pending_state.py:165: in test_last_round_pending_delete_clears_state_but_does_not_extend_budget
+    assert c.pending_agent_id is None and c.state is CanvasState.BUILDING
+E   AssertionError: assert ('draft' is None)
+E    +  where 'draft' = <selfplay_graph_flowsteer.canvas.GraphCanvas object at 0x7fb92673fd50>.pending_agent_id
+_ test_last_round_pending_delete_clears_state_but_does_not_extend_budget[swe_bench-True] _
+tests/test_unified_round_and_pending_state.py:165: in test_last_round_pending_delete_clears_state_but_does_not_extend_budget
+    assert c.pending_agent_id is None and c.state is CanvasState.BUILDING
+E   AssertionError: assert ('draft' is None)
+E    +  where 'draft' = <selfplay_graph_flowsteer.canvas.GraphCanvas object at 0x7fb9267564d0>.pending_agent_id
+__ test_pending_model_at_exhausted_round_has_no_advertised_actions[alfworld] ___
+tests/test_unified_round_and_pending_state.py:177: in test_pending_model_at_exhausted_round_has_no_advertised_actions
+    assert not result.active and result.control_snapshot['allowed_actions'] == []
+E   AssertionError: assert (not False and ['set_model', 'delete_agent'] == []
+E    +  where False = CanvasStep(round_index=2, action=CanvasAction(action_type=<ActionType.SET_PROMPT: 'set_prompt'>, agent_id=None, target...nvalid_repeat_count=0, topology_edits_frozen=False, event_id=':canvas:1', director_call_id='', submission_receipt=None).active
+E
+E     Left contains 2 more items, first extra item: 'set_model'
+E     Use -v to get more diff)
+__ test_pending_model_at_exhausted_round_has_no_advertised_actions[swe_bench] __
+tests/test_unified_round_and_pending_state.py:177: in test_pending_model_at_exhausted_round_has_no_advertised_actions
+    assert not result.active and result.control_snapshot['allowed_actions'] == []
+E   AssertionError: assert (not False and ['set_model', 'delete_agent'] == []
+E    +  where False = CanvasStep(round_index=2, action=CanvasAction(action_type=<ActionType.SET_PROMPT: 'set_prompt'>, agent_id=None, target...nvalid_repeat_count=0, topology_edits_frozen=False, event_id=':canvas:1', director_call_id='', submission_receipt=None).active
+E
+E     Left contains 2 more items, first extra item: 'set_model'
+E     Use -v to get more diff)
+_____ test_pending_delete_parameters_match_the_state_gate[alfworld-False] ______
+tests/test_unified_round_and_pending_state.py:189: in test_pending_delete_parameters_match_the_state_gate
+    assert c.control_snapshot()['legal_action_parameters']['delete_agent']['targets'] == ['draft']
+E   AssertionError: assert ['draft', 'solver'] == ['draft']
+E
+E     Left contains one more item: 'solver'
+E     Use -v to get more diff
+______ test_pending_delete_parameters_match_the_state_gate[alfworld-True] ______
+tests/test_unified_round_and_pending_state.py:189: in test_pending_delete_parameters_match_the_state_gate
+    assert c.control_snapshot()['legal_action_parameters']['delete_agent']['targets'] == ['draft']
+E   AssertionError: assert ['draft', 'solver'] == ['draft']
+E
+E     Left contains one more item: 'solver'
+E     Use -v to get more diff
+_____ test_pending_delete_parameters_match_the_state_gate[swe_bench-False] _____
+tests/test_unified_round_and_pending_state.py:189: in test_pending_delete_parameters_match_the_state_gate
+    assert c.control_snapshot()['legal_action_parameters']['delete_agent']['targets'] == ['draft']
+E   AssertionError: assert ['draft', 'solver'] == ['draft']
+E
+E     Left contains one more item: 'solver'
+E     Use -v to get more diff
+_____ test_pending_delete_parameters_match_the_state_gate[swe_bench-True] ______
+tests/test_unified_round_and_pending_state.py:189: in test_pending_delete_parameters_match_the_state_gate
+    assert c.control_snapshot()['legal_action_parameters']['delete_agent']['targets'] == ['draft']
+E   AssertionError: assert ['draft', 'solver'] == ['draft']
+E
+E     Left contains one more item: 'solver'
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_unified_round_and_pending_state.py::test_real_director_finishes_on_last_round_without_extra_worker[alfworld-False]
+FAILED tests/test_unified_round_and_pending_state.py::test_real_director_finishes_on_last_round_without_extra_worker[alfworld-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_real_director_finishes_on_last_round_without_extra_worker[swe_bench-False]
+FAILED tests/test_unified_round_and_pending_state.py::test_real_director_finishes_on_last_round_without_extra_worker[swe_bench-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_last_round_run_executes_once_and_cannot_open_an_extra_turn[alfworld]
+FAILED tests/test_unified_round_and_pending_state.py::test_last_round_run_executes_once_and_cannot_open_an_extra_turn[swe_bench]
+FAILED tests/test_unified_round_and_pending_state.py::test_deleting_pending_node_allows_real_director_to_rebuild_and_finish[alfworld-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_deleting_pending_node_allows_real_director_to_rebuild_and_finish[swe_bench-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_last_round_pending_delete_clears_state_but_does_not_extend_budget[alfworld-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_last_round_pending_delete_clears_state_but_does_not_extend_budget[swe_bench-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_pending_model_at_exhausted_round_has_no_advertised_actions[alfworld]
+FAILED tests/test_unified_round_and_pending_state.py::test_pending_model_at_exhausted_round_has_no_advertised_actions[swe_bench]
+FAILED tests/test_unified_round_and_pending_state.py::test_pending_delete_parameters_match_the_state_gate[alfworld-False]
+FAILED tests/test_unified_round_and_pending_state.py::test_pending_delete_parameters_match_the_state_gate[alfworld-True]
+FAILED tests/test_unified_round_and_pending_state.py::test_pending_delete_parameters_match_the_state_gate[swe_bench-False]
+FAILED tests/test_unified_round_and_pending_state.py::test_pending_delete_parameters_match_the_state_gate[swe_bench-True]
+16 failed, 6 passed in 0.54s
