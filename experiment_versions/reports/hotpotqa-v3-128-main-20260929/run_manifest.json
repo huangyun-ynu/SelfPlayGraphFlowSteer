@@ -1,0 +1,216 @@
+{
+  "evaluation_only": true,
+  "parameter_updates": 0,
+  "execution_semantics": {
+    "director_action_protocol_version": "director_action_json_v2",
+    "output_contract_version": "task_result_v1",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format",
+    "submission_admission_config": {
+      "canvas": {
+        "submission_protocol": "legacy",
+        "submission_protocol_by_dataset": {
+          "hotpotqa": "unified_task_result_v1"
+        },
+        "submission_journal_dir": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/hotpotqa-v3-128-main-20260929/submissions",
+        "alfworld_terminal_candidate_policy": "off",
+        "max_recovery_executions": 2,
+        "action_budget_policy": "phase_split_v1",
+        "webshop_action_budget_policy": null,
+        "max_agents": 4,
+        "max_rounds": 24,
+        "director_budget_policy": "rounds_v1",
+        "max_director_edits": null,
+        "max_director_edits_by_dataset": {},
+        "max_total_tokens": 32768,
+        "max_total_tokens_by_dataset": {
+          "aime": 240000,
+          "nq_open": 240000,
+          "hotpotqa": 240000,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 240000,
+          "swe_bench": 350000
+        },
+        "worker_token_budget_by_dataset": {},
+        "relay_max_chars": 1000,
+        "feedback_max_chars": 6000,
+        "artifact_summary_max_chars": 320,
+        "structural_repair_enabled": true,
+        "graph_growth_token_reserve": 8192,
+        "remaining_time_admission_enabled": false,
+        "worker_latency_quantile": 0.95,
+        "worker_latency_window": 64,
+        "worker_latency_min_samples": 3,
+        "worker_latency_cold_start_s": 30.0,
+        "finalization_time_reserve_s": 20.0,
+        "finalization_time_reserve_by_dataset": {
+          "healthbench_professional": 180.0,
+          "swe_bench": 120.0
+        },
+        "remaining_token_admission_enabled": false,
+        "native_webshop_output_materialization": false,
+        "worker_token_quantile": 0.95,
+        "worker_token_window": 64,
+        "worker_token_min_samples": 3,
+        "worker_token_cold_start": 4096,
+        "finalization_token_reserve": 2048,
+        "repair_recent_action_limit": 5,
+        "semantic_no_progress_limit": 2,
+        "output_selection_budget": 1,
+        "structural_exploration_policy": "off",
+        "bidirectional_revision_policy": "always",
+        "bidirectional_revision_confidence_threshold": 0.8
+      },
+      "answer_submission": {
+        "enabled": true
+      },
+      "alfworld_task_prompt_source": "dataset"
+    },
+    "worker_output_role_version": "worker_output_role_v1",
+    "director_prompt_variant": "v2.2",
+    "director_prompt_variant_by_dataset": {
+      "hotpotqa": "v3"
+    },
+    "director_prompt_template_sha256_by_dataset": {
+      "hotpotqa": {
+        "code": "0c2f85a7100579d5633276baa84ce0d511c689f622059ef3ae57882a01aaa58b",
+        "environment": "57af03da709916e43c0f304e61e20c6360ad1572fbc7483277117cfa0065eb4c",
+        "general": "6dc28a28d87e24183811559223e306a6267f5ecd10172e97d52d63e46a35af78",
+        "math": "f13f5c6633cf8750dfb8aba2d01b41449a621638b5e8ccbc0621dcf05f843795",
+        "response": "567dc3372bc5de0d677d3796f169383e385b4ab4d8f8d94f1e13f8f31f76c968",
+        "retrieval_qa": "d26712dafaeb7b92273c50789a8dd637d832df39f572bf7d325cad54be7f391c"
+      }
+    },
+    "director_action_protocol_version_by_dataset": {
+      "hotpotqa": "director_action_json_v3"
+    },
+    "submission_contract_version_by_dataset": {
+      "hotpotqa": "unified_submission_v1"
+    },
+    "director_prompt_template_sha256_by_problem_type": {
+      "code": "7ea0adc46e2aa74362094a2a1c851fdb596ad230829789b890ecbfcedda26663",
+      "environment": "0ba6c37057c684f58459674d82571c82ebceb844c1568e0ad448f6bbcc327878",
+      "general": "6bed5cfef5f85dac68cc1269cce140f832f879bf380548041c6ba9bbe12cb0a3",
+      "math": "6804c6b9353a5ade63374d260a5b2b19b8571e115c0c72f401c1824bab8c565a",
+      "response": "4a72117ae97e4dc7fee3c9752f11fa530ce1f141c273947c8bc583263ad868a2",
+      "retrieval_qa": "418d5ec50e981d90bb6fd12e0448413cbea452652cddff1a6128485204ee4857"
+    },
+    "worker_and_recovery_sha256": {
+      "hotpotqa:False": "45ec4c846577b3656893b2adc8956405e8cf9c3026906a15eadc5b1cdcf55564",
+      "hotpotqa:True": "927e999ef8ce2a011385cae599aaca00107da40fe1a971f537ac4202d14f4315",
+      "nq_open:False": "032421d35a16387d7c4a508a8e82eb9ef1f0736d406250571e4be9a7d2b38407",
+      "nq_open:True": "62fcd7e6be4c1731069dc9a2ac87146057492c162d70040715c3c3bf624866dc",
+      "aime:False": "c7a63d1001cce74c06871c4b696a20c2453cd1c406804b0f7962ad662570cddd",
+      "aime:True": "c8593678cbec2281d70de06d6b22ee6e7dd40df1d64070dae2161fdd3cfb4792",
+      "healthbench_professional:False": "e4c5c5882f8b017d026f76fb81efdf6e4a5d7462d4b68adacb15240c1b646241",
+      "healthbench_professional:True": "3376304db8c162ca97275dcc3549166f19a9c4d74a3619386de66ff0e72eead2",
+      "alfworld:False": "d61e558d10d5e9e9c0760e3ee6e597a45f286a3ab3f03882489bead1c8e33001",
+      "alfworld:True": "d61e558d10d5e9e9c0760e3ee6e597a45f286a3ab3f03882489bead1c8e33001",
+      "webshop:False": "6f1e500fb757b6fc4f3664fc016e87305a34ab09811b55b779d56576cb8b85ef",
+      "webshop:True": "6f1e500fb757b6fc4f3664fc016e87305a34ab09811b55b779d56576cb8b85ef",
+      "swe_bench:False": "3bec7342a56320e9da69a4e4175ded66d530468f12c2bddccc99cfd2c2783d28",
+      "swe_bench:True": "3bec7342a56320e9da69a4e4175ded66d530468f12c2bddccc99cfd2c2783d28",
+      ":False": "c7a63d1001cce74c06871c4b696a20c2453cd1c406804b0f7962ad662570cddd",
+      ":True": "a48f1db87910adbbb6ab3755e643f522fad4efc0722eecb732c771795939e012"
+    },
+    "contract_source_sha256": {
+      "execution_contract": "d056e74c1c7d2d0ba11f98997b4fa9096112f269debcc382ce21f07448ad40e0",
+      "actions": "420a8c34eca921e44cdbb39cd0dae1ca10a5fff5ef52fddea06afa024b25332b",
+      "output_contract": "0f806c7da18b6dd89d8f152fa7f4c66a1d2662da93cb4cbcd4a8cf78fab7c0a6",
+      "hotpot_answer_contract": "d9ff12c879c51a4c894824488f10e7a14a44d53caafef28ff9432ef6e1088631",
+      "runtime": "a2888d30a4b8b2bdd008c7c4121a169fdd2ad58ad8d066b92160faf081cd8d41",
+      "llm": "620e0873f8a68c4c7d3355e6d90faa544bfe039721cad4577bebaa65ca763905",
+      "artifact_protocol": "58752493b8971ca7f18406ccab342ead04fd680d03f237057153de4982738601",
+      "endpoint_pool": "3157eca96ea78e262cd7ad95f4ff83af6c26149b622d53c769bf4319eaae2af5",
+      "director": "5cb0c08f913ead2d425b8a8373bdd59617667a0db01380303496f7840da9e7c3",
+      "canvas": "2ed69b7ff622c589bbe91f2f3232b6b736a252da44f18d675531fe8fe7257391",
+      "graph": "00cdbfe5357c6ce2bf57099a0dfb824d5cb737b57b11cd0de69b666882f1c224",
+      "delegation": "b456412aa516041b072c1f0a2b33dfbd489e0c4c2d6b8ee4a071796e5b15970e",
+      "counterfactual": "af75458d105cef73a39cfccf4ffea64d9ba5e5b4ea80b7623649d67adfd496fa",
+      "adaptive": "4a22751849b456e7026b5d79cdd1ba55072ebbbbfdb75b558d231effdf4a8bb1",
+      "answer_submission": "6e18fd5050053191291ddd19dc24503e069e049a41903678ab59c86d77bfe7e5",
+      "submission_contract": "cd2798da588db006618bf66c2b68995bb2cdafb37879028f0259d6a31b4f6b98",
+      "unified_contract": "ddded776f6513fa5667e6a895a4a6907d924b85706fcc92ca5e1034858f00d4a",
+      "unified_submission": "b88c7923f55fe3d77f4cf2ea6d5eb558d9ce3c25f896da62e549787227b8a8cc",
+      "webshop_native": "5b513cff4f5f72f5e5948d8b3c581d31d1b5979973461e19ca0786dcd50a20c3",
+      "webshop": "489d3656b0495bbe15d768c1f51f0ab0587b7ee93881a20a0b953ed8b3f7a728",
+      "webshop_sidecar": "84f3618f7dd109ac1246a2007cc78173d93b8adc2810ef81ae4434414dba0f33",
+      "webshop_profiles": "4155b2bad83c45f8a93633937217596ea6fccdd39c0b8a1ef21979bbdb414970",
+      "webshop_native_executor": "b7bd17e8f81a9c5dc2fa99e7a386b23707be883e148600e075e7d4f48286a5d3",
+      "alfworld": "0d4df6478a8c29ad777d2c51e8d00e84fedc88176420c8789d2c5712736b7082",
+      "swebench": "e9b6668e21e4fcac2ecb775188edbbd0bdac8b8d6190f3173519730326a8dab2",
+      "worker_usage_ledger": "27d7ba8f9a8176ce0f173932b101525890134b706cbb5a0e1bf0b1a02b9bcc3e",
+      "student_action_protocol": "070047ebb6432cf2db31da10d4e535e67fb3338771c15a162db8068e81198545",
+      "swe_public_tests": "32eb1d813c10e00a74f08c45b2e5a4d7b7906cefbea979ce3b10a02af8d6fbaa",
+      "swe_public_recipes": "01445119112ffe688782d1eacfb4dedbc3f0d1b5071195302fddfe3bd71f3f44",
+      "_swe_public_probe": "3ae6160fcfe3a5ccd5525a2e8fdeb0394a2cb3567b393552e80f4df1c30ea332",
+      "outcome_admission": "1f0e6e8a35a9971eeefc67ad6767b53e1419b4a43bc36f869f3d95ca0577a360",
+      "swe_failure_attribution": "5d93f005a767cd7c37b5174145cf9f4ce5afd0a29a74e737404b9cfa3f264a42",
+      "selfplay_runtime": "253093c46d2bf78fcd3e8c9144fa01adf2e1f1169ef476afbc3b3b2c76bc6203",
+      "protocol_reward": "700edb3be98e19332d20a166e13f6db844e1c24c156b7e96c723d166fadbb5ce",
+      "application": "293d0cae2dacba9a8183364897832dfbecf5f720122d584bbcc8a09ecce6a122",
+      "evaluation": "94b5effb4943e9d658c8c808fe3fc5c054023612e1fe74b5a23e3e2947f3c68d",
+      "observability": "9536ad5b61c61d61d89c34e5730b9c56d08b6aa17ed627339c32d9ec116588d2",
+      "benchmark": "561dc69b28b9a97631ebb075f8c1444e73ec940a9f720b5691adcef7cac0a918",
+      "benchmark_tracking": "2c3b4d97dd2b9c3b7a1f04399cbb83acec8d8b985d64adf93002165502f182db",
+      "benchmark_reporting": "079c5173f0f833679b2af20c851a6ec364b413edeafad38b44c5f59500c170f0",
+      "qa_metrics": "496f10e3fdaa1fa2f3467fb900f3819e4fed5bf95f87073b76b9069f89845b6b",
+      "qa_submission": "4ad24c158e798dc35ee46b13bf611f07321be8ce0d1e24c2e8d40522ebb35864",
+      "nq_evidence": "d768961038c9cd0ba7bec3a645a759c6637ca9a0a1a52f98da8601732666a9e8",
+      "nq_corpus_tasks": "9d38818d42bb4f8d264fbffa20aa45028a8842ce2d03abb56f59f5a72a0e8505",
+      "aime_submission": "7745cf34e82c3720c707ad9ff43db7208e0922a031f51f73d73eecadbbc756b3",
+      "outcome_metrics": "975458e10c1e03c2c20f66e8a4f94785d1e3f04338e999ca0a251b1bdb2d4bfc",
+      "rollouts": "02c6fbd5fd4878ce90ad9fbd8b6237bb5713f53a1201770aa8601f6a1ff16088",
+      "training": "5ae215846909d5165dc379093e1039f2ce2eecd3c6fcaee096836153c54104dc",
+      "selfplay": "bc6a08c90d423fe980a1199271540f4336c32336f6cc1a82f1ab9a7c6fa8a43d",
+      "async_cycle": "b06e2db97b315876a3d1ad4f13d40b3a476461b13d717650d8af63f96a32e3c5",
+      "config": "8ee3b3cbc1a3f5819ae8b5dfba2443849ae5a8f311ba8cdb0c11b1be70e7754f",
+      "pats_semantics": "e6f981a2a6b3c4f9d6088ba5ca378ad1f6aabf4f13047a9723fcc5d5506bd3f6",
+      "pats_refiner": "abefbc99a09872fac56ef3ff55873227687eff577e29d308bbe52d5df70fd5ea",
+      "pats": "bda8ed97f15499a5d8f60a2e0dd27a86226e75fb66a176a0fde07b215c5b0c28",
+      "skill_evolution_v2": "43595907b26b4e53ac27bc66e730d60d613dabc1c8404c1cf909da1dc6cc60eb"
+    },
+    "director_seed_sha256": "5ce76ec5b36964606e8bb827a4b2c06aa018a5647f56415beb78de5c08f2ea7c",
+    "pats_semantic_revision": "director_runtime_semantics_v5_action_json",
+    "pats_runtime_contract_sha256": "deca610b569af3526961c8e031bbfe844f37eb86ecfac92a9a7f7226843d9346",
+    "pats_runtime_contract_sha256_by_dataset": {
+      "hotpotqa": "32cf29a4c9021c0d1062ffb55907402df687e043273e77e2b49e9b4474fe2a06"
+    }
+  },
+  "director_model": "Qwen3.5-9B",
+  "director_model_source": "/mnt/ssd/test/codex-students/student02/models/Qwen3.5-9B",
+  "director_thinking": true,
+  "director_thinking_by_dataset": {
+    "hotpotqa": true
+  },
+  "parameter_update_entrypoint": false,
+  "worker_logical_routes": [
+    "deepseek"
+  ],
+  "worker_endpoint_pools": {},
+  "route_concurrency": {
+    "default": 12,
+    "deepseek": 50
+  },
+  "dataset_token_limits": {
+    "aime": 240000,
+    "nq_open": 240000,
+    "hotpotqa": 240000,
+    "webshop": 350000,
+    "alfworld": 350000,
+    "healthbench_professional": 240000,
+    "swe_bench": 350000
+  },
+  "workers": 50,
+  "datasets": [
+    "hotpotqa"
+  ],
+  "examples_planned": 128,
+  "historical_duration_priority": false,
+  "duration_estimate_version": "disabled",
+  "duration_estimates_s": {},
+  "swe_enabled": false,
+  "director_skill_root": "",
+  "deepseek_thinking": false,
+  "minimax_thinking": null
+}

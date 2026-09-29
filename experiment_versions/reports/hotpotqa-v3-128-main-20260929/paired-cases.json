@@ -1,0 +1,1805 @@
+[
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adcd8295542994d58a2f6fc",
+    "question": "Did Skin and Laura Stoica both sing?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "yes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "yes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7780a655429949eeb29e9b",
+    "question": "Who was the only group to win \"The X Factor\" and work with MNEK on his debut EP Small Talk?",
+    "reference": [
+      "Little Mix"
+    ],
+    "answer": "Little Mix",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Little Mix",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7e25eb5542991319bc9434",
+    "question": "RNZ Concert is a radio network owned by a company headquartered in a city with what population?",
+    "reference": [
+      "405,000"
+    ],
+    "answer": "405,000",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "405,000",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7771135542993735360283",
+    "question": "In what year was the follow up to \"The Purple Prince of Oz released?",
+    "reference": [
+      "1938"
+    ],
+    "answer": "1938",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "1938",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7380165542992d56e7e33b",
+    "question": "Who is older, Diederik Boer or Jasper Cillessen?",
+    "reference": [
+      "Diederik Boer"
+    ],
+    "answer": "Diederik Boer",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Diederik Boer",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab7c1055542991d322237af",
+    "question": "Are Károly Makk and Marco Bellocchio both film directors?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "yes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "yes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abc75ec5542996583600454",
+    "question": "Are Yizheng and Wuchang District in different provinces of China?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "yes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "yes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab54d705542992aa134a29f",
+    "question": "What is the name of this 1998 British-American crime comedy film, whose soundtrack included Lujon?",
+    "reference": [
+      "The Big Lebowski"
+    ],
+    "answer": "The Big Lebowski",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "The Big Lebowski",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae1fec25542997283cd231c",
+    "question": "The aircraft involved in the 1950 British Columbia B-36 crash had departed from an Air Force base just southeast of which Alaska town?",
+    "reference": [
+      "Moose Creek"
+    ],
+    "answer": "Moose Creek",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Fairbanks",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab7eba155429928e1fe3935",
+    "question": "Which author wrote in more literary forms, Mary Doria Russell or Dorothy Parker?",
+    "reference": [
+      "Dorothy Parker"
+    ],
+    "answer": "Dorothy Parker",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Dorothy Parker",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ade5ec4554299728e26c6ee",
+    "question": "Paul Marantz work includes which nightclub that is currently a Broadway theatre?",
+    "reference": [
+      "Studio 54"
+    ],
+    "answer": "Studio 54",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Studio 54",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adcf3bd5542994ed6169c39",
+    "question": "California State Route 242 ends in which largest city of Contra Costa county?",
+    "reference": [
+      "Concord"
+    ],
+    "answer": "Concord",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Concord",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae3642d5542991a06ce99b4",
+    "question": "What name is shared by the venue in Prestatyn, Wales that hosted Pro Challenge Series – Event 2 and a company operating holiday parks in the UK?",
+    "reference": [
+      "Pontins"
+    ],
+    "answer": "Pontins",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Pontins",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a90200555429933b8a20480",
+    "question": "Who starred in the last film by Jed Johnson's lover?",
+    "reference": [
+      "Carroll Baker, Perry King and Susan Tyrrell"
+    ],
+    "answer": "Carroll Baker, Perry King and Susan Tyrrell",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Carroll Baker, Perry King and Susan Tyrrell",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8e46755542990e94052aaa",
+    "question": "What are alternate names for the type of roof on Ravenswood, a historic home located near Bunceton, Missouri?  ",
+    "reference": [
+      "\"French roof\" or \"curb roof\""
+    ],
+    "answer": "French roof or curb roof",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "French roof, curb roof",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab9af4e554299743d22eb9f",
+    "question": "Did the band Saosin form before the band No Devotion?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "yes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "yes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab9d53255429939ce03dc39",
+    "question": "KCFO (970 AM) airs the show of an American historical theologian that has been described as what?",
+    "reference": [
+      "one of America's most influential evangelicals"
+    ],
+    "answer": "one of America's most influential evangelicals",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "one of America's most influential evangelicals",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab5d37e5542992aa134a3a7",
+    "question": "Which American actor, drag queen, insult comedian, and costume deisgner starred in Hurricane Bianca?",
+    "reference": [
+      "Bianca Del Rio"
+    ],
+    "answer": "Bianca Del Rio",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Bianca Del Rio",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae0128355429925eb1afbfe",
+    "question": " Peter Schattschneider is a cientist who has specialized knowledge in the exploration of the interactions of matter and energy across what?",
+    "reference": [
+      "the physical universe"
+    ],
+    "answer": "the physical universe",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "the physical universe",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a90c0a055429916514e7556",
+    "question": "Where is the place Norman Allen Adie moved to the United States to work at located in?",
+    "reference": [
+      "Rockefeller Center"
+    ],
+    "answer": "New York City",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "New York City",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adbd73655429944faac237b",
+    "question": "Mira Quien Baila (also known as Mira Quien Baila 2011 and Mira Quien Baila 2) debuted on Univision on September 11, 2011, the TV series is the Spanish version of which British version, television dance contest, featuring contestants, celebrities, and other people, from all walks of life, with professional dance partners competing in a ballroom and Latin dance competition?",
+    "reference": [
+      "Strictly Come Dancing"
+    ],
+    "answer": "Strictly Come Dancing",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Strictly Come Dancing",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac3bf1e5542995ef918c20d",
+    "question": "America's Music: The Roots of Country is a film that touches on which bar-style music, common in the South US?",
+    "reference": [
+      "honky-tonk"
+    ],
+    "answer": "Honky-tonk",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Honky-tonk",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab965be5542996be20204c2",
+    "question": "What was the population of the village and civil parish in 2011 where South Humber Bank Power Station is located?",
+    "reference": [
+      "1,234"
+    ],
+    "answer": "1,234",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "1,234",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a77c91f5542995d831812d1",
+    "question": "What is the title of the Canadian film directed by Jeremy Ma and Angus Ng whose common elements include satire, dark humor, incongruity, the abasement of reason, and controversy regarding the philosophical condition of being \"nothing\"?",
+    "reference": [
+      "Criminology"
+    ],
+    "answer": "Criminology",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Criminology",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab88ea355429934fafe6e11",
+    "question": "Students from which university that opened in 1885 in Ormskirk can receive training from Liverpool University Air Squadron?",
+    "reference": [
+      "Edge Hill University"
+    ],
+    "answer": "Edge Hill University",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Edge Hill University",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abaf81f55429939ce03dd7c",
+    "question": "On what date did the American politician who served as Lieutenant Governor of Oklahoma and died in the city that is home to the main campus of Oklahoma State University die?",
+    "reference": [
+      "November 22, 1966"
+    ],
+    "answer": "November 22, 1966",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "November 22, 1966",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab29820554299194fa9341b",
+    "question": "What is the rating of the highest charting album from Judy Collins that includes the song from \"Love Actually\"?",
+    "reference": [
+      "5"
+    ],
+    "answer": "No. 5",
+    "em": 0.0,
+    "f1": 0.6666666666666666,
+    "baseline_answer": "No. 5 on the Billboard Pop Albums charts",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae1a980554299492dc91b57",
+    "question": "From which University did the star of the film For Christ's Sake graduate ?",
+    "reference": [
+      "San Francisco State University"
+    ],
+    "answer": "San Francisco State University",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "San Francisco State University",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a89b519554299669944a577",
+    "question": "The Agrotis alluaudi moth is found on an island in what ocean?",
+    "reference": [
+      "Indian Ocean"
+    ],
+    "answer": "Indian Ocean",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Indian Ocean",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7713f355429966f1a36c22",
+    "question": "Where did Eve Meyer die?",
+    "reference": [
+      "on the Spanish island of Tenerife, Canary Islands"
+    ],
+    "answer": "Tenerife, Canary Islands",
+    "em": 0.0,
+    "f1": 0.6,
+    "baseline_answer": "Tenerife",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a884ac05542996e4f308937",
+    "question": "Where was the draft where Tywon Ronell Lawson was picked by the Minnesota Timberwolves held?",
+    "reference": [
+      "the WaMu Theatre"
+    ],
+    "answer": "WaMu Theatre at Madison Square Garden in New York City",
+    "em": 0.0,
+    "f1": 0.3333333333333333,
+    "baseline_answer": "WaMu Theatre at Madison Square Garden in New York City",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab6609b55429954757d326d",
+    "question": "The Billion Dollar Hobo is a 1977 American comedy film starring Will Geer and an actor that is the voice of what \"SpongeBob SquarePants\" character? ",
+    "reference": [
+      "Barnacle Boy"
+    ],
+    "answer": "Barnacle Boy",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Barnacle Boy",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae3e1fa5542991a06ce9a37",
+    "question": "The Wedding Present discography equalled a record for a run of top-30 singles by which artist known as the King of Rock and Roll?",
+    "reference": [
+      "Elvis Presley"
+    ],
+    "answer": "Elvis Presley",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Elvis Presley",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a808d785542996402f6a54e",
+    "question": "For which award was the American actor who played Jim Dial on \"Murphy Brown\" and guest-starred in the 11th episode of the second season of \"Family Guy\" nominated for his performance on \"Murphy Brown\"?",
+    "reference": [
+      "Emmy Award"
+    ],
+    "answer": "Emmy Award for Outstanding Supporting Actor in a Comedy Series",
+    "em": 0.0,
+    "f1": 0.36363636363636365,
+    "baseline_answer": "Emmy Award for Outstanding Supporting Actor in a Comedy Series",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abd1cab5542992ac4f381e1",
+    "question": "Can both Robert Hayden and Chitra Banerjee Divakaruni be classed as members of American minorities?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "yes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "yes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab3aef6554299753aec5997",
+    "question": "The 2009 album Billo Rani was released by the Punjabi singer who moved to what English city in 1984?",
+    "reference": [
+      "Birmingham"
+    ],
+    "answer": "Birmingham",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Birmingham",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8dce2655429941ae14e062",
+    "question": "Are Sharp Corporation and Robotron KC 87 both computers?",
+    "reference": [
+      "no"
+    ],
+    "answer": "no",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a888dd15542997e5c09a61a",
+    "question": "Which is farther north,  Kundol Lake or Śniardwy?",
+    "reference": [
+      "Śniardwy"
+    ],
+    "answer": "Śniardwy",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Śniardwy",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abbaed9554299660624171b",
+    "question": "Were Robert Coover and Rómulo Gallegos both American's?",
+    "reference": [
+      "no"
+    ],
+    "answer": "no",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7911cd55429970f5fffe4a",
+    "question": "Sean Meadows formed what genre of band in 1994?",
+    "reference": [
+      "rock"
+    ],
+    "answer": "rock",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "rock",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a874cbf5542994846c1cd52",
+    "question": "Lake Managua and Rush Lake, are an expanse of water entirely surrounded by land and unconnected to the sea?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "No",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "no",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a81e443554299676cceb13d",
+    "question": "Which magazine is published more frequently, The Believer or Better Homes and Gardens?",
+    "reference": [
+      "Better Homes and Gardens"
+    ],
+    "answer": "Better Homes and Gardens",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Better Homes and Gardens",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab560275542992aa134a2ea",
+    "question": "She's Leaving Home was from the album released on what date?",
+    "reference": [
+      "26 May 1967"
+    ],
+    "answer": "26 May 1967",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "26 May 1967",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8346bb55429966c78a6b69",
+    "question": "The city of Telmessos was called Telebehi by what Iron Age people?",
+    "reference": [
+      "Lycians"
+    ],
+    "answer": "Lycians",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Lycians",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7c41925542996dd594b8ee",
+    "question": "Andrew Stahl was an actor on the CBS drama that aired during which period?",
+    "reference": [
+      "April 1994 to August 1995"
+    ],
+    "answer": "April 1994 to August 1995",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "April 1994 to August 1995",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7e1f3f5542997cc2c47524",
+    "question": "Which three occupations do Bernhard Stavenhagen and Franz Liszt share, according to the passages? List all three.",
+    "reference": [
+      "pianist, composer and conductor",
+      "pianist, composer, conductor",
+      "pianist, conductor and composer",
+      "pianist, conductor, composer",
+      "composer, pianist and conductor",
+      "composer, pianist, conductor",
+      "composer, conductor and pianist",
+      "composer, conductor, pianist",
+      "conductor, pianist and composer",
+      "conductor, pianist, composer",
+      "conductor, composer and pianist",
+      "conductor, composer, pianist"
+    ],
+    "answer": "pianist, composer, conductor",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "pianist, composer, conductor",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a870d5f55429960ec39b713",
+    "question": "What type of church did this American author found who claimed the ideas of Dianetics originated in the 1920s and 1930s?",
+    "reference": [
+      "Church of Scientology"
+    ],
+    "answer": "Church of Scientology",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Scientology",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae15fcc5542997b2ef7d1b2",
+    "question": "Are Colorado River Aqueduct and Eastside Canal both in the same state?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "yes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "yes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab7f904554299366779407b",
+    "question": "She Is, is the first studio album, released on which date, by the South Korean singer-songwriter Kim Jong-hyun, better known by the mononym Jonghyun, is a South Korean singer-songwriter, and radio host?",
+    "reference": [
+      "May 24, 2016"
+    ],
+    "answer": "May 24, 2016",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "May 24, 2016",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae6b94a5542996d980e7c7f",
+    "question": "Kalle Makinen is nicknamed 'Sergio' after another famous footballer; what teams does the original Sergio play for?",
+    "reference": [
+      "Real Madrid and the Spain national team."
+    ],
+    "answer": "Real Madrid and the Spain national team",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Real Madrid and the Spain national team",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5add8c665542997545bbbd74",
+    "question": "Are both  Carleton University and University of Kansas located in the United States?",
+    "reference": [
+      "no"
+    ],
+    "answer": "no",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac2f46a5542996773102655",
+    "question": "According to the passages, which Indian political alliance represented in the 2012 Indian vice-presidential election had Narendra Modi as its leader?",
+    "reference": [
+      "National Democratic Alliance"
+    ],
+    "answer": "National Democratic Alliance (NDA)",
+    "em": 0.0,
+    "f1": 0.8571428571428571,
+    "baseline_answer": "National Democratic Alliance (NDA)",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5add18b45542992ae4cec45e",
+    "question": "What are disabled children called in Ghana",
+    "reference": [
+      "spirit child"
+    ],
+    "answer": "spirit child",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "spirit child",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab6ad2855429953192ad35e",
+    "question": "The lead singer and guitarist in the Portland, Oregon rock band consisting of John Gourley, Zach Carothers, Kyle O'Quin, Jason Sechrist and Eric Howk, goes by what alias?",
+    "reference": [
+      "The Fantastic The"
+    ],
+    "answer": "The Fantastic The",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "The Fantastic The",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7543b155429916b01642cd",
+    "question": "What is the title of the book that documents the involvement of the president of the BioProducts Division at Archer Daniels Midland in a conspiracy case?",
+    "reference": [
+      "The Informant"
+    ],
+    "answer": "The Informant",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "The Informant",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac3e5225542997ea680c986",
+    "question": "Which artist recorded a song with Diddy that was in the number one position of the Billboard Year-End Hot 100 Singles of 2010?",
+    "reference": [
+      "Kesha"
+    ],
+    "answer": "Kesha",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Kesha",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab2c88655429916697740ce",
+    "question": "Both .li and .ch are country codes under which naming system?",
+    "reference": [
+      "Domain Name System of the Internet"
+    ],
+    "answer": "ISO 3166-1 alpha-2",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "ISO 3166-1 alpha-2",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8cfc8e554299441c6b9f9e",
+    "question": "Nikos Sofis attended which multi-campus private business school with headquarters in Switzerland?",
+    "reference": [
+      "EU Business School"
+    ],
+    "answer": "EU Business School",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "EU Business School",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a76abf65542993569682c7d",
+    "question": "After which Scottish mathematician, physicist and astronomer is the Napierian logarithm named?",
+    "reference": [
+      "John Napier"
+    ],
+    "answer": "John Napier",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "John Napier",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab27c54554299722f9b4d48",
+    "question": "Who was the company that manufactures the New Routemaster founded by?",
+    "reference": [
+      "Robert Wright"
+    ],
+    "answer": "Robert Wright",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Robert Wright",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae22f5a554299234fd04420",
+    "question": "how is Springbokkie and Punch connected?",
+    "reference": [
+      "drink"
+    ],
+    "answer": "Both are drinks.",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "both are drinks",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5add82d65542992ae4cec594",
+    "question": "In between Brand New and King Charles which included Derrick Sherman (guitar, backing vocals, keyboards)?",
+    "reference": [
+      "Brand New"
+    ],
+    "answer": "Brand New",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Brand New",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8b49f755429949d91db52f",
+    "question": "What profession does Emmanuel Chabrier and Leoš Janáček have in common?",
+    "reference": [
+      "composer"
+    ],
+    "answer": "composer",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "composer",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adc9f495542994d58a2f682",
+    "question": "Coll is known for Breacachadh also know as?",
+    "reference": [
+      "Breachacha Castle"
+    ],
+    "answer": "Breachacha Castle",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Breachacha Castle",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adff9ff554299603e4183dc",
+    "question": "What American singer and producer does Snoop Dogg's song that includes a stutter edit feature?",
+    "reference": [
+      "Pharrell"
+    ],
+    "answer": "Pharrell",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Pharrell",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8cda8655429941ae14df16",
+    "question": "What British games manufacturer publishes \"White Dwarf,\" a magazine which gave Dragons of Mystery a middling review?",
+    "reference": [
+      "Games Workshop"
+    ],
+    "answer": "Games Workshop",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Games Workshop",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a75dbb55542992db9473701",
+    "question": "News correspondent Bob Pisani presents for which international satellite and cable business channel?",
+    "reference": [
+      "CNBC"
+    ],
+    "answer": "CNBC",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "CNBC",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae23bc65542992decbdcc96",
+    "question": "The actress who appeared in the 2002 film Love in the Time of Money and made her film debut in a 1995 teen drama was born in what year?",
+    "reference": [
+      "1979"
+    ],
+    "answer": "1979",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "1979",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8b525155429950cd6afca2",
+    "question": "Who was a Venezuelan intellectual, lawyer, journalist, writer, television producer and politician, John Kenneth Galbraith or Arturo Uslar Pietri ?",
+    "reference": [
+      "Arturo Uslar Pietri"
+    ],
+    "answer": "Arturo Uslar Pietri",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Arturo Uslar Pietri",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a87aab65542993e715abfd2",
+    "question": "What is the name of the group who's political slogan was \"Blut und Ehre\" and was for young men between 14 and 18 years of age? ",
+    "reference": [
+      "Hitler Youth"
+    ],
+    "answer": "Hitler Youth",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Hitler Youth",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adda5b65542997545bbbd9b",
+    "question": "What was the budget for the 2012 animated film that Oliver Jones worked on?",
+    "reference": [
+      "$60 million"
+    ],
+    "answer": "$60 million",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "$60 million",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adcc41b5542994ed6169bf7",
+    "question": "This band gets it's name from a line that ran through Flint, Michigan and created Thirty Years of Funk: 1969-1999",
+    "reference": [
+      "Grand Funk Railroad"
+    ],
+    "answer": "Grand Funk Railroad",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Grand Funk Railroad",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a88ffd95542995153361245",
+    "question": "Who wrote the screenplay for the 2010 film directed by Paul Greengrass mentioned in the passages?",
+    "reference": [
+      "Brian Helgeland"
+    ],
+    "answer": "Brian Helgeland",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Brian Helgeland",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab6ff11554299110f219a8b",
+    "question": "The Hotel Metropole, built in 1908, was added to the National Register of Historical Places in 1979, it was demolished after being severely damaged during which named earthquake, that occurred in Northern California on October 17, 1989?",
+    "reference": [
+      "1989 Loma Prieta earthquake"
+    ],
+    "answer": "1989 Loma Prieta earthquake",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "1989 Loma Prieta earthquake",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7a7b5155429941d65f2672",
+    "question": "When was the performer of \"Lil Ghetto Boy\", the song sampled in \"Things Done Changed\", born?",
+    "reference": [
+      "February 18, 1965"
+    ],
+    "answer": "February 18, 1965",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "February 18, 1965",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adc652555429947ff173946",
+    "question": "In what city was the singer of \"Momma Knows Best\" born?",
+    "reference": [
+      "London"
+    ],
+    "answer": "London",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "London",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8e61665542995a26add4da",
+    "question": "Who served as a congressman for the the district which contains the cities of Lexington (including its suburbs), Richmond, and Frankfort, the state capital?",
+    "reference": [
+      "Ben Chandler"
+    ],
+    "answer": "Ben Chandler",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Ben Chandler",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae0aa4b55429945ae9593f9",
+    "question": "Are Pylon and Team Sleep experimental bands?",
+    "reference": [
+      "no"
+    ],
+    "answer": "No, only Team Sleep is explicitly described as experimental; Pylon is not described as experimental in the provided passages.",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8b049355429949d91db466",
+    "question": "Between The House of Love and 1990s, which band was considered to be an alternative rock band?",
+    "reference": [
+      "The House of Love"
+    ],
+    "answer": "The House of Love",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "The House of Love",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5adf87455542993344016cc6",
+    "question": "Which French video game publisher, published the war-theme real-time strategy game \"Conflict Zone\"?",
+    "reference": [
+      "Ubisoft"
+    ],
+    "answer": "Ubisoft",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Ubisoft",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab417e75542996a3a969f2d",
+    "question": "JP Cooper is best known for featuring on which single, which was also covered by a South Korean girl group named AOA?",
+    "reference": [
+      "Perfect Strangers"
+    ],
+    "answer": "Perfect Strangers",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Perfect Strangers",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a897117554299669944a524",
+    "question": "What expressway connects the stadium formerly known as Aryamehr Stadium to the western end of Hakim Expressway?",
+    "reference": [
+      "Allameh Jafari Expressway"
+    ],
+    "answer": "Allameh Jafari Expressway",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Allameh Jafari Expressway",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae4a2295542995ad6573ddb",
+    "question": "The Qube is home to the operations center of what type of lending company?",
+    "reference": [
+      "mortgage"
+    ],
+    "answer": "mortgage lending company",
+    "em": 0.0,
+    "f1": 0.5,
+    "baseline_answer": "mortgage lending company",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a86fb81554299211dda2b7a",
+    "question": "Claughton is a residential district in Birkenhead that includes part of Birkenhead Park, which was designed by who?",
+    "reference": [
+      "Joseph Paxton"
+    ],
+    "answer": "Joseph Paxton",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Joseph Paxton",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae1a9565542997f29b3c0ef",
+    "question": "What Frank Farian-created group released the single \"Ma Baker\" off their album \"Love for Sale\"?",
+    "reference": [
+      "Boney M."
+    ],
+    "answer": "Boney M.",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Boney M.",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab97e0e554299131ca42343",
+    "question": "Jasmin Raskin represents which Maryland's 8th congressional district which is located towards which border?",
+    "reference": [
+      "Pennsylvania border"
+    ],
+    "answer": "Pennsylvania border",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Pennsylvania border",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a80b3a65542992bc0c4a7ba",
+    "question": "According to the passages, what city is a tourist destination and is near the site of a battle where combined Austrian losses and French casualties exceeded 10,000?",
+    "reference": [
+      "Verona"
+    ],
+    "answer": "Verona",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Verona",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ade683255429939a52fe8a8",
+    "question": "Sesame Street Magazine and The Wittenburg Door, are which form of entertainment?",
+    "reference": [
+      "magazine"
+    ],
+    "answer": "magazine",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "magazine",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8dd3935542995a26add3f2",
+    "question": "What is the title of the fourth studio album by French DJ David Guetta that includes \"When Love Takes Over\", featuring vocals by Kelly Rowland?",
+    "reference": [
+      "One Love"
+    ],
+    "answer": "One Love",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "One Love",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5add28065542990d50227e08",
+    "question": "Were both Memotech MTX and TEC-1 single-board kit computers?",
+    "reference": [
+      "no"
+    ],
+    "answer": "no",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a77878d5542997042120a95",
+    "question": "What ancient officer in North West England is the second Baronet of the Heywood baronets?",
+    "reference": [
+      "High Sheriff of Lancashire"
+    ],
+    "answer": "High Sheriff of Lancashire",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "High Sheriff of Lancashire",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae4a4685542996836b02cf0",
+    "question": "What was the pen name of the husband of Grand Duchess Yelizaveta Mavrikiyevna ?",
+    "reference": [
+      "\"K.R.\""
+    ],
+    "answer": "K.R.",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "K.R.",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac02e005542996f0d89cb4e",
+    "question": " Vítor Vianna is a Brazilian mixed martial artist, who has competed in mixed martial arts events in Brazil, Holland, and in the United States, this ranking is due to certain fights, of which type, that he has participated in which term used in combat sports such as boxing and mixed martial arts to describe a weight limit for odd class fights?",
+    "reference": [
+      "Catchweight"
+    ],
+    "answer": "Catchweight",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "catchweight",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a83458755429966c78a6b66",
+    "question": "What plant growth form do Lodoicea and Nothofagus have in common?",
+    "reference": [
+      "trees"
+    ],
+    "answer": "trees",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "trees",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8780645542993e715abf87",
+    "question": "How many acres is the district in Selma where  the most popular style of house in the Southern United States from the end of the American Civil War (1861–65) through the 1920s be found?",
+    "reference": [
+      "323"
+    ],
+    "answer": "323 acres",
+    "em": 0.0,
+    "f1": 0.6666666666666666,
+    "baseline_answer": "323 acres",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab24fdc554299449642c86e",
+    "question": "What is the name of the show on Netflix produced by the company A Little Stranger?",
+    "reference": [
+      "Unbreakable Kimmy Schmidt"
+    ],
+    "answer": "Unbreakable Kimmy Schmidt",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Unbreakable Kimmy Schmidt",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab82ebb55429934fafe6d0a",
+    "question": " Temptations Live! features an American baritone singer nicknamed what?",
+    "reference": [
+      "Big Daddy"
+    ],
+    "answer": "Big Daddy",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Big Daddy",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab3126255429976abd1bc4e",
+    "question": "Wall of Fame is a British comedy panel game that was first broadcast on Sky1 in 2011, it is hosted by \"Little Britain\" star David Walliams and features Tamara Ecclestone Rutland (born 28 June 1984) is a British model, socialite, television personality, and the daughter of which billionaire?",
+    "reference": [
+      "Bernie Ecclestone"
+    ],
+    "answer": "Bernie Ecclestone",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Bernie Ecclestone",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae4acca55429913cc2044ca",
+    "question": "What New York City Borough contains the 7 World Trade Center and the Collegiate Reformed Protestant Dutch Church",
+    "reference": [
+      "Manhattan"
+    ],
+    "answer": "Manhattan",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Manhattan",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae4e09255429908b63264a0",
+    "question": "Who is the manufacturer of the skin care medicine in UK in which niacinamide vitamin is an active ingredient which is found in food? ",
+    "reference": [
+      "Diomed Developments Limited"
+    ],
+    "answer": "Diomed Developments Limited",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Diomed Developments Limited",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab2c30f55429916697740a1",
+    "question": "Are both Karamay and Meihekou transportation hubs?",
+    "reference": [
+      "no"
+    ],
+    "answer": "no",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8fa8495542992414482b25",
+    "question": "The Old Man of Coniston is a fell to the west of a lake that has a maximum depth of how many feet?",
+    "reference": [
+      "184 feet"
+    ],
+    "answer": "184 feet",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "184",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7db5225542997cc2c47475",
+    "question": "What play was the musical Dag Achatz his own transcription of Bernstein's Symphonic Dances from based on?",
+    "reference": [
+      "\"Romeo and Juliet\""
+    ],
+    "answer": "Romeo and Juliet",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Romeo and Juliet",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac3b879554299204fd21e17",
+    "question": "The 2016 Miami Dolphins season was the franchise's 47th season in the National Football League, the 51st overall and the first under head coach Adam Gase, with their Week 15 win over the New York Jets, the Dolphins clinched a winning record for the first time since 2008, and clinched a playoff berth the following week after which franchise's 47th season in the National Football League, the 57th overall and the fourth under head coach Andy Reid and the fourth and final season under general manager John Dorsey who was fired June 22, 2017?",
+    "reference": [
+      "2016 Kansas City Chiefs season"
+    ],
+    "answer": "2016 Kansas City Chiefs season",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Kansas City Chiefs",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a84581f5542992ef85e23c5",
+    "question": "Returning Home, was one of three films shortlisted by Norway to be their submission for the Academy Award for Best Foreign Language Film at the 88th Academy Awards, but it lost out to \"The Wave\",  a 2015 Norwegian catastrophe drama film directed by who?",
+    "reference": [
+      "Roar Uthaug"
+    ],
+    "answer": "Roar Uthaug",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Roar Uthaug",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae01520554299603e4183e5",
+    "question": "Which of the founders of the of the Creation Research Society and the Institute for Creation Research, also co-authored a book, that according to Ronald Numbers, elevated young earth creationism \"to a position of fundamentalist orthodoxy.\" ?",
+    "reference": [
+      "Henry M. Morris"
+    ],
+    "answer": "Henry M. Morris",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Henry M. Morris",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae0541555429924de1b70a7",
+    "question": "Site Selection magazine is headquartered in a city that had how many inhabitants in 2010 ?",
+    "reference": [
+      "9,116"
+    ],
+    "answer": "9,116",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "9,116",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a86ee265542994775f60786",
+    "question": "In what year was the hymnbook that Elisha J. King compiled first published?",
+    "reference": [
+      "1844"
+    ],
+    "answer": "1844",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "1844",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a90c2b35542995651fb51df",
+    "question": "an Emmy Award winner and two-time Tony Award winner, was on the episode 15 of the third season of \"Chuck\". what is her name ?",
+    "reference": [
+      "Swoosie Kurtz"
+    ],
+    "answer": "Swoosie Kurtz",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Swoosie Kurtz",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a710e545542994082a3e530",
+    "question": "What comedy film, written and directed by Garth Jennings,  did Jules Sitruk have a role in?",
+    "reference": [
+      "Son of Rambow"
+    ],
+    "answer": "Son of Rambow",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Son of Rambow",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7ce645554299683c1c63cc",
+    "question": "Which best-selling singer and actress appeared in the 1995 movie Waiting To Exhale?",
+    "reference": [
+      "Whitney Houston"
+    ],
+    "answer": "Whitney Houston",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Whitney Houston",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae5ee6355429929b0807a1e",
+    "question": "The holonomic brain theory, developed by neuroscientist Karl Pribram initially in collaboration with who, which was American scientist who has been described as one of the most significant theoretical physicists of the 20th century and who contributed unorthodox ideas to quantum theory, neuropsychology and the philosophy of mind?",
+    "reference": [
+      "David Bohm"
+    ],
+    "answer": "David Bohm",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "David Bohm",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a749f8f55429979e28829cc",
+    "question": "What is the name of the intelligent, neurotic and introspective character that William Faulkner created in his fourth novel, published in 1929?",
+    "reference": [
+      "Quentin Compson"
+    ],
+    "answer": "Quentin Compson",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Quentin Compson",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7e43c95542991319bc9458",
+    "question": "Phillip Hill-Pearson worked on the British television film with which actor who played Jimmy Murphy?",
+    "reference": [
+      "David Tennant"
+    ],
+    "answer": "David Tennant",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "David Tennant",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abdf8795542993f32c2a071",
+    "question": "Who wrote the supernatural investigation novel which derives its title from a line in the \"nunnery scene\" soliloquy of the play \"Hamlet\"?",
+    "reference": [
+      "Manly Wade Wellman"
+    ],
+    "answer": "Manly Wade Wellman",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Manly Wade Wellman",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac1311555429964131be16a",
+    "question": "Eleven Eleven is the studio album by the folk-rock musician of what nationality?",
+    "reference": [
+      "American"
+    ],
+    "answer": "American",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "American",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae7d89f5542997ec27276f6",
+    "question": "The Missouri Tigers coached by gary pinkel played this team in 2010 insight bowl in tempe arizona?",
+    "reference": [
+      "Iowa Hawkeyes"
+    ],
+    "answer": "Iowa Hawkeyes",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Iowa Hawkeyes",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7cac4755429907fabeeffc",
+    "question": "The Shenandoah Valley Railroad had considerably backing from another railroad with what nickname?",
+    "reference": [
+      "\"Pennsy\""
+    ],
+    "answer": "Pennsy",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Pennsy",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abfe6ba5542997d6429592c",
+    "question": "Which German music group produced the song \"Rhythm Is a Dancer\" as well as the album \"The Madman's Return\"?",
+    "reference": [
+      "Snap!"
+    ],
+    "answer": "Snap!",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Snap!",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae351595542992e3233c378",
+    "question": "Which model was absent in the 2009 high-profile show in which the first Victoria Secrets PINK contract model, modeled in?",
+    "reference": [
+      "Adriana Lima"
+    ],
+    "answer": "Adriana Lima",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Adriana Lima",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab9a694554299743d22eb8a",
+    "question": "Which show featured on Tiny TV first aired in the United States on August 20, 2001?",
+    "reference": [
+      "Oswald"
+    ],
+    "answer": "Oswald",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Oswald",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a890a0e55429946c8d6e8f7",
+    "question": "The Mindscape of Alan Moore is a 2003 documentary film which chronicles the life and work of Alan Moore, author of several acclaimed graphic novels, including V for Vendetta is a British graphic novel written by Alan Moore and illustrated by David Lloyd, published by which organization?",
+    "reference": [
+      "DC Comics"
+    ],
+    "answer": "DC Comics",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "DC Comics",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae71a0f5542995703ce8bd3",
+    "question": "Who wrote the British television sitcom with seven series being broadcast between 1981 to 1991, 16 sporadic Christmas specials, and a 'Comic Relief special', recorded as part of the 1997 appeal which features the final appearance of Uncle Albert?",
+    "reference": [
+      "John Sullivan"
+    ],
+    "answer": "John Sullivan",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "John Sullivan",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab233c15542993be8fa98c2",
+    "question": "The Emil and Patricia Jones Convocation Center is home to a college team that is a member of which school fund ?",
+    "reference": [
+      "Thurgood Marshall College Fund"
+    ],
+    "answer": "Thurgood Marshall College Fund",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Thurgood Marshall College Fund",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5abf84175542994516f454bd",
+    "question": "What episode of South Park was created using the Snapz Pro X program for macOS?",
+    "reference": [
+      "Make Love, Not Warcraft"
+    ],
+    "answer": "Make Love, Not Warcraft",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Make Love, Not Warcraft",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a74eb6d5542996c70cfae3a",
+    "question": "Which strategy board game, Twilight Imperium or Focus, appears in Sackson's \"A Gamut of Games\"?",
+    "reference": [
+      "Focus"
+    ],
+    "answer": "Focus",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "Focus",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac0a02f5542992a796ded3e",
+    "question": "Which of the Donald Franklin Stewart directed museum was built in 1854?",
+    "reference": [
+      "USS Constellation"
+    ],
+    "answer": "USS Constellation Museum",
+    "em": 0.0,
+    "f1": 0.8,
+    "baseline_answer": "USS Constellation Museum",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae3083155429928c42395b3",
+    "question": "Where is the broadcast studio of the channel that along with CNN and BBC disputes the murderer of Neda?",
+    "reference": [
+      "1211 Avenue of the Americas, New York City, New York"
+    ],
+    "answer": "1211 Avenue of the Americas, New York City, New York",
+    "em": 1.0,
+    "f1": 1.0,
+    "baseline_answer": "1211 Avenue of the Americas, New York City, New York",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  }
+]

@@ -1,0 +1,184 @@
+[
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a90c0a055429916514e7556",
+    "question": "Where is the place Norman Allen Adie moved to the United States to work at located in?",
+    "reference": [
+      "Rockefeller Center"
+    ],
+    "answer": "New York City",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "New York City",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab29820554299194fa9341b",
+    "question": "What is the rating of the highest charting album from Judy Collins that includes the song from \"Love Actually\"?",
+    "reference": [
+      "5"
+    ],
+    "answer": "No. 5",
+    "em": 0.0,
+    "f1": 0.6666666666666666,
+    "baseline_answer": "No. 5 on the Billboard Pop Albums charts",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a7713f355429966f1a36c22",
+    "question": "Where did Eve Meyer die?",
+    "reference": [
+      "on the Spanish island of Tenerife, Canary Islands"
+    ],
+    "answer": "Tenerife, Canary Islands",
+    "em": 0.0,
+    "f1": 0.6,
+    "baseline_answer": "Tenerife",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a884ac05542996e4f308937",
+    "question": "Where was the draft where Tywon Ronell Lawson was picked by the Minnesota Timberwolves held?",
+    "reference": [
+      "the WaMu Theatre"
+    ],
+    "answer": "WaMu Theatre at Madison Square Garden in New York City",
+    "em": 0.0,
+    "f1": 0.3333333333333333,
+    "baseline_answer": "WaMu Theatre at Madison Square Garden in New York City",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a808d785542996402f6a54e",
+    "question": "For which award was the American actor who played Jim Dial on \"Murphy Brown\" and guest-starred in the 11th episode of the second season of \"Family Guy\" nominated for his performance on \"Murphy Brown\"?",
+    "reference": [
+      "Emmy Award"
+    ],
+    "answer": "Emmy Award for Outstanding Supporting Actor in a Comedy Series",
+    "em": 0.0,
+    "f1": 0.36363636363636365,
+    "baseline_answer": "Emmy Award for Outstanding Supporting Actor in a Comedy Series",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a874cbf5542994846c1cd52",
+    "question": "Lake Managua and Rush Lake, are an expanse of water entirely surrounded by land and unconnected to the sea?",
+    "reference": [
+      "yes"
+    ],
+    "answer": "No",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "no",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac2f46a5542996773102655",
+    "question": "According to the passages, which Indian political alliance represented in the 2012 Indian vice-presidential election had Narendra Modi as its leader?",
+    "reference": [
+      "National Democratic Alliance"
+    ],
+    "answer": "National Democratic Alliance (NDA)",
+    "em": 0.0,
+    "f1": 0.8571428571428571,
+    "baseline_answer": "National Democratic Alliance (NDA)",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ab2c88655429916697740ce",
+    "question": "Both .li and .ch are country codes under which naming system?",
+    "reference": [
+      "Domain Name System of the Internet"
+    ],
+    "answer": "ISO 3166-1 alpha-2",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "ISO 3166-1 alpha-2",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae22f5a554299234fd04420",
+    "question": "how is Springbokkie and Punch connected?",
+    "reference": [
+      "drink"
+    ],
+    "answer": "Both are drinks.",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "both are drinks",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae0aa4b55429945ae9593f9",
+    "question": "Are Pylon and Team Sleep experimental bands?",
+    "reference": [
+      "no"
+    ],
+    "answer": "No, only Team Sleep is explicitly described as experimental; Pylon is not described as experimental in the provided passages.",
+    "em": 0.0,
+    "f1": 0.0,
+    "baseline_answer": "no",
+    "baseline_em": 1.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ae4a2295542995ad6573ddb",
+    "question": "The Qube is home to the operations center of what type of lending company?",
+    "reference": [
+      "mortgage"
+    ],
+    "answer": "mortgage lending company",
+    "em": 0.0,
+    "f1": 0.5,
+    "baseline_answer": "mortgage lending company",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5a8780645542993e715abf87",
+    "question": "How many acres is the district in Selma where  the most popular style of house in the Southern United States from the end of the American Civil War (1861–65) through the 1920s be found?",
+    "reference": [
+      "323"
+    ],
+    "answer": "323 acres",
+    "em": 0.0,
+    "f1": 0.6666666666666666,
+    "baseline_answer": "323 acres",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  },
+  {
+    "task_id": "hotpotqa/flowsteer-corrected-v1/5ac0a02f5542992a796ded3e",
+    "question": "Which of the Donald Franklin Stewart directed museum was built in 1854?",
+    "reference": [
+      "USS Constellation"
+    ],
+    "answer": "USS Constellation Museum",
+    "em": 0.0,
+    "f1": 0.8,
+    "baseline_answer": "USS Constellation Museum",
+    "baseline_em": 0.0,
+    "submission_status": "submitted",
+    "outcome_status": "scored"
+  }
+]

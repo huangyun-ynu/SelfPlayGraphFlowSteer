@@ -1,0 +1,40 @@
+{
+  "schema": "hotpotqa_v3_128_audit_v1",
+  "source_commit": "93c901ddabd547dafacdbde3287aa93a5849a093",
+  "task_count": 128,
+  "completed": 128,
+  "execution_errors": 0,
+  "counts": {
+    "strict_em_correct": 115,
+    "verifier_passed": 121,
+    "submitted": 128,
+    "scored": 128,
+    "v3_receipts": 128,
+    "recorded_worker_tokens": 395833,
+    "improved": 5,
+    "regressed": 1,
+    "both_correct": 110,
+    "both_wrong": 12,
+    "worker_executions": 152,
+    "accepted_finish": 128
+  },
+  "strict_em": 0.8984375,
+  "answer_f1": 0.9358394209956711,
+  "verifier_pass_rate_all": 0.9453125,
+  "worker_requests": 152,
+  "worker_models": {
+    "deepseek-flash": 152
+  },
+  "worker_request_outcomes": {
+    "backend_request_success": 152
+  },
+  "worker_input_tokens": 359953,
+  "worker_output_tokens": 35880,
+  "dataset_sha256": "6e4096785ad5b869b6541c868beb25ad7f157cc64ae8968c0db3cbe2f185e27c",
+  "records_sha256": "6f9103f2aa99b8fa8c84a14d47e33f9bb64cad75f1b68ff69ff975017077bd51",
+  "baseline_records_sha256": "c078d6a074bfc96cf8d94395d6b05f4a2f4492fadaa4c63b60626fb0e5b71446",
+  "baseline_strict_em_correct": 111,
+  "source_unchanged": true,
+  "source_bindings_checked": true,
+  "independent_metric_check": true
+}
