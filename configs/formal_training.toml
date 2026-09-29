@@ -1,4 +1,5 @@
 # SWE baseline: swe-65of128-20260928 (65/128 = 50.78125%); dataset-scoped v3.
+# ALFWorld baseline: V3 102/128 plus 20260929 ALF/SWE state fixes; see promotion record.
 # Hotpot baseline: hotpot-8672-20260928 (111/128 strict EM); evidence-first v1, v2.2.
 # Canonical deployment configuration for the seven-dataset formal PATS run.
 # Credentials are loaded from the repository .env and are never stored here.
@@ -54,7 +55,8 @@ gemini = ["gemini", "gemini2"]
 gpt_judge = ["gpt_judge", "gpt_judge_eco"]
 
 [canvas]
-submission_journal_dir = "state/formal-training-swe65-v1/submissions"
+submission_journal_dir = "state/formal-training-alf-swe-statefix-v1/submissions"
+alfworld_terminal_candidate_policy = "finish_only_v1"
 # Predictive admission protection is disabled; hard token and wall-clock limits remain.
 remaining_time_admission_enabled = false
 remaining_token_admission_enabled = false
@@ -72,6 +74,14 @@ healthbench_professional = 240000
 swe_bench = 350000
 
 [canvas.worker_token_budget_by_dataset.swe_bench]
+policy = "reported_usage_threshold_v1"
+start_threshold = 350000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
+[canvas.worker_token_budget_by_dataset.alfworld]
 policy = "reported_usage_threshold_v1"
 start_threshold = 350000
 accounting_scope = "question_attempt"
@@ -168,6 +178,7 @@ env_feedback_enabled = false
 # Local assets are present; the formal environment installs the alfworld extra.
 [alfworld]
 enabled = true
+task_prompt_source = "environment_reset"
 data_root = "assets/alfworld-data/json_2.1.1"
 max_episode_steps = 50
 max_rollout_steps = 200
@@ -410,6 +421,7 @@ gpt = ["gpt_student", "gpt"]
 
 [canvas.submission_protocol_by_dataset]
 swe_bench = "unified_task_result_v1"
+alfworld = "unified_task_result_v1"
 
 [runtimes.gpt.max_concurrency_by_dataset]
 swe_bench = 5

@@ -1,7 +1,12 @@
 # Formal Training 配置与凭据说明
 
+> 2026-09-29 更新：ALFWorld 与 SWE 的真实失败轨迹修复版已共同纳入正式训练。
+> 两者使用数据集级 v3 与实际 usage 发送阈值；ALFWorld 题目取自环境 reset，
+> 启用当前成功候选保护。反事实执行使用独立 usage 账户。详情见
+> [ALF / SWE 正式同步记录](ALF_SWE_FORMAL_PROMOTION_20260929.zh-CN.md)。
+>
 > 2026-09-28 SWE 更新：正式 SWE 基线已提升为 65/128（50.78%）版本，
-> 单独使用 v3 / unified_task_result_v1；其他六集保持原协议。
+> 当时仅 SWE 使用 v3 / unified_task_result_v1；2026-09-29 起 ALFWorld 也使用 v3。
 > SWE GPT 池为 GPT-student（并发 10）与非 eco GPT（并发 5），每题共享
 > 350,000 实际 usage 发送阈值。下文通用路由表描述其余数据集默认值。
 > 版本来源、训练与评测设置的区别见 [SWE 正式同步记录](SWE_FORMAL_PROMOTION_20260928.zh-CN.md)。

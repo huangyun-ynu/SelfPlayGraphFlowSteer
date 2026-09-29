@@ -437,7 +437,7 @@ class ModelAgentExecutor:
 
     backend: ChatBackend
     role: str = "worker"
-    version: str = "model-agent-v26-student-text-actions-hotpot-evidence-first"
+    version: str = "model-agent-v27-student-text-actions-hotpot-evidence-first-alfworld-v3-usage"
     tools: dict[str, AgentTool] = field(default_factory=dict)
     action_registry: DatasetActionRegistry | None = None
     max_tool_rounds: int = 3
@@ -1371,8 +1371,14 @@ class ModelAgentExecutor:
                     actions=request_action_specs,
                     **({"max_tokens": 2048, "enable_thinking": False} if test_recovery_active else {}),
                 )
-            except WorkerUsageDispatchStopped:
-                raise
+            except WorkerUsageDispatchStopped as stopped:
+                if action_adapter != "alfworld":
+                    raise
+                response = _alfworld_usage_stop_response(context, stopped.reason)
+                protocol_diagnostics.append({"stage": "alfworld_usage_stop", "accepted": True,
+                    "runtime_generated": True, "reason": stopped.reason, "no_request_dispatched": True})
+                finalization_reason = stopped.reason
+                break
             except RequestTokenCreditExceeded as exc:
                 if full_graph_credit:
                     # No completed final outcome: cancel this probe, never
@@ -2858,8 +2864,13 @@ class ModelAgentExecutor:
                         max_tokens=max_tokens,
                         enable_thinking=False,
                     )
-            except WorkerUsageDispatchStopped:
-                raise
+            except WorkerUsageDispatchStopped as stopped:
+                if visible_context.get("action_environment", {}).get("adapter") != "alfworld":
+                    raise
+                diagnostics.append({"stage": "alfworld_usage_stop", "accepted": True,
+                    "runtime_generated": True, "reason": stopped.reason, "no_request_dispatched": True})
+                return (_alfworld_usage_stop_response(visible_context, stopped.reason),
+                        token_in, token_out, diagnostics)
             except RequestTokenCreditExceeded as exc:
                 if abort_on_credit_exhaustion:
                     raise
@@ -3042,7 +3053,7 @@ class RoutedModelAgentExecutor:
 
     @property
     def version(self) -> str:
-        return "solver-routed-model-agent-v23-student-text-actions-hotpot-evidence-first:" + ",".join(self.routes)
+        return "solver-routed-model-agent-v24-student-text-actions-hotpot-evidence-first-alfworld-v3-usage:" + ",".join(self.routes)
 
     def route_for(self, node: AgentNode) -> str:
         explicit = str(node.metadata.get("runtime_route", "")).strip()
@@ -3199,9 +3210,7 @@ class MultiAgentRuntime:
         self.worker_usage_ledger: WorkerUsageLedger | None = None
 
     def reset(self) -> None:
-        if self.worker_usage_ledger is not None:
-            self.worker_usage_ledger.close()
-            self.worker_usage_ledger = None
+        self.close_worker_usage_ledger()
         self.artifacts.clear()
         self.cache.clear()
         self._artifact_seq = 0
@@ -3216,6 +3225,23 @@ class MultiAgentRuntime:
         reset_executor = getattr(self.executor, "reset", None)
         if callable(reset_executor):
             reset_executor()
+
+    def close_worker_usage_ledger(self) -> None:
+        if self.worker_usage_ledger is not None:
+            ledger = self.worker_usage_ledger
+            self.worker_usage_ledger = None
+            ledger.close()
+
+    def prune_deleted_agents(self, graph: MultiAgentGraph) -> None:
+        """Drop deleted nodes' bookkeeping without executing or rebinding work."""
+        self.artifacts = {key: value for key, value in self.artifacts.items() if key in graph.nodes}
+        self._last_input_payloads = {
+            key: value for key, value in self._last_input_payloads.items() if key[0] in graph.nodes
+        }
+        self._artifact_input_bindings = {
+            key: value for key, value in self._artifact_input_bindings.items() if key in graph.nodes
+        }
+        self._stale_artifacts.intersection_update(graph.nodes)
 
     @property
     def native_webshop(self) -> bool:
@@ -3263,7 +3289,7 @@ class MultiAgentRuntime:
 
     def swe_execution_blocker(self, node: AgentNode) -> str | None:
         """A fresh SWE workspace needs tools; in-flight finalization is separate."""
-        if node.metadata.get("action_adapter") == "swe_bench" and self.worker_usage_ledger is not None:
+        if node.metadata.get("action_adapter") in {"swe_bench", "alfworld"} and self.worker_usage_ledger is not None:
             reason = self.worker_usage_ledger.stop_reason()
             if reason is not None:
                 return reason
@@ -3996,7 +4022,7 @@ class MultiAgentRuntime:
                 )
         try:
             with worker_usage_scope(
-                self.worker_usage_ledger if node.metadata.get("action_adapter") == "swe_bench" else None,
+                self.worker_usage_ledger if node.metadata.get("action_adapter") in {"swe_bench", "alfworld"} else None,
                 agent_id=agent_id, execution_id=f"{self._execution_seq}:{agent_id}",
             ):
                 artifact = self.executor.execute(
@@ -8320,3 +8346,17 @@ _WEBSHOP_SUPERSEDED_STAGED_ABSENCE_MARKERS = (
     "pending runtime commit",
     "staged pending",
 )
+
+
+def _alfworld_usage_stop_response(context: dict[str, Any], reason: str) -> LLMResponse:
+    """Local report only; success is scored from the lifecycle, never this text."""
+    state = context.get("action_environment", {}).get("state", {})
+    won = state.get("done") is True and state.get("success") is True
+    return LLMResponse(text=json.dumps({
+        "answer": "environment_success" if won else "environment_incomplete",
+        "summary": "Runtime retained the current ALFWorld episode after Worker dispatch stopped: " + reason,
+        "confidence": 1.0 if won else 0.0,
+        "evidence": ["Public task: " + str(state.get("public_task_statement", "")),
+                     "Observed environment step: " + str(state.get("step", 0))],
+        "unresolved_issues": [] if won else [reason],
+    }), model="runtime-alfworld-usage-boundary", metadata={"runtime_generated": True})

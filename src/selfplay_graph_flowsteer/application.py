@@ -72,6 +72,7 @@ from .observability import (
 from .output_contract import OUTPUT_CONTRACT_VERSION
 from .pats import PatsConfig
 from .protocol_reward import LEGACY_REWARD_VERSION, DirectorRewardConfig
+from .worker_usage_ledger import WorkerUsageLedger
 from .rollouts import Tokenizer
 from .route_health import PersistentRouteCircuitOpenError, RouteHealthStore
 from .runtime import (
@@ -474,8 +475,11 @@ class ALFWorldConfig:
     max_revision_calls: int = 50
     max_total_calls: int = 100
     worker_guidance_policy: str = "factual_memory_v1"
+    task_prompt_source: str = "dataset"
 
     def validate(self) -> None:
+        if self.task_prompt_source not in {"dataset", "environment_reset"}:
+            raise ValueError("alfworld.task_prompt_source must be dataset or environment_reset")
         if self.worker_guidance_policy not in {
             "factual_memory_v1",
             "raw_state_v1",
@@ -1038,7 +1042,8 @@ class AdaptiveApplicationConfig:
             "execution_semantics": execution_semantics(
                 "v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
                 admission_config={"canvas": asdict(self.canvas),
-                                  "answer_submission": asdict(self.answer_submission)},
+                                  "answer_submission": asdict(self.answer_submission),
+                                  "alfworld_task_prompt_source": self.alfworld.task_prompt_source},
             ),
             "policies": {
                 "proposer": self.proposer_model.to_dict(),
@@ -1077,6 +1082,7 @@ class AdaptiveApplicationConfig:
                 "health_cooldown_s": self.route_health_cooldown_s,
             },
             "canvas_execution": {
+                "alfworld_terminal_candidate_policy": self.canvas.alfworld_terminal_candidate_policy,
                 "worker_protocol_status_version": "worker_protocol_status_v1",
                 "fallback_max_total_tokens": self.canvas.max_total_tokens,
                 "max_total_tokens_by_dataset": {
@@ -1283,6 +1289,7 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
                 canonical_dataset_name(dataset): str(protocol)
                 for dataset, protocol in canvas.get("submission_protocol_by_dataset", {}).items()
             },
+            alfworld_terminal_candidate_policy=str(canvas.get("alfworld_terminal_candidate_policy", "off")),
             submission_journal_dir=str(_path(canvas.get("submission_journal_dir"), root, "state/submissions")),
             max_recovery_executions=int(canvas.get("max_recovery_executions", 2)),
             action_budget_policy=str(canvas.get("action_budget_policy", "phase_split_v1")),
@@ -1462,6 +1469,7 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             compatibility_profile=str(webshop.get("compatibility_profile", "current")),
         ),
         alfworld=ALFWorldConfig(
+            task_prompt_source=str(alfworld.get("task_prompt_source", "dataset")),
             enabled=bool(alfworld.get("enabled", False)),
             data_root=_path(
                 alfworld.get("data_root"),
@@ -1730,6 +1738,13 @@ class AdaptiveApplicationResult:
             self.solver_result.trace.events,
             run_id=self.run_id,
         )
+        usage = self.task.metadata.get("worker_usage", {})
+        if (usage.get("policy") == "reported_usage_threshold_v1"
+                and usage.get("question_attempt_id") == self.run_id):
+            # A physical response can consume tokens before parsing or repair
+            # fails. The shared ledger remains authoritative without an Artifact.
+            worker_token_in = int(usage["confirmed_input_tokens"])
+            worker_token_out = int(usage["confirmed_output_tokens"])
         return {
             "run_id": self.run_id,
             "task": task_to_public_dict(self.task),
@@ -1848,13 +1863,23 @@ class AdaptiveSolverApplication:
 
     def close(self) -> None:
         closed: set[int] = set()
-        for backend in self.owned_backends:
-            if id(backend) in closed:
-                continue
-            closed.add(id(backend))
-            close = getattr(backend, "close", None)
-            if callable(close):
-                close()
+        backends, self.owned_backends = self.owned_backends, ()
+        first_error = None
+        try:
+            for backend in backends:
+                if id(backend) in closed:
+                    continue
+                closed.add(id(backend))
+                close = getattr(backend, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except BaseException as exc:
+                        first_error = first_error or exc
+        finally:
+            self.runtime.close_worker_usage_ledger()
+        if first_error is not None:
+            raise first_error
 
     def set_rollout_deadline(self, deadline: RolloutDeadline | None) -> None:
         """Install one deadline across Director, Canvas, Worker, and API gates."""
@@ -2032,6 +2057,8 @@ class AdaptiveSolverApplication:
                     "mace_rewards",
                     "mace_decisions",
                     "mace_window_audit",
+                    "worker_usage",
+                    "alfworld_task_binding",
                 }
                 or key.startswith("_runtime_")
             ):
@@ -2113,6 +2140,18 @@ class AdaptiveSolverApplication:
             token_budget = self.config.canvas.max_total_tokens_by_dataset.get(
                 dataset, self.config.canvas.max_total_tokens
             )
+            usage_policy = self.config.canvas.worker_usage_policy(dataset)
+            if usage_policy is not None:
+                # Counterfactual siblings own independent environments and accounts.
+                # Never reopen or charge the primary rollout's persisted account.
+                attempt_id = f"{task.metadata['judge_evaluation_scope']}:{uuid.uuid4().hex}"
+                self.runtime.worker_usage_ledger = WorkerUsageLedger(
+                    Path(self.config.canvas.submission_journal_dir) / "worker_usage"
+                    / (hashlib.sha256(attempt_id.encode()).hexdigest() + ".sqlite3"),
+                    question_attempt_id=attempt_id,
+                    threshold=int(usage_policy.get("start_threshold", token_budget)),
+                    max_unsettled_attempts=int(usage_policy.get("max_unsettled_attempts", 2)),
+                )
             webshop_partition = (
                 budget_partition(
                     total_limit=int(token_budget),
@@ -2125,6 +2164,9 @@ class AdaptiveSolverApplication:
                 else None
             )
             for node in graph.nodes.values():
+                if usage_policy is not None:
+                    node.metadata["_runtime_budget_kind"] = "reported_usage_threshold_v1"
+                    continue
                 if dataset == "webshop":
                     node.metadata["_runtime_webshop_request_admission_enabled"] = (
                         self.config.canvas.remaining_token_admission_enabled
@@ -2149,14 +2191,18 @@ class AdaptiveSolverApplication:
                     # Environment branches must obey admission before a request,
                     # not just reject an already over-budget graph afterwards.
                     node.metadata["_runtime_budget_kind"] = "full_graph_request_credit_v1"
-            with request_dataset(task.metadata.get("dataset", task.task_type)):
-                report = self.runtime.execute(
-                    task=solver_task_text(
+            worker_task = (
+                active_alfworld_lifecycles[0].effective_task
+                if active_alfworld_lifecycles else solver_task_text(
                         task,
                         include_submission_contract=(
                             getattr(self.solver, "answer_finalizer", None) is not None
                         ),
-                    ),
+                    )
+            )
+            with request_dataset(task.metadata.get("dataset", task.task_type)):
+                report = self.runtime.execute(
+                    task=worker_task,
                     graph=graph,
                     dirty_agents=None,
                 )
@@ -2186,6 +2232,17 @@ class AdaptiveSolverApplication:
                 "execution": report.to_dict(),
                 "token_budget": int(token_budget),
             }
+            ledger = self.runtime.worker_usage_ledger
+            if ledger is not None:
+                usage = {**ledger.status(), "digest": ledger.digest(),
+                         "question_attempt_id": ledger.question_attempt_id,
+                         "dispatch_policy_valid": ledger.dispatches_valid()}
+                task.metadata["worker_usage"] = usage
+                self.last_graph_evaluation["worker_usage"] = usage
+                if not usage["usage_complete"] or not usage["dispatch_policy_valid"]:
+                    raise GraphEvaluationIncompleteError(
+                        "full graph branch has incomplete or invalid Worker usage; no counterfactual credit"
+                    )
             if report.incomplete_bidirectional_components:
                 raise GraphEvaluationIncompleteError(
                     "full graph branch has incomplete bidirectional execution; no counterfactual credit"
@@ -2242,7 +2299,7 @@ class AdaptiveSolverApplication:
                 task.metadata["swe_environment_result"] = evaluation
                 if not bool(evaluation.get("environment_completed", False)):
                     raise RuntimeError("SWE counterfactual official harness did not complete")
-            if report.token_in + report.token_out > int(token_budget):
+            if ledger is None and report.token_in + report.token_out > int(token_budget):
                 raise RuntimeError("full graph branch exceeded its complete execution token budget")
             for key in ("webshop_environment_result", "alfworld_environment_result"):
                 outcome = task.metadata.get(key)
@@ -2325,14 +2382,17 @@ class AdaptiveSolverApplication:
                 }
             return task_score
         finally:
-            for lifecycle in (
-                *active_webshop_lifecycles,
-                *active_alfworld_lifecycles,
-                *active_swe_lifecycles,
-            ):
-                lifecycle.close_all()
-            self.runtime.discard_peer_rewards()
-            self.runtime.full_graph_replay = previous_full_replay
+            try:
+                for lifecycle in (
+                    *active_webshop_lifecycles,
+                    *active_alfworld_lifecycles,
+                    *active_swe_lifecycles,
+                ):
+                    lifecycle.close_all()
+            finally:
+                self.runtime.close_worker_usage_ledger()
+                self.runtime.discard_peer_rewards()
+                self.runtime.full_graph_replay = previous_full_replay
 
 
 def create_adaptive_application(
@@ -2437,6 +2497,7 @@ def create_adaptive_application(
         alfworld_lifecycle = ALFWorldSessionLifecycle(
             LocalALFWorldClient(),
             data_root=config.alfworld.data_root,
+            task_prompt_source=config.alfworld.task_prompt_source,
             max_episode_steps=config.alfworld.max_episode_steps,
             max_rollout_steps=config.alfworld.max_rollout_steps,
             max_observation_chars=config.alfworld.max_observation_chars,

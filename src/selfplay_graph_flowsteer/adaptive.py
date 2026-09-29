@@ -437,6 +437,19 @@ class AdaptiveWorkflowSolver:
         )
 
     def solve(self, task: TaskSpec, *, run_id: str) -> AdaptiveSolverResult:
+        try:
+            return self._solve(task, run_id=run_id)
+        except BaseException:
+            # Preparing an environment goal starts a real episode before the
+            # Director. Configuration/skill/ledger failures must close it too.
+            try:
+                for lifecycle in alfworld_lifecycles(getattr(self.runtime.executor, "tools", {})):
+                    lifecycle.close_all()
+            finally:
+                self.runtime.close_worker_usage_ledger()
+            raise
+
+    def _solve(self, task: TaskSpec, *, run_id: str) -> AdaptiveSolverResult:
         if (
             self.required_nq_frozen_top_k
             and canonical_dataset_name(task.metadata.get("dataset")) == "nq_open"
@@ -449,27 +462,6 @@ class AdaptiveWorkflowSolver:
             )
         task.metadata["judge_evaluation_scope"] = f"primary:{run_id}:{self.runtime.seed}"
 
-        skill_manifest = {}
-        if self.skillbank and hasattr(self.skillbank, "select_context"):
-            scope_kwargs = (
-                {"task_metadata": task.metadata}
-                if getattr(self.skillbank, "supports_task_metadata", False)
-                else {}
-            )
-            selected_skills, skill_context, skill_manifest = self.skillbank.select_context(
-                task.prompt,
-                task_type=task.task_type,
-                tokenizer=self.director_tokenizer,
-                tools=getattr(self.runtime.executor, "tools", {}).keys(),
-                **scope_kwargs,
-            )
-        else:
-            selected_skills = (
-                self.skillbank.retrieve(task.prompt, task_type=task.task_type)
-                if self.skillbank
-                else []
-            )
-            skill_context = SolverSkillBank.format_prompt_context(selected_skills)
         action_adapter = self.action_registry.resolve(task)
         lifecycle_tools = getattr(self.runtime.executor, "tools", {})
         active_webshop_lifecycles = webshop_lifecycles(lifecycle_tools)
@@ -497,6 +489,32 @@ class AdaptiveWorkflowSolver:
             for lifecycle in active_swe_lifecycles:
                 lifecycle.bind_task(task)
             self.runtime.environment_fingerprint = active_swe_lifecycles[0].environment_fingerprint
+        effective_task = task.prompt
+        if action_adapter is not None and action_adapter.adapter_id == "alfworld":
+            effective_task = active_alfworld_lifecycles[0].effective_task
+        worker_task = (effective_task if action_adapter is not None and action_adapter.adapter_id == "alfworld"
+                       else solver_task_text(task, include_submission_contract=self.answer_finalizer is not None))
+        skill_manifest = {}
+        if self.skillbank and hasattr(self.skillbank, "select_context"):
+            scope_kwargs = (
+                {"task_metadata": task.metadata}
+                if getattr(self.skillbank, "supports_task_metadata", False)
+                else {}
+            )
+            selected_skills, skill_context, skill_manifest = self.skillbank.select_context(
+                effective_task,
+                task_type=task.task_type,
+                tokenizer=self.director_tokenizer,
+                tools=getattr(self.runtime.executor, "tools", {}).keys(),
+                **scope_kwargs,
+            )
+        else:
+            selected_skills = (
+                self.skillbank.retrieve(effective_task, task_type=task.task_type)
+                if self.skillbank
+                else []
+            )
+            skill_context = SolverSkillBank.format_prompt_context(selected_skills)
         base_canvas_config = self.canvas_config or CanvasConfig()
         dataset_key, selected_token_budget = base_canvas_config.token_budget_for_dataset(
             task.metadata.get("dataset", "")
@@ -507,20 +525,15 @@ class AdaptiveWorkflowSolver:
             "fallback_max_total_tokens": base_canvas_config.max_total_tokens,
         }
         canvas = GraphCanvas(
-            task=solver_task_text(
-                task, include_submission_contract=self.answer_finalizer is not None
-            ),
-            worker_task=solver_task_text(
-                task,
-                include_submission_contract=self.answer_finalizer is not None,
-            ),
+            task=worker_task,
+            worker_task=worker_task,
             # HealthBench evaluates the next reply in a public conversation;
             # task.prompt may contain only a context-dependent follow-up.
             director_task=(
                 solver_task_text(task)
                 if action_adapter is not None
                 and action_adapter.adapter_id == "healthbench_professional"
-                else task.prompt
+                else effective_task
             ),
             runtime=self.runtime,
             config=replace(base_canvas_config, max_total_tokens=selected_token_budget),

@@ -53,17 +53,25 @@ class WorkerUsageLedger:
             raise ValueError("invalid Worker usage account configuration")
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock_fd = os.open(str(self.path) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
-        try:
-            fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as exc:
-            os.close(self._lock_fd)
-            raise RuntimeError("Worker usage account is already active") from exc
         self.threshold = int(threshold)
         self.max_unsettled_attempts = int(max_unsettled_attempts)
         self.question_attempt_id = question_attempt_id
         self._lock = threading.RLock()
-        self._db = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
+        self._lock_fd: int | None = None
+        self._db: sqlite3.Connection | None = None
+        try:
+            self._lock_fd = os.open(str(self.path) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
+            try:
+                fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as exc:
+                raise RuntimeError("Worker usage account is already active") from exc
+            self._db = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
+            self._initialize_account()
+        except BaseException:
+            self.close()
+            raise
+
+    def _initialize_account(self) -> None:
         self._db.execute("PRAGMA busy_timeout=30000")
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("CREATE TABLE IF NOT EXISTS account (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL, threshold INTEGER NOT NULL, max_unsettled INTEGER NOT NULL, policy TEXT NOT NULL)")
@@ -75,7 +83,7 @@ class WorkerUsageLedger:
         self._db.execute("CREATE TABLE IF NOT EXISTS reconciliation (attempt_id TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, reconciled_at REAL NOT NULL)")
         with self._transaction():
             row = self._db.execute("SELECT identity, threshold, max_unsettled, policy FROM account WHERE id=1").fetchone()
-            expected = (question_attempt_id, self.threshold, self.max_unsettled_attempts, POLICY)
+            expected = (self.question_attempt_id, self.threshold, self.max_unsettled_attempts, POLICY)
             if row is None:
                 self._db.execute("INSERT INTO account VALUES (1, ?, ?, ?, ?)", expected)
             elif tuple(row) != expected:
@@ -90,7 +98,7 @@ class WorkerUsageLedger:
             try:
                 yield
                 self._db.commit()
-            except Exception:
+            except BaseException:
                 self._db.rollback()
                 raise
 
@@ -218,7 +226,16 @@ class WorkerUsageLedger:
             return all(before < self.threshold for (before,) in rows)
 
     def close(self) -> None:
+        """Release the connection and flock once, including partial initialization."""
         with self._lock:
-            self._db.close()
-            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
-            os.close(self._lock_fd)
+            connection, self._db = self._db, None
+            lock_fd, self._lock_fd = self._lock_fd, None
+            try:
+                if connection is not None:
+                    connection.close()
+            finally:
+                if lock_fd is not None:
+                    try:
+                        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                    finally:
+                        os.close(lock_fd)

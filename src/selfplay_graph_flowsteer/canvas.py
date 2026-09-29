@@ -553,7 +553,20 @@ class GraphCanvas(UnifiedSubmissionMixin):
                     else None
                 ),
             )
+        budget_cleanup = False
         if self.unified:
+            protected = self._protected_alfworld_candidates()
+            if protected and (action.action_type is not ActionType.FINISH or action.target not in protected):
+                return self._reject_graph_action(action, code="alfworld_terminal_candidate_protected",
+                    message="A current trusted successful episode is ready. Submit it with FINISH(target).",
+                    rejection_details={"targets": protected})
+            ledger = self.runtime.worker_usage_ledger
+            if ledger is not None and ledger.stop_reason() and action.action_type is not ActionType.FINISH:
+                budget_cleanup = (action.action_type is ActionType.DELETE_AGENT
+                    and str(action.target or action.agent_id) in self._alfworld_budget_cleanup_targets())
+                if not budget_cleanup:
+                    return self._reject_graph_action(action, code=ledger.stop_reason(),
+                        message="Worker dispatch stopped. Only FINISH or a listed zero-Worker cleanup deletion is allowed.")
             if action.action_type is ActionType.SET_OUTPUT:
                 return self._reject_graph_action(action, code="retired_action", message="Use result_scope in SET_PROMPT and FINISH(target).")
             if action.action_type is ActionType.SET_PROMPT and action.result_scope not in RESULT_SCOPES:
@@ -1134,6 +1147,17 @@ class GraphCanvas(UnifiedSubmissionMixin):
 
         self._refresh_structural_repair(action)
 
+        if budget_cleanup:
+            # The preview proved that every retained artifact still has the
+            # same inputs. Prune bookkeeping directly; never enter execution.
+            self.dirty_agents.intersection_update(self.graph.nodes)
+            self.runtime.prune_deleted_agents(self.graph)
+            self._token_admission_event.update(
+                budget_cleanup="current_candidate_zero_worker_v1",
+                deleted_agent=str(action.target or action.agent_id),
+                worker_calls=0,
+            )
+
         field_repairs = (
             [repair.to_dict() for repair in compilation.field_repairs]
             if compilation is not None
@@ -1147,6 +1171,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         )
         should_execute = (
             action.action_type is not ActionType.ADD_AGENT
+            and not budget_cleanup
             and not pending_output_waits_for_model
             and not staged_environment_cleanup
             and (
@@ -2160,7 +2185,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         executable_dirty = self.dirty_agents & configured
         if not executable_dirty and not force:
             return None
-        if self.dataset == "swe_bench" and configured:
+        if (self.dataset == "swe_bench" or self.runtime.worker_usage_ledger is not None) and configured:
             usage_ledger = self.runtime.worker_usage_ledger
             remaining = max(0, self.config.max_total_tokens - self.total_tokens)
             if usage_ledger is not None:
@@ -2176,7 +2201,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
                     metadata = self.graph.nodes[agent_id].metadata
                     metadata.pop("_runtime_token_credit", None)
                     metadata.pop("_runtime_finalization_output_reserve", None)
-                    metadata["_runtime_budget_kind"] = "swe_reported_usage_threshold_v1"
+                    metadata["_runtime_budget_kind"] = "reported_usage_threshold_v1"
             else:
                 self._token_admission_event.update(
                     budget_schema=SWE_SHARED_TOKEN_BUDGET,

@@ -125,6 +125,9 @@ class ALFWorldSessionLifecycle:
     max_observation_chars: int = 4_000
     adapter_id: str = "alfworld"
     attempt_scoped_budget: bool = True
+    task_prompt_source: str = "dataset"
+    _prepared_payload: dict[str, Any] | None = None
+    _effective_task: str = ""
     _task: TaskSpec | None = None
     _game_path: Path | None = None
     _game_fingerprint: str = ""
@@ -146,6 +149,10 @@ class ALFWorldSessionLifecycle:
     def environment_fingerprint(self) -> str:
         return self._game_fingerprint
 
+    @property
+    def effective_task(self) -> str:
+        return self._effective_task
+
     def bind_task(self, task: TaskSpec) -> None:
         with self._lock:
             self.close_all()
@@ -157,6 +164,32 @@ class ALFWorldSessionLifecycle:
             self._results = {}
             self._rollout_steps = 0
             self._attempt_index = 0
+            if self.task_prompt_source not in {"dataset", "environment_reset"}:
+                raise ValueError("unknown ALFWorld task_prompt_source")
+            self._effective_task = task.prompt
+            if self.task_prompt_source == "environment_reset":
+                payload = self.client.create_session(str(game_path), max_steps=self.max_episode_steps)
+                self._prepared_payload = payload
+                try:
+                    if not str(payload.get("session_id", "")).strip():
+                        raise RuntimeError("ALFWorld reset returned no session_id")
+                    self._effective_task = self._reset_goal(payload)
+                    if not self._effective_task:
+                        raise RuntimeError("ALFWorld reset has no public task statement")
+                    task.metadata["alfworld_task_binding"] = {
+                        "version": "environment_reset_v1", "source": self.task_prompt_source,
+                        "original_task": task.prompt, "effective_task": self._effective_task,
+                        "game_fingerprint": self._game_fingerprint,
+                        "prepared_session_id": str(payload["session_id"]),
+                    }
+                except BaseException:
+                    self.close_all()
+                    raise
+
+    @staticmethod
+    def _reset_goal(payload: dict[str, Any]) -> str:
+        _, marker, goal = str(payload.get("observation", "")).partition("Your task is to:")
+        return goal.strip() if marker else ""
 
     def begin_execution(self, *, agent_id: str, seed: int, revision: bool) -> dict[str, Any]:
         del seed
@@ -185,12 +218,16 @@ class ALFWorldSessionLifecycle:
                 return dict(state)
             if self._rollout_steps >= self.max_rollout_steps:
                 raise RuntimeError("ALFWorld rollout environment-step budget is exhausted")
-            payload = self.client.create_session(
-                str(self._game_path), max_steps=self.max_episode_steps
-            )
+            payload = self._prepared_payload
+            if payload is None:
+                payload = self.client.create_session(str(self._game_path), max_steps=self.max_episode_steps)
+            self._prepared_payload = None
             session_id = str(payload.get("session_id", "")).strip()
             if not session_id:
                 raise RuntimeError("ALFWorld session creation returned no session_id")
+            if self.task_prompt_source == "environment_reset" and self._reset_goal(payload) != self._effective_task:
+                self.client.close_session(session_id)
+                raise RuntimeError("ALFWorld reset public task differs from the prepared task")
             self._active_agent = str(agent_id)
             self._active_session = session_id
             self._attempt_index += 1
@@ -307,6 +344,12 @@ class ALFWorldSessionLifecycle:
     def close_all(self) -> None:
         with self._lock:
             self._close_active()
+            if self._prepared_payload is not None:
+                session_id = str(self._prepared_payload.get("session_id", ""))
+                self._prepared_payload = None
+                if session_id:
+                    self.client.close_session(session_id)
+            self._effective_task = ""
             for agent_id, (session_id, _, _, _) in list(self._sessions.items()):
                 self.client.close_session(session_id)
                 del self._sessions[agent_id]
@@ -404,6 +447,9 @@ class ALFWorldSessionLifecycle:
     ) -> dict[str, Any]:
         return {
             "adapter": self.adapter_id,
+            "task_id": self._task.task_id if self._task else None,
+            "session_id": self._active_session,
+            "task_prompt_source": self.task_prompt_source,
             "game_fingerprint": self._game_fingerprint,
             "attempt_index": self._active_attempt_index,
             "revision": bool(revision),

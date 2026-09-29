@@ -411,7 +411,7 @@ def test_alfworld_scores_selected_episode_and_keeps_success_after_text_failure(
     from selfplay_graph_flowsteer.observability import VerificationResult
 
     lifecycle = SimpleNamespace(
-        bind_task=lambda task: None,
+        bind_task=lambda task: setattr(lifecycle, "effective_task", task.prompt),
         close_all=lambda: None,
         environment_fingerprint="isolated-fixture",
         result_for=lambda agent: {},

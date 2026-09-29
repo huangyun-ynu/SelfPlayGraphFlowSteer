@@ -93,6 +93,7 @@ class CanvasConfig:
     submission_protocol: str = "legacy"
     submission_protocol_by_dataset: dict[str, str] = field(default_factory=dict)
     submission_journal_dir: str = "state/submissions"
+    alfworld_terminal_candidate_policy: str = "off"
     max_recovery_executions: int = 2
     action_budget_policy: str = "phase_split_v1"
     max_agents: int = 8
@@ -143,18 +144,25 @@ class CanvasConfig:
     def __post_init__(self) -> None:
         if self.submission_protocol not in {"legacy", "unified_task_result_v1"}:
             raise ValueError("unsupported submission_protocol")
-        for dataset, protocol in self.submission_protocol_by_dataset.items():
-            if canonical_dataset_name(dataset) != "swe_bench":
-                raise ValueError("dataset submission protocol overrides currently support SWE only")
+        protocols = {canonical_dataset_name(key): value
+                     for key, value in self.submission_protocol_by_dataset.items()}
+        for dataset, protocol in protocols.items():
+            if dataset not in {"swe_bench", "alfworld"}:
+                raise ValueError("dataset submission protocol overrides support SWE and ALFWorld only")
             if protocol not in {"legacy", "unified_task_result_v1"}:
                 raise ValueError("unsupported dataset submission_protocol")
+        if self.alfworld_terminal_candidate_policy not in {"off", "finish_only_v1"}:
+            raise ValueError("unknown ALFWorld terminal candidate policy")
         if self.max_recovery_executions < 0:
             raise ValueError("max_recovery_executions must be non-negative")
         if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
             raise ValueError("unknown canvas.action_budget_policy")
         for dataset, policy in self.worker_token_budget_by_dataset.items():
-            if canonical_dataset_name(dataset) != "swe_bench" or not isinstance(policy, dict):
-                raise ValueError("reported Worker usage policy is supported for SWE only")
+            if canonical_dataset_name(dataset) not in {"swe_bench", "alfworld"} or not isinstance(policy, dict):
+                raise ValueError("reported Worker usage policy is supported for SWE and ALFWorld only")
+            if (canonical_dataset_name(dataset) == "alfworld"
+                    and protocols.get("alfworld", self.submission_protocol) != "unified_task_result_v1"):
+                raise ValueError("ALFWorld reported usage requires unified_task_result_v1")
             if policy.get("policy") != "reported_usage_threshold_v1":
                 raise ValueError("unknown SWE Worker usage policy")
             if policy.get("accounting_scope", "question_attempt") != "question_attempt":
@@ -184,7 +192,7 @@ class CanvasConfig:
         overrides = {canonical_dataset_name(key): value
                      for key, value in self.submission_protocol_by_dataset.items()}
         protocol = overrides.get(canonical_dataset_name(dataset))
-        return (replace(self, submission_protocol=protocol, submission_protocol_by_dataset={})
+        return (replace(self, submission_protocol=protocol)
                 if protocol is not None else self)
 
     def director_edit_limit(self, dataset: object) -> int | None:

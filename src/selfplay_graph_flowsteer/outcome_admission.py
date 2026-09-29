@@ -117,7 +117,7 @@ def terminal_policy_failure(
     # An overrun is an admission/accounting defect, not evidence that the model
     # knowingly spent a correctly enforced budget.
     if (worker_token_limit > 0 and worker_tokens > worker_token_limit
-            and not (dataset == "swe_bench" and worker_budget_policy == "reported_usage_threshold_v1"
+            and not (dataset in {"swe_bench", "alfworld"} and worker_budget_policy == "reported_usage_threshold_v1"
                      and worker_dispatch_valid)):
         return None
     for artifact in [*artifacts.values(), *(historical_artifacts or {}).values()]:

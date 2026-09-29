@@ -1,0 +1,358 @@
+{
+  "schema": "spgfs-formal-promotion-v1",
+  "id": "alf-swe-statefix-20260929",
+  "date": "2026-09-29",
+  "status": "formal_local",
+  "entrypoint": "scripts/formal/run_experiment.sh",
+  "config": "configs/formal_training.toml",
+  "before_commit": "8ac3ab6369daa46d4b1874b647033e6ab3a07b2c",
+  "archive_tag": "archive/formal-before-alf-swe-statefix-20260929",
+  "source_versions": {
+    "alfworld_evaluated": "478b38f957746d34cf07f6a3f4b6ffd6b339d6c8",
+    "alfworld_verification": "4837fbcc0f50521081d585769aedbeb7b0584c50",
+    "swe_evaluated": "10a144ccaf27e2aed3b5ac201b6e81ece0aa7f5e",
+    "swe_verification": "8ac3ab6369daa46d4b1874b647033e6ab3a07b2c"
+  },
+  "historical_full_evaluation": {
+    "alfworld": {
+      "passed": 102,
+      "total": 128
+    },
+    "swe_bench": {
+      "passed": 65,
+      "total": 128
+    },
+    "note": "Historical results; no fresh 128-question inference after this promotion."
+  },
+  "real_regression": {
+    "worker_tokens": 458339,
+    "cases": 3,
+    "passed": 2,
+    "failed": 1,
+    "report": "experiment_versions/reports/real-failure-state-fix-20260929/README.zh-CN.md"
+  },
+  "protocols": {
+    "swe_bench": "unified_task_result_v1",
+    "alfworld": "unified_task_result_v1"
+  },
+  "task_prompt_source": "environment_reset",
+  "terminal_candidate_policy": "finish_only_v1",
+  "worker_usage_policies": {
+    "swe_bench": {
+      "policy": "reported_usage_threshold_v1",
+      "start_threshold": 350000,
+      "accounting_scope": "question_attempt",
+      "max_inflight_requests": 1,
+      "unknown_usage_policy": "continue_bounded",
+      "max_unsettled_attempts": 2
+    },
+    "alfworld": {
+      "policy": "reported_usage_threshold_v1",
+      "start_threshold": 350000,
+      "accounting_scope": "question_attempt",
+      "max_inflight_requests": 1,
+      "unknown_usage_policy": "continue_bounded",
+      "max_unsettled_attempts": 2
+    }
+  },
+  "training_counterfactual": {
+    "effective_environment_goal": true,
+    "independent_usage_account_per_attempt": true,
+    "unknown_usage_training_credit": false
+  },
+  "config_validation": [
+    {
+      "config": "formal_training.toml",
+      "valid": true,
+      "submission_protocol_by_dataset": {
+        "swe_bench": "unified_task_result_v1",
+        "alfworld": "unified_task_result_v1"
+      },
+      "task_prompt_source": "environment_reset",
+      "usage_datasets": [
+        "alfworld",
+        "swe_bench"
+      ],
+      "alfworld_routes": [
+        "gpt",
+        "grok",
+        "gemini",
+        "deepseek",
+        "minimax"
+      ],
+      "swe_routes": [
+        "gpt"
+      ]
+    },
+    {
+      "config": "formal_eval_worker08_main_v22.local.toml",
+      "valid": true,
+      "submission_protocol_by_dataset": {
+        "swe_bench": "unified_task_result_v1",
+        "alfworld": "unified_task_result_v1"
+      },
+      "task_prompt_source": "environment_reset",
+      "usage_datasets": [
+        "alfworld",
+        "swe_bench"
+      ],
+      "alfworld_routes": [
+        "gpt",
+        "grok",
+        "gemini",
+        "deepseek",
+        "minimax"
+      ],
+      "swe_routes": [
+        "gpt"
+      ]
+    }
+  ],
+  "execution_semantics": {
+    "director_action_protocol_version": "director_action_json_v2",
+    "output_contract_version": "task_result_v1",
+    "submission_contract_version": "finish_submission_v2_grade_answer_format",
+    "submission_admission_config": {
+      "canvas": {
+        "submission_protocol": "legacy",
+        "submission_protocol_by_dataset": {
+          "swe_bench": "unified_task_result_v1",
+          "alfworld": "unified_task_result_v1"
+        },
+        "submission_journal_dir": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-alf-swe-statefix-v1/submissions",
+        "alfworld_terminal_candidate_policy": "finish_only_v1",
+        "max_recovery_executions": 2,
+        "action_budget_policy": "phase_split_v1",
+        "max_agents": 4,
+        "max_rounds": 24,
+        "director_budget_policy": "rounds_v1",
+        "max_director_edits": null,
+        "max_director_edits_by_dataset": {},
+        "max_total_tokens": 32768,
+        "max_total_tokens_by_dataset": {
+          "aime": 240000,
+          "nq_open": 240000,
+          "hotpotqa": 240000,
+          "webshop": 350000,
+          "alfworld": 350000,
+          "healthbench_professional": 240000,
+          "swe_bench": 350000
+        },
+        "worker_token_budget_by_dataset": {
+          "swe_bench": {
+            "policy": "reported_usage_threshold_v1",
+            "start_threshold": 350000,
+            "accounting_scope": "question_attempt",
+            "max_inflight_requests": 1,
+            "unknown_usage_policy": "continue_bounded",
+            "max_unsettled_attempts": 2
+          },
+          "alfworld": {
+            "policy": "reported_usage_threshold_v1",
+            "start_threshold": 350000,
+            "accounting_scope": "question_attempt",
+            "max_inflight_requests": 1,
+            "unknown_usage_policy": "continue_bounded",
+            "max_unsettled_attempts": 2
+          }
+        },
+        "relay_max_chars": 1000,
+        "feedback_max_chars": 6000,
+        "artifact_summary_max_chars": 320,
+        "structural_repair_enabled": true,
+        "graph_growth_token_reserve": 8192,
+        "remaining_time_admission_enabled": false,
+        "worker_latency_quantile": 0.95,
+        "worker_latency_window": 64,
+        "worker_latency_min_samples": 3,
+        "worker_latency_cold_start_s": 30.0,
+        "finalization_time_reserve_s": 20.0,
+        "finalization_time_reserve_by_dataset": {
+          "healthbench_professional": 180.0,
+          "swe_bench": 120.0
+        },
+        "remaining_token_admission_enabled": false,
+        "native_webshop_output_materialization": false,
+        "worker_token_quantile": 0.95,
+        "worker_token_window": 64,
+        "worker_token_min_samples": 3,
+        "worker_token_cold_start": 4096,
+        "finalization_token_reserve": 2048,
+        "repair_recent_action_limit": 5,
+        "semantic_no_progress_limit": 2,
+        "output_selection_budget": 1,
+        "structural_exploration_policy": "off",
+        "bidirectional_revision_policy": "always",
+        "bidirectional_revision_confidence_threshold": 0.8
+      },
+      "answer_submission": {
+        "enabled": true
+      },
+      "alfworld_task_prompt_source": "environment_reset"
+    },
+    "worker_output_role_version": "worker_output_role_v1",
+    "director_prompt_variant": "v2.2",
+    "director_prompt_variant_by_dataset": {
+      "swe_bench": "v3",
+      "alfworld": "v3"
+    },
+    "director_prompt_template_sha256_by_dataset": {
+      "swe_bench": {
+        "code": "0c2f85a7100579d5633276baa84ce0d511c689f622059ef3ae57882a01aaa58b",
+        "environment": "57af03da709916e43c0f304e61e20c6360ad1572fbc7483277117cfa0065eb4c",
+        "general": "6dc28a28d87e24183811559223e306a6267f5ecd10172e97d52d63e46a35af78",
+        "math": "f13f5c6633cf8750dfb8aba2d01b41449a621638b5e8ccbc0621dcf05f843795",
+        "response": "567dc3372bc5de0d677d3796f169383e385b4ab4d8f8d94f1e13f8f31f76c968",
+        "retrieval_qa": "d26712dafaeb7b92273c50789a8dd637d832df39f572bf7d325cad54be7f391c"
+      },
+      "alfworld": {
+        "code": "0c2f85a7100579d5633276baa84ce0d511c689f622059ef3ae57882a01aaa58b",
+        "environment": "57af03da709916e43c0f304e61e20c6360ad1572fbc7483277117cfa0065eb4c",
+        "general": "6dc28a28d87e24183811559223e306a6267f5ecd10172e97d52d63e46a35af78",
+        "math": "f13f5c6633cf8750dfb8aba2d01b41449a621638b5e8ccbc0621dcf05f843795",
+        "response": "567dc3372bc5de0d677d3796f169383e385b4ab4d8f8d94f1e13f8f31f76c968",
+        "retrieval_qa": "d26712dafaeb7b92273c50789a8dd637d832df39f572bf7d325cad54be7f391c"
+      }
+    },
+    "director_action_protocol_version_by_dataset": {
+      "swe_bench": "director_action_json_v3",
+      "alfworld": "director_action_json_v3"
+    },
+    "submission_contract_version_by_dataset": {
+      "swe_bench": "unified_submission_v1",
+      "alfworld": "unified_submission_v1"
+    },
+    "director_prompt_template_sha256_by_problem_type": {
+      "code": "7ea0adc46e2aa74362094a2a1c851fdb596ad230829789b890ecbfcedda26663",
+      "environment": "0ba6c37057c684f58459674d82571c82ebceb844c1568e0ad448f6bbcc327878",
+      "general": "6bed5cfef5f85dac68cc1269cce140f832f879bf380548041c6ba9bbe12cb0a3",
+      "math": "6804c6b9353a5ade63374d260a5b2b19b8571e115c0c72f401c1824bab8c565a",
+      "response": "4a72117ae97e4dc7fee3c9752f11fa530ce1f141c273947c8bc583263ad868a2",
+      "retrieval_qa": "418d5ec50e981d90bb6fd12e0448413cbea452652cddff1a6128485204ee4857"
+    },
+    "worker_and_recovery_sha256": {
+      "hotpotqa:False": "9868116bfbf81cf47ffd926c641ce179a6e38330b35514856395a300af7ac71f",
+      "hotpotqa:True": "0025cfe55cf690d3680395469cae7a2d7f5a9e65e7e979725c87d3043c4a03a7",
+      "nq_open:False": "032421d35a16387d7c4a508a8e82eb9ef1f0736d406250571e4be9a7d2b38407",
+      "nq_open:True": "4ecd35aea07cfcab4de75a8d7325298ff3a662238108b6eb05210072f6c8da3c",
+      "aime:False": "c7a63d1001cce74c06871c4b696a20c2453cd1c406804b0f7962ad662570cddd",
+      "aime:True": "c8593678cbec2281d70de06d6b22ee6e7dd40df1d64070dae2161fdd3cfb4792",
+      "healthbench_professional:False": "e4c5c5882f8b017d026f76fb81efdf6e4a5d7462d4b68adacb15240c1b646241",
+      "healthbench_professional:True": "3376304db8c162ca97275dcc3549166f19a9c4d74a3619386de66ff0e72eead2",
+      "alfworld:False": "0c613e1d1daf66135470acd5ff7a1350f2cdd152dceb9daaa09333f8682a1ba6",
+      "alfworld:True": "3c00e06670d6a56e31fac09bd2fc63a0227d1ec890fae66158b0df88c4e8e6ea",
+      "webshop:False": "6f1e500fb757b6fc4f3664fc016e87305a34ab09811b55b779d56576cb8b85ef",
+      "webshop:True": "6f1e500fb757b6fc4f3664fc016e87305a34ab09811b55b779d56576cb8b85ef",
+      "swe_bench:False": "d8108af2b598313a148267696b2892f9f9f172a06b5bc41c42ef164df8687714",
+      "swe_bench:True": "b5d0b613aa21d5ca78545bb5b0e921819820f9de04fdd805c642539e1fb53dec",
+      ":False": "c7a63d1001cce74c06871c4b696a20c2453cd1c406804b0f7962ad662570cddd",
+      ":True": "a48f1db87910adbbb6ab3755e643f522fad4efc0722eecb732c771795939e012"
+    },
+    "contract_source_sha256": {
+      "execution_contract": "6c0066176ad594c90c15dc5a0b3ed5b9254600e168e70c6395259cb8862bdba6",
+      "actions": "420a8c34eca921e44cdbb39cd0dae1ca10a5fff5ef52fddea06afa024b25332b",
+      "output_contract": "31c69774e93239d48df2903449b4fe2789d28138c35b8622edb96b35a729e8e0",
+      "hotpot_answer_contract": "d9ff12c879c51a4c894824488f10e7a14a44d53caafef28ff9432ef6e1088631",
+      "runtime": "b396fcdceedfe8da4c9fc0fadb3821a719afad3c76763430b5f031f362e4770b",
+      "llm": "88206d578e72954e99467ba052d3e9a3e8b0ab7e2f9f01c6e4539cf71336349b",
+      "artifact_protocol": "58752493b8971ca7f18406ccab342ead04fd680d03f237057153de4982738601",
+      "endpoint_pool": "3157eca96ea78e262cd7ad95f4ff83af6c26149b622d53c769bf4319eaae2af5",
+      "director": "4b829443a50dc3d0d67cb9677d5e98caa738cf7daef8b9bcd3cea9a8e24059b8",
+      "canvas": "e6b3aae294e49d9bf9101a07da8a3066b24ede6938ed1c84fd1cf28c2795c82e",
+      "graph": "00cdbfe5357c6ce2bf57099a0dfb824d5cb737b57b11cd0de69b666882f1c224",
+      "delegation": "2af35114dd2eb1dc90fae61610fe5ff74242604eb9e37ae2143955674cde1fbc",
+      "counterfactual": "af75458d105cef73a39cfccf4ffea64d9ba5e5b4ea80b7623649d67adfd496fa",
+      "adaptive": "d383d78cc65888b4851735809b30e7a72307db41855a3b353c46e5d2d84da70d",
+      "answer_submission": "6e18fd5050053191291ddd19dc24503e069e049a41903678ab59c86d77bfe7e5",
+      "submission_contract": "cd2798da588db006618bf66c2b68995bb2cdafb37879028f0259d6a31b4f6b98",
+      "unified_contract": "ddded776f6513fa5667e6a895a4a6907d924b85706fcc92ca5e1034858f00d4a",
+      "unified_submission": "5fc18a266a6864c13f4196129cbc7141753098af20525556d60321b8847933f3",
+      "webshop_native": "5b513cff4f5f72f5e5948d8b3c581d31d1b5979973461e19ca0786dcd50a20c3",
+      "webshop": "c045510d794b37b809e933416b33de731f9ef1354a07b1a16842f54a2bbd6c88",
+      "webshop_sidecar": "aeaadfdbfc789977ff246f0037742dadf343dd7f3813d4fce384bb9a0db8d9a6",
+      "webshop_profiles": "cfe62a3ba5caa7538e7e0a2eee9b4cbc1156cabdeec21c38e7024d646d9daa0e",
+      "webshop_steps": "f037421b61ae2af4b646aebf16061d1b435dd69ede3f8dc54e41473e83bdc231",
+      "webshop_evidence": "0e6b30b473ec7524b0791a7e6b8d29c8e9b75c83078006b2855c5846ace482f4",
+      "webshop_native_executor": "b7bd17e8f81a9c5dc2fa99e7a386b23707be883e148600e075e7d4f48286a5d3",
+      "alfworld": "0d4df6478a8c29ad777d2c51e8d00e84fedc88176420c8789d2c5712736b7082",
+      "swebench": "e9b6668e21e4fcac2ecb775188edbbd0bdac8b8d6190f3173519730326a8dab2",
+      "worker_usage_ledger": "27d7ba8f9a8176ce0f173932b101525890134b706cbb5a0e1bf0b1a02b9bcc3e",
+      "student_action_protocol": "070047ebb6432cf2db31da10d4e535e67fb3338771c15a162db8068e81198545",
+      "swe_public_tests": "32eb1d813c10e00a74f08c45b2e5a4d7b7906cefbea979ce3b10a02af8d6fbaa",
+      "swe_public_recipes": "01445119112ffe688782d1eacfb4dedbc3f0d1b5071195302fddfe3bd71f3f44",
+      "_swe_public_probe": "3ae6160fcfe3a5ccd5525a2e8fdeb0394a2cb3567b393552e80f4df1c30ea332",
+      "outcome_admission": "49da0398d7cfe8469a13454c544bb4990c3a20b4dbaf213e1e0fd8261852509a",
+      "swe_failure_attribution": "5d93f005a767cd7c37b5174145cf9f4ce5afd0a29a74e737404b9cfa3f264a42",
+      "selfplay_runtime": "253093c46d2bf78fcd3e8c9144fa01adf2e1f1169ef476afbc3b3b2c76bc6203",
+      "protocol_reward": "700edb3be98e19332d20a166e13f6db844e1c24c156b7e96c723d166fadbb5ce",
+      "application": "e0169958e789cb0b9c83ed0ed5f58ee9596aa20b737e3f363fe38cae8202ce52",
+      "evaluation": "94b5effb4943e9d658c8c808fe3fc5c054023612e1fe74b5a23e3e2947f3c68d",
+      "observability": "9536ad5b61c61d61d89c34e5730b9c56d08b6aa17ed627339c32d9ec116588d2",
+      "benchmark": "561dc69b28b9a97631ebb075f8c1444e73ec940a9f720b5691adcef7cac0a918",
+      "benchmark_tracking": "2c3b4d97dd2b9c3b7a1f04399cbb83acec8d8b985d64adf93002165502f182db",
+      "benchmark_reporting": "079c5173f0f833679b2af20c851a6ec364b413edeafad38b44c5f59500c170f0",
+      "qa_metrics": "496f10e3fdaa1fa2f3467fb900f3819e4fed5bf95f87073b76b9069f89845b6b",
+      "qa_submission": "4ad24c158e798dc35ee46b13bf611f07321be8ce0d1e24c2e8d40522ebb35864",
+      "aime_submission": "7745cf34e82c3720c707ad9ff43db7208e0922a031f51f73d73eecadbbc756b3",
+      "outcome_metrics": "975458e10c1e03c2c20f66e8a4f94785d1e3f04338e999ca0a251b1bdb2d4bfc",
+      "rollouts": "02c6fbd5fd4878ce90ad9fbd8b6237bb5713f53a1201770aa8601f6a1ff16088",
+      "training": "5ae215846909d5165dc379093e1039f2ce2eecd3c6fcaee096836153c54104dc",
+      "selfplay": "bc6a08c90d423fe980a1199271540f4336c32336f6cc1a82f1ab9a7c6fa8a43d",
+      "async_cycle": "b06e2db97b315876a3d1ad4f13d40b3a476461b13d717650d8af63f96a32e3c5",
+      "config": "bacd3f1a0bcd8f7da9d5b32e0e363b62dd39385e1bfae18e56e7c1457e57edef",
+      "pats_semantics": "e6f981a2a6b3c4f9d6088ba5ca378ad1f6aabf4f13047a9723fcc5d5506bd3f6",
+      "pats_refiner": "abefbc99a09872fac56ef3ff55873227687eff577e29d308bbe52d5df70fd5ea",
+      "pats": "bda8ed97f15499a5d8f60a2e0dd27a86226e75fb66a176a0fde07b215c5b0c28",
+      "skill_evolution_v2": "43595907b26b4e53ac27bc66e730d60d613dabc1c8404c1cf909da1dc6cc60eb"
+    },
+    "director_seed_sha256": "5ce76ec5b36964606e8bb827a4b2c06aa018a5647f56415beb78de5c08f2ea7c",
+    "pats_semantic_revision": "director_runtime_semantics_v5_action_json",
+    "pats_runtime_contract_sha256": "deca610b569af3526961c8e031bbfe844f37eb86ecfac92a9a7f7226843d9346",
+    "pats_runtime_contract_sha256_by_dataset": {
+      "swe_bench": "32cf29a4c9021c0d1062ffb55907402df687e043273e77e2b49e9b4474fe2a06",
+      "alfworld": "32cf29a4c9021c0d1062ffb55907402df687e043273e77e2b49e9b4474fe2a06"
+    }
+  },
+  "changed_files_sha256": {
+    "configs/formal_training.toml": "e83624e7dbb31fe374a17226a05aed770fd629c9b3df78ecdb095fde793bec17",
+    "docs/ALF_SWE_FORMAL_PROMOTION_20260929.zh-CN.md": "788b4f28ce23096280fe0a437df77add1bf09eaa004c099f678f3cc260540aa9",
+    "docs/FORMAL_TRAINING_CONFIG.zh-CN.md": "965ab9e924ef344bc9bdffe25d9697fbce2565ba77b387b903796fa2372133c1",
+    "experiment_versions/README.md": "55d4d03fdd68b7bb10fc94a8e37ee3682039ab4fe4a075b9a87b3c0c1b81d92e",
+    "src/selfplay_graph_flowsteer/adaptive.py": "d383d78cc65888b4851735809b30e7a72307db41855a3b353c46e5d2d84da70d",
+    "src/selfplay_graph_flowsteer/alfworld.py": "0d4df6478a8c29ad777d2c51e8d00e84fedc88176420c8789d2c5712736b7082",
+    "src/selfplay_graph_flowsteer/application.py": "e0169958e789cb0b9c83ed0ed5f58ee9596aa20b737e3f363fe38cae8202ce52",
+    "src/selfplay_graph_flowsteer/canvas.py": "e6b3aae294e49d9bf9101a07da8a3066b24ede6938ed1c84fd1cf28c2795c82e",
+    "src/selfplay_graph_flowsteer/config.py": "bacd3f1a0bcd8f7da9d5b32e0e363b62dd39385e1bfae18e56e7c1457e57edef",
+    "src/selfplay_graph_flowsteer/outcome_admission.py": "49da0398d7cfe8469a13454c544bb4990c3a20b4dbaf213e1e0fd8261852509a",
+    "src/selfplay_graph_flowsteer/runtime.py": "b396fcdceedfe8da4c9fc0fadb3821a719afad3c76763430b5f031f362e4770b",
+    "src/selfplay_graph_flowsteer/submission_contract.py": "cd2798da588db006618bf66c2b68995bb2cdafb37879028f0259d6a31b4f6b98",
+    "src/selfplay_graph_flowsteer/unified_submission.py": "5fc18a266a6864c13f4196129cbc7141753098af20525556d60321b8847933f3",
+    "src/selfplay_graph_flowsteer/worker_usage_ledger.py": "27d7ba8f9a8176ce0f173932b101525890134b706cbb5a0e1bf0b1a02b9bcc3e",
+    "tests/test_alf_swe_formal_promotion.py": "8033f1726a7395a8595e782922070816b3f389d9c6f76f757c1b4795e2e1c7a6",
+    "tests/test_alfworld_budget_cleanup.py": "2ae4e9eabed115592ab18b33dcfa581373bf9a13849bd6734bd685df625b42c7",
+    "tests/test_alfworld_v3_usage.py": "c72e3ff4a99cdc5b798d798008230ab98b480418708343eb887554c5cbf367ad",
+    "tests/test_output_contract.py": "91c73a1a9b3708f7bc6f9d91217429e7667981a7b22776dca23441098fd64f51",
+    "tests/test_runtime.py": "d5c07efa170b0f9ce7e3ff4381e93f9ce6ed7709a753cd7be44fab5fa7c7b2e3",
+    "tests/test_worker_usage_cleanup.py": "38ee0afa4fb717dcc914d170e05964306af6e3b062f58964066fa292e7213b81"
+  },
+  "new_paid_inference_requests": 0,
+  "parameter_updates": 0,
+  "publication": "Not yet pushed; previous push rejected because GitHub HTTPS write credentials are unavailable.",
+  "validation": {
+    "targeted": {
+      "passed": 421,
+      "deselected": 1,
+      "log": "targeted-tests.log"
+    },
+    "excluded_test": "tests/test_canvas_director.py::test_recorded_aime16_output_switch_trace_stops_after_first_unproductive_switch",
+    "excluded_reason": "Missing historical local AIME trace 064ef67eca667e6894335446.json",
+    "broader_initial_run": {
+      "passed": 532,
+      "failed": 4,
+      "fixed_then_retested": 3,
+      "remaining_missing_fixture": 1
+    },
+    "configuration_profiles_validated": 2,
+    "git_diff_check": "passed"
+  }
+}

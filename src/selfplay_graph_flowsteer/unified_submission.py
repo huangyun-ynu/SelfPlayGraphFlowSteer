@@ -435,6 +435,60 @@ class UnifiedSubmissionMixin:
                 self.state = CanvasState.FAILED
                 return self._record(action, accepted=False, feedback="Submission status is uncertain; the persisted transaction is locked and must not be replayed with another target.", rejection_code="submission_commit_unknown", final_execution=True)
 
+    def _protected_alfworld_candidates(self):
+        if (self.dataset != "alfworld"
+                or self.config.alfworld_terminal_candidate_policy != "finish_only_v1"):
+            return []
+        candidates = []
+        for target in sorted(self.graph.nodes):
+            assessment = self.submission_assessment(target, include_payload=True)
+            payload = assessment.get("payload", {})
+            if assessment["submit_ready"] and payload.get("done") is True and payload.get("won") is True:
+                candidates.append(target)
+        return candidates
+
+    def _alfworld_budget_cleanup_targets(self):
+        """Preview deletions that retain a current win without scheduling work.
+
+        Only current artifacts are considered. A deletion must not invalidate
+        any retained node, or leave pending execution behind. No old graph or
+        candidate is restored, and the Director chooses each deletion.
+        """
+        ledger = self.runtime.worker_usage_ledger
+        if (self.dataset != "alfworld" or ledger is None or not ledger.stop_reason()
+                or ledger.status()["inflight_request_count"]
+                or self._unified_transaction is not None or self.pending_relation_decision):
+            return []
+        winners = []
+        for target in sorted(self.graph.nodes):
+            assessment = self.submission_assessment(target, include_payload=True)
+            payload = assessment.get("payload", {})
+            if (payload.get("done") is True and payload.get("won") is True
+                    and assessment["blockers"]
+                    and all(reason.startswith("graph:agents cannot influence output:")
+                            for reason in assessment["blockers"])):
+                winners.append(target)
+        cleanup = []
+        for target in sorted(self.graph.nodes):
+            # Pending configuration permits deleting only that pending node.
+            if self.pending_agent_id and target != self.pending_agent_id:
+                continue
+            retained_winners = [winner for winner in winners if winner != target
+                                and winner not in self.graph.reachable_from(target)]
+            if not retained_winners:
+                continue
+            candidate = self.graph.clone()
+            mutation = candidate.delete_agent(target)
+            if candidate.validate(final=False) or mutation.dirty_agents:
+                continue
+            if any(not node.configured or agent in self.dirty_agents
+                   or not self.runtime.artifact_matches_current_input_signature(
+                       agent, task=self.worker_task, graph=candidate, allow_failed=True)
+                   for agent, node in candidate.nodes.items()):
+                continue
+            cleanup.append(target)
+        return cleanup
+
     def _unified_control_snapshot(self):
         from .canvas import CanvasState
         self._restore_submission_lock()
@@ -485,7 +539,14 @@ class UnifiedSubmissionMixin:
         if usage_status is not None:
             usage_status["digest"] = usage_ledger.digest()
             if usage_ledger.stop_reason() is not None:
-                allowed = ["finish"] if "finish" in allowed else []
+                cleanup = self._alfworld_budget_cleanup_targets()
+                parameters["delete_agent"]["targets"] = cleanup
+                allowed = [name for name in allowed if name == "finish"
+                           or (name == "delete_agent" and cleanup)]
+        protected = self._protected_alfworld_candidates()
+        if protected:
+            allowed = ["finish"] if "finish" in allowed else []
+            parameters["finish"]["targets"] = protected
         return {
             "canvas_version": self.graph.version, "director_action_protocol_version": ACTION_PROTOCOL,
             "submission_contract_version": SUBMISSION_VERSION, "submission_protocol": PROTOCOL,
@@ -494,6 +555,11 @@ class UnifiedSubmissionMixin:
             "pending_relation_decision": self.pending_relation_decision.to_dict() if self.pending_relation_decision else None,
             "allowed_actions": allowed,
             "worker_usage": usage_status,
+            "terminal_candidate_protection": {
+                "policy": self.config.alfworld_terminal_candidate_policy,
+                "targets": protected,
+                "instruction": "Submit an existing trusted terminal candidate with FINISH(target); no more Worker calls or graph edits." if protected else "",
+            } if self.dataset == "alfworld" else None,
             "action_field_requirements": {name: list(UNIFIED_ACTION_FIELDS[name]) for name in allowed if name in UNIFIED_ACTION_FIELDS},
             "legal_action_parameters": parameters, "graph_state": self._graph_state_snapshot(),
             "result_assessments": assessments,
