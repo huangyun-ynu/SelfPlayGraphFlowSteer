@@ -1,0 +1,115 @@
+{
+  "schema": "aime_v3_30_audit_v1",
+  "source_commit": "42dd925274a7fefbf88a00894fa1c81c138ec55e",
+  "run_id": "8133b48762804df7",
+  "run_root": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/aime-v3-30-main-20260929",
+  "dataset_path": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/data/formal/eval/aime_official_test.jsonl",
+  "dataset_sha256": "f50a3ba12616c8d87b37d1fd7a0a2c2b5e440c18388db0991855423856a610c7",
+  "dataset_rows": 30,
+  "config_sha256": "5c119c344c199dd4bef59a6f60916015b03a4840ad39559fa657bcf64c033a4d",
+  "source_config_template": "experiment_versions/reports/hotpot128-aime30-c50-20260928-204627/config.toml",
+  "new_records_sha256": "0209e01195f0e16df2e44f630f75f21fc3ccaebadf4317cae6780df22fe61175",
+  "new_run_manifest_sha256": "3b6ccbb1a4799933cf620f12238645a2c713a5863ba430e2773ecb8f9d80cfd4",
+  "aggregate_summary_sha256": "9e2575633f8be3eacba92773b93dab6b3decc88a5dc874e1a866675051be758f",
+  "comparison_records_path": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-hotpot-answer-contract/state/hotpot128-aime30-c50-20260928-204627/aime/results/records.jsonl",
+  "comparison_records_sha256": "8f30985d7d8ac657ddc38c2fc643e3a59b0628810a875c093009ce272627bfa1",
+  "execution": {
+    "director_model": "Qwen3.5-9B",
+    "director_endpoint": "http://127.0.0.1:18605/v1",
+    "worker_route": "deepseek",
+    "worker_model": "deepseek-flash",
+    "seed": 0,
+    "workers": 30,
+    "parameter_updates": 0
+  },
+  "effective_protocol": {
+    "director_variant": "v3",
+    "submission_protocol": "unified_task_result_v1",
+    "submission_contract": "unified_submission_v1"
+  },
+  "audit": {
+    "planned": 30,
+    "completed": 30,
+    "execution_failures": 0,
+    "submitted": 30,
+    "valid_receipts": 30,
+    "accepted_finish": 30,
+    "finish_zero_worker": 30,
+    "set_output_actions": 0,
+    "correct": 20,
+    "incorrect": 10,
+    "exact_integer_metric_matches": 30,
+    "mean_score": 0.6666666666666666,
+    "worker_recorded_tokens": 602750
+  },
+  "comparison": {
+    "prior_correct": 24,
+    "prior_submitted": 28,
+    "same_task_ids": true,
+    "both_correct": 19,
+    "both_wrong": 5,
+    "regressed_ids": [
+      "aime-2026/2026/10",
+      "aime-2026/2026/11",
+      "aime-2026/2026/18",
+      "aime-2026/2026/23",
+      "aime-2026/2026/5"
+    ],
+    "improved_ids": [
+      "aime-2026/2026/21"
+    ]
+  },
+  "incorrect_cases": [
+    {
+      "id": "aime-2026/2026/5",
+      "submitted": "13",
+      "reference": "65"
+    },
+    {
+      "id": "aime-2026/2026/10",
+      "submitted": "168",
+      "reference": "156"
+    },
+    {
+      "id": "aime-2026/2026/11",
+      "submitted": "29",
+      "reference": "896"
+    },
+    {
+      "id": "aime-2026/2026/14",
+      "submitted": "213",
+      "reference": "681"
+    },
+    {
+      "id": "aime-2026/2026/16",
+      "submitted": "32",
+      "reference": "178"
+    },
+    {
+      "id": "aime-2026/2026/18",
+      "submitted": "252",
+      "reference": "503"
+    },
+    {
+      "id": "aime-2026/2026/22",
+      "submitted": "227",
+      "reference": "754"
+    },
+    {
+      "id": "aime-2026/2026/23",
+      "submitted": "125",
+      "reference": "245"
+    },
+    {
+      "id": "aime-2026/2026/26",
+      "submitted": "384",
+      "reference": "132"
+    },
+    {
+      "id": "aime-2026/2026/28",
+      "submitted": "2020",
+      "reference": "107"
+    }
+  ],
+  "interpretation": "Paired observational comparison only; code and local Director service differ. No isolated V3 causal estimate."
+}
