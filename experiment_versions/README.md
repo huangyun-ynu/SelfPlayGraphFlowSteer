@@ -1,8 +1,12 @@
 # 实验源码版本
 
+> 2026-09-29 当前正式版本已固定为 Git 标签 `unified-v3-20260929`。
+> 七个数据集统一 V3，AIME 复核实验已撤回；包含最新 AIME、HotpotQA、HealthBench 评测记录。
+> 版本范围、源码哈希和 91 项定向验证见 [版本快照](checkpoints/unified-v3-20260929/README.zh-CN.md)。
+
 > 2026-09-29 最新正式协议：七个数据集均为 V3，包含用户确认切换的 WebShop。
 > 切换前完整正式版保存于 `experiment/formal-before-all-v3-20260929`（`4678541`）。
-> 下列 WebShop 50% 等成绩保留历史含义；当前 V3 未重测。见
+> 下列 WebShop 50% 等成绩保留历史含义；不能直接视为当前 V3 成绩。见
 > [统一 V3 记录](../docs/ALL_DATASETS_V3_FORMAL_PROMOTION_20260929.zh-CN.md)。
 
 > 2026-09-29：main 的 NQ 已切换到 R2D2 1,702,133 段语料运行时检索。

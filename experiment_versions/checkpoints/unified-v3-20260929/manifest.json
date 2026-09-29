@@ -1,0 +1,84 @@
+{
+  "schema": "formal_version_checkpoint_v1",
+  "version_tag": "unified-v3-20260929",
+  "recorded_at": "2026-09-29T15:55:50.809944+00:00",
+  "source_commit": "c52c4c6b05f4e7ca0afb43c26499faaa88a01a3c",
+  "source_trees": {
+    "src": "6666c5aba1108ce27f3ce2b687d786edc7e25a2e",
+    "configs": "78809d2d6f07c9019e0010a046d627ee326d89b4",
+    "scripts": "408e27b7ce6821f54d26f358f9eb4e5b8820fdb4",
+    "tests": "b0f9d402c4c630cde6661ab8a44e8a4050d5096a"
+  },
+  "formal_entrypoint": "configs/formal_training.toml",
+  "datasets": {
+    "aime": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    },
+    "nq_open": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    },
+    "hotpotqa": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    },
+    "healthbench_professional": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    },
+    "webshop": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    },
+    "alfworld": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    },
+    "swe_bench": {
+      "director": "v3",
+      "action_protocol": "director_action_json_v3",
+      "submission_protocol": "unified_task_result_v1",
+      "receipt": "unified_submission_v1"
+    }
+  },
+  "preserved_settings": {
+    "nq_corpus": "R2D2",
+    "nq_passage_count": 1702133,
+    "nq_evidence_mode": "corpus_tool",
+    "webshop_train_rows": 444,
+    "aime_bounded_review_experiment_enabled": false
+  },
+  "file_sha256": {
+    "configs/formal_training.toml": "1d5d8e823ad6a59881483c3aa59230d6e664ddf89365036328a0da2937d8f67d",
+    "data/formal/train/webshop.jsonl": "7166743ec89973e30809b5c266a094821d98a39f801a128e63d0304a8ced2d60",
+    "scripts/formal/environment.sh": "d9e58ad9f4ac7eb500ff95e21ad4d03c172f464582a332dcc4d7d36d47deff62",
+    "scripts/formal/run_experiment.sh": "b7d9948223e35ce621b55b263a9981b986c371094599de60cb08f934bdf5b4ce"
+  },
+  "validation": {
+    "command": "python -m pytest -q tests/test_all_datasets_v3_promotion.py tests/test_unified_submission.py tests/test_unified_environments.py tests/test_unified_round_and_pending_state.py tests/test_unified_worker_budget.py tests/test_alfworld_v3_usage.py",
+    "passed": 91,
+    "failed": 0,
+    "duration_s": 1.57,
+    "effective_protocols_verified_for_all_seven_datasets": true,
+    "source_configs_scripts_tests_match_pre_aime_experiment_29e4f2f": true
+  },
+  "evaluation_reports": [
+    "experiment_versions/reports/aime30-v3-main-20260929/",
+    "experiment_versions/reports/hotpotqa-v3-128-main-20260929/",
+    "experiment_versions/reports/healthbench-v3-gpt-low-128-main-20260929/"
+  ],
+  "publication_scope": "tracked formal source, configuration, tests and reports; unrelated untracked experiments retained locally"
+}
