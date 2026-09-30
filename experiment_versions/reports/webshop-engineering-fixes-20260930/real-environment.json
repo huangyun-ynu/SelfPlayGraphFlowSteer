@@ -1,0 +1,67 @@
+[
+  {
+    "task": "00015",
+    "asin": "B09MQLDRRL",
+    "option": "terracotta",
+    "captured_prefix_steps": 6,
+    "extra_probe_steps": 4,
+    "option_selected": true,
+    "section_reservation_retained": true,
+    "section_return_retains_selection": true,
+    "product_return_clears_selection": true,
+    "worker_pid": 1522,
+    "owned_worker_stopped": true
+  },
+  {
+    "task": "00234",
+    "asin": "B005GSYPPW",
+    "option": "lieutenant",
+    "captured_prefix_steps": 2,
+    "extra_probe_steps": 4,
+    "option_selected": true,
+    "section_reservation_retained": true,
+    "section_return_retains_selection": true,
+    "product_return_clears_selection": true,
+    "worker_pid": 3576,
+    "owned_worker_stopped": true
+  },
+  {
+    "task": "00318",
+    "asin": "B07PHVNWN9",
+    "option": "cappuccino",
+    "captured_prefix_steps": 2,
+    "extra_probe_steps": 4,
+    "option_selected": true,
+    "section_reservation_retained": true,
+    "section_return_retains_selection": true,
+    "product_return_clears_selection": true,
+    "worker_pid": 5268,
+    "owned_worker_stopped": true
+  },
+  {
+    "task": "00358",
+    "asin": "B01HEXEHWC",
+    "option": "cantaloupe",
+    "captured_prefix_steps": 9,
+    "extra_probe_steps": 4,
+    "option_selected": true,
+    "section_reservation_retained": true,
+    "section_return_retains_selection": true,
+    "product_return_clears_selection": true,
+    "worker_pid": 5837,
+    "owned_worker_stopped": true
+  },
+  {
+    "task": "00365",
+    "asin": "B07MWSX8Z7",
+    "option": "cottonwood",
+    "captured_prefix_steps": 2,
+    "extra_probe_steps": 4,
+    "option_selected": true,
+    "section_reservation_retained": true,
+    "section_return_retains_selection": true,
+    "product_return_clears_selection": true,
+    "worker_pid": 6751,
+    "owned_worker_stopped": true
+  }
+]

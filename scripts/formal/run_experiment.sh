@@ -59,6 +59,8 @@ fi
 "${SPGFS_PYTHON:-$SPGFS_VENV/bin/python}" scripts/formal/webshop_dataset_index.py \
   --input "$SPGFS_FORMAL_TASK_POOL" --goals "$SPGFS_WEBSHOP_GOALS" \
   --validate-only --require-training-split
+python scripts/formal/check_webshop_official_service.py \
+  --config "$FORMAL_CONFIG" --dataset "$SPGFS_FORMAL_TASK_POOL" --offline
 
 IFS=, read -r DEFAULT_PROPOSER_GPU DEFAULT_SOLVER_GPU DEFAULT_ASYNC_ROLLOUT_GPU _ \
   <<<"$SPGFS_ALLOWED_PHYSICAL_GPUS"
@@ -110,25 +112,7 @@ if [[ "${SPGFS_ENABLE_LOCAL_RETRIEVAL:-0}" == "1" ]] && ! retrieval_healthy; the
 fi
 
 webshop_healthy() {
-  python - <<'PY'
-import json
-import os
-from urllib.request import urlopen
-
-try:
-    port = int(os.environ["SPGFS_WEBSHOP_PORT"])
-    with urlopen(f"http://127.0.0.1:{port}/health", timeout=2.0) as response:
-        payload = json.load(response)
-except Exception:
-    raise SystemExit(1)
-raise SystemExit(
-    0
-    if payload.get("status") == "ok"
-    and payload.get("idempotency_protocol") == "webshop-request-v1"
-    and payload.get("index_path") == os.path.realpath(os.environ["SPGFS_WEBSHOP_INDEX"])
-    else 1
-)
-PY
+  python scripts/formal/check_webshop_official_service.py --config "$FORMAL_CONFIG" >/dev/null 2>&1
 }
 
 if ! webshop_healthy; then

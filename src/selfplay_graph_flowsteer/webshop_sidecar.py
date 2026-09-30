@@ -20,6 +20,17 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from .webshop_navigation import annotate_navigation
+
+def implementation_sha256() -> str:
+    """Identify the service implementation, independently of its scorer/data."""
+    digest = hashlib.sha256()
+    for name in ("webshop_sidecar.py", "webshop_navigation.py", "webshop_worker_bridge.py"):
+        digest.update(name.encode())
+        digest.update(Path(__file__).with_name(name).read_bytes())
+    return digest.hexdigest()
+
+
 _PROTOCOL = "skillev-official-environment-worker@1"
 _IDEMPOTENCY_PROTOCOL = "webshop-request-v1"
 _GOAL_ID = re.compile(r"^(?:webshop/)?goal[-/:](\d+)$", re.IGNORECASE)
@@ -64,16 +75,12 @@ class OfficialWorker:
             environment["JAVA_HOME"] = str(self.java_home)
             environment["JVM_PATH"] = str(self.java_home / "lib/server/libjvm.so")
             environment["PATH"] = f"{self.java_home / 'bin'}:{environment.get('PATH', '')}"
-        command = [str(self.interpreter), str(self.worker_script)]
-        if self.observation_mode != "text":
-            command = [
-                str(self.interpreter),
-                str(Path(__file__).with_name("webshop_worker_bridge.py")),
-                "--worker-script",
-                str(self.worker_script),
-                "--observation-mode",
-                self.observation_mode,
-            ]
+        command = [
+            str(self.interpreter),
+            str(Path(__file__).with_name("webshop_worker_bridge.py")),
+            "--worker-script", str(self.worker_script),
+            "--observation-mode", self.observation_mode,
+        ]
         self._process = subprocess.Popen(  # noqa: S603
             [*command, "--response-fd", str(write_fd)],
             cwd=self.source_root,
@@ -191,6 +198,7 @@ class OfficialWorker:
 @dataclass
 class ProductStore:
     path: Path
+    public_purchase_price: bool = False
     _cache: dict[str, dict[str, Any]] = field(default_factory=dict, init=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
@@ -202,10 +210,13 @@ class ProductStore:
             return dict(cached)
         with sqlite3.connect(f"file:{self.path}?mode=ro", uri=True) as connection:
             row = connection.execute(
-                "SELECT product_json FROM products INDEXED BY products_asin_uq WHERE asin = ?",
+                ("SELECT product_json, price FROM products INDEXED BY products_asin_uq WHERE asin = ?" if self.public_purchase_price else "SELECT product_json FROM products INDEXED BY products_asin_uq WHERE asin = ?"),
                 (key,),
             ).fetchone()
         value = json.loads(row[0]) if row else {}
+        if row and self.public_purchase_price:
+            from .webshop_quality import public_priced_product
+            value=public_priced_product(value,row[1])
         if not isinstance(value, dict):
             value = {}
         with self._lock:
@@ -286,10 +297,10 @@ class WebShopSession:
             product = self.products.product(self.current_asin)
             for name, values in _option_groups(product).items():
                 if any(
-                    str(item.get("value", "")).casefold() == raw_action.casefold()
+                    raw_action.casefold() in {str(item.get("value", "")).casefold(),f"{name}: {item.get('value', '')}".casefold()}
                     for item in values
                 ):
-                    self.selected_options[name.casefold()] = raw_action
+                    self.selected_options[name.casefold()] = raw_action[len(name)+2:] if raw_action.casefold().startswith(name.casefold()+': ') else raw_action
                     break
         elif kind == "back_to_search":
             self.current_asin = ""
@@ -345,6 +356,7 @@ class WebShopSession:
             )
         if terminal:
             payload["exact_success"] = payload["reward"] >= 1.0
+            if isinstance(result.get('scoring'),dict):payload['scoring']=result['scoring']
         return payload
 
     def _page_type(self, actions: list[str], terminal: bool) -> str:
@@ -371,6 +383,8 @@ class WebShopSession:
             for name, values in _option_groups(product).items()
             for item in values
         }
+        option_lookup.update({f"{name}: {item.get('value', '')}".casefold():(name,str(item.get('value','')))
+            for name,values in _option_groups(product).items() for item in values})
         product_ordinal = 0
         for raw in actions:
             if raw == "search" or not raw.startswith("click["):
@@ -378,7 +392,7 @@ class WebShopSession:
             value = raw[6:-1]
             lower = value.casefold()
             item: dict[str, Any]
-            if _ASIN.fullmatch(value):
+            if _ASIN.fullmatch(value) and lower not in option_lookup:
                 product_ordinal += 1
                 asin = value.upper()
                 preview = search_products.get(asin, {})
@@ -429,6 +443,7 @@ class WebShopSession:
             item["raw_action"] = raw
             output.append(item)
             targets[target] = value
+        annotate_navigation({"page_type": page_type, "valid_subactions": output})
         return output, targets
 
 
@@ -516,11 +531,28 @@ class SidecarState:
     initializer_gate: threading.Semaphore = field(init=False, repr=False)
     products: ProductStore = field(init=False)
     goal_fingerprint: str = field(init=False)
+    goals_sha256: str = field(init=False)
+    scorer_version: str = field(init=False)
+    scorer_sha256: str = field(init=False)
 
     def __post_init__(self) -> None:
         self.initializer_gate = threading.Semaphore(self.args.max_initializers)
+        self.implementation_sha256 = implementation_sha256()
         self.products = ProductStore(self.args.store)
+        goals_bytes = self.args.goals.read_bytes()
+        self.goals_sha256 = hashlib.sha256(goals_bytes).hexdigest()
+        self.scorer_version = "official"
+        self.scorer_sha256 = hashlib.sha256(Path(__file__).with_name('webshop_quality.py').read_bytes()).hexdigest()
+        for line in goals_bytes.splitlines():
+            contract = json.loads(line).get("_quality_contract") if line.strip() else None
+            if contract:
+                from .webshop_quality import VERSION
+                if contract.get("version") != VERSION:
+                    raise ValueError("unsupported WebShop quality goal inventory")
+                self.scorer_version = VERSION
+        self.products.public_purchase_price=self.scorer_version != 'official'
         digest = hashlib.sha256()
+        digest.update(self.scorer_sha256.encode())
         for path in (self.args.goals, self.args.store, self.args.index):
             stat = path.stat()
             digest.update(f"{path}:{stat.st_size}:{stat.st_mtime_ns}".encode())
@@ -559,7 +591,8 @@ class SidecarState:
                 raise
         with self.lock:
             self.sessions[session_id] = session
-        return {"session_id": session_id, **payload}
+        return {"session_id": session_id,
+                "instruction_sha256": hashlib.sha256(session.instruction.encode()).hexdigest(), **payload}
 
     def session(self, session_id: str) -> WebShopSession:
         with self.lock:
@@ -608,6 +641,10 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
             HTTPStatus.OK,
             {
                 "goal_fingerprint": state.goal_fingerprint,
+                "implementation_sha256": state.implementation_sha256,
+                "goals_sha256": state.goals_sha256,
+                "scorer_version": state.scorer_version,
+                "scorer_sha256": state.scorer_sha256,
                 "index_path": str(state.args.index.resolve()),
                 "idempotency_protocol": _IDEMPOTENCY_PROTOCOL,
                 "raw_action_protocol": "webshop-raw-actions-v1",

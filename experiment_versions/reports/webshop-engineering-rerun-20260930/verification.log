@@ -1,0 +1,30 @@
+{
+  "tasks": 128,
+  "counts": {
+    "prev_labels_checked": 780,
+    "actual_event:reserved": 310,
+    "actual_event:unknown_return_path": 31,
+    "executed_prev_from:product_section": 73,
+    "actual_event:plan_update_ignored": 64,
+    "error:invalid_action_arguments": 5,
+    "corrected_option_observations": 11,
+    "corrected_option:cottonwood": 6,
+    "corrected_option:cantaloupe": 4,
+    "error:stateful_action_deferred": 2,
+    "error:purchase_budget_reserved": 7,
+    "actual_event:rejected": 9,
+    "actual_event:released": 5,
+    "error:purchase_plan_incomplete": 1,
+    "error:invalid_completion_plan": 1,
+    "corrected_option:lieutenant": 1
+  },
+  "advertised_product_ids_checked": 1578,
+  "nonexistent_product_ids": [],
+  "wrong_navigation": 0,
+  "fake_option_products": 0,
+  "reserved_section_transitions": 42,
+  "section_reservations_lost": 0,
+  "preflight_mismatches": 0,
+  "release_count_mismatches": [],
+  "ignored_count_mismatches": []
+}

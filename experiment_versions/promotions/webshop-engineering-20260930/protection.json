@@ -1,0 +1,45 @@
+{
+  "preexisting_public_files_checked": 861,
+  "changed_within_promotion_scope": [
+    "configs/formal_training.toml",
+    "configs/webshop_official_baseline.json",
+    "data/formal/train/webshop.jsonl",
+    "data/formal/train/webshop_index_manifest.json",
+    "docs/ALL_DATASETS_V3_FORMAL_PROMOTION_20260929.zh-CN.md",
+    "docs/FORMAL_TRAINING_CONFIG.zh-CN.md",
+    "docs/WEBSHOP_BASELINE.zh-CN.md",
+    "experiment_versions/README.md",
+    "scripts/formal/bootstrap_remote.sh",
+    "scripts/formal/environment.sh",
+    "scripts/formal/run_experiment.sh",
+    "src/selfplay_graph_flowsteer/application.py",
+    "src/selfplay_graph_flowsteer/runtime.py",
+    "src/selfplay_graph_flowsteer/webshop_action_reserve.py",
+    "src/selfplay_graph_flowsteer/webshop_sidecar.py",
+    "tests/test_all_datasets_v3_promotion.py",
+    "tests/test_webshop_action_reserve.py",
+    "tests/test_webshop_baseline_restore.py",
+    "tests/test_webshop_formal_promotion.py",
+    "tests/test_webshop_nonpurchase_recovery.py",
+    "tests/test_webshop_scheduling.py"
+  ],
+  "concurrent_external_changes": [],
+  "quality_code_preserved": [
+    "src/selfplay_graph_flowsteer/webshop_quality.py",
+    "src/selfplay_graph_flowsteer/webshop_worker_bridge.py",
+    "src/selfplay_graph_flowsteer/webshop.py",
+    "scripts/formal/check_webshop_quality_service.py"
+  ],
+  "evaluated_core_runtime_identical": [
+    "src/selfplay_graph_flowsteer/application.py",
+    "src/selfplay_graph_flowsteer/runtime.py",
+    "src/selfplay_graph_flowsteer/webshop_action_reserve.py",
+    "src/selfplay_graph_flowsteer/webshop_memory.py",
+    "src/selfplay_graph_flowsteer/webshop_memory_projection.py",
+    "src/selfplay_graph_flowsteer/webshop_navigation.py",
+    "src/selfplay_graph_flowsteer/webshop_native.py",
+    "src/selfplay_graph_flowsteer/webshop_scheduling.py",
+    "src/selfplay_graph_flowsteer/execution_contract.py",
+    "src/selfplay_graph_flowsteer/unified_submission.py"
+  ]
+}

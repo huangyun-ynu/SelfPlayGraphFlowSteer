@@ -37,7 +37,7 @@ if [[ -z "${SPGFS_VENV:-}" ]]; then
   fi
 fi
 export PATH="$SPGFS_VENV/bin:$PATH"
-export SPGFS_FORMAL_TASK_POOL="${SPGFS_FORMAL_TASK_POOL:-$ROOT/state/formal-data/validated_task_pool.jsonl}"
+export SPGFS_FORMAL_TASK_POOL="${SPGFS_FORMAL_TASK_POOL:-$ROOT/state/formal-data/webshop-restored512-20260930-v1/validated_task_pool.jsonl}"
 export SPGFS_RETRIEVAL_INDEX="${SPGFS_RETRIEVAL_INDEX:-$ROOT/state/formal-data/retrieval/nq_open_wikipedia.sqlite3}"
 # Formal NQ-open runs use the pinned R2D2 1,702,133-passage
 # E5/FAISS corpus. The online Wikipedia backend remains available only when
@@ -63,3 +63,6 @@ export SPGFS_WEBSHOP_GOALS="${SPGFS_WEBSHOP_GOALS:-$ROOT/assets/webshop/prepared
 export SPGFS_WEBSHOP_PORT="${SPGFS_WEBSHOP_PORT:-18020}"
 export SPGFS_WEBSHOP_INDEX=$SPGFS_WEBSHOP_SOURCE_ROOT/search_engine/indexes
 export SPGFS_WEBSHOP_JAVA_HOME="${SPGFS_WEBSHOP_JAVA_HOME:-${JAVA_HOME:-$ROOT/assets/java/jdk-11.0.32.1+1}}"
+
+# Formal evaluation uses the original official instructions and scoring.
+export SPGFS_WEBSHOP_EVAL_DATASET="${SPGFS_WEBSHOP_EVAL_DATASET:-$ROOT/data/formal/eval/webshop_official_test_128.jsonl}"

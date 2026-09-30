@@ -1,0 +1,64 @@
+{
+  "agent_id": "agent_1",
+  "prompt": "Role: Shopping Assistant\nObjective: Find and purchase a yellow manual toothbrush suitable for 7-14 year old kids with sensitive teeth, priced under 50.00 dollars\nScope: Search for products matching specifications, compare options, and complete the purchase\nExpected output: Stage purchase of the best observed relevant product within the action budget; select requested options and honestly report unresolved constraints.\n\nSystem-managed output contract (webshop-terminal-contract-v3-neutral):\n- Search accepts the Agent's query and returns public catalog results. The runtime does not supply a query, rank candidates by the hidden goal, or prescribe query terms.\n- Search-result option values are display defaults, not the session's selected options. Search history and product-page observations are public evidence; they do not reveal hidden candidate scores.\n- Titles, prices, available options and observed sections are visible to the Agent. The Agent decides how to interpret them; no candidate or evidence-coverage order is selected by the runtime.\n- One selected value is retained per option group; a later selection replaces it. The latest live selected_options is authoritative for the session. Observed Description and Features text is retained in webshop_progress. The Agent chooses whether to select an option or navigate.\n- Your objective is to complete a purchase that best satisfies the user's request within the available action budget. Purchase early only when public evidence supports the requested product type, attributes, price and requested options, with those options selected. If an important requirement is contradicted or unverified and enough budget remains for a useful search, comparison or inspection plus completing a purchase, continue investigating instead of buying a partial match. Prioritize resolving known mismatches; do not repeat uninformative actions or explore merely to use all steps. Manage the remaining budget so you can select the requested options and execute Buy Now. Include navigation back to the product page when needed. When the remaining budget is only enough to finish purchasing the best candidate you have observed, stop further exploration. Use public evidence to compare candidates, select the closest available requested options, and execute Buy Now. Accept a partial match as a fallback only when further useful investigation would leave insufficient budget to complete the best observed purchase. Record unsupported or conflicting requirements honestly in purchase_evidence.unresolved_constraints. Do not claim they are verified. Return without staging a purchase only when no executable purchase path remains or no observed product is relevant to the request.\n- A recommendation or product page is not an environment purchase. A Buy Now Action stages a purchase in this session; it is committed only after Canvas selects the output Agent. No purchase is automatically chosen.\n- Use only target identifiers exposed by the latest environment observation; the runtime executes exactly one staged purchase after Canvas selects the output Agent.\n- Report staged status and unresolved constraints without claiming purchase success before the selected staged action is committed by the runtime.",
+  "structural_operator": null,
+  "layer": 0,
+  "allowed_tools": [
+    "webshop_search",
+    "webshop_click"
+  ],
+  "operation_policy_configured": true,
+  "initial_tool_budget": 12,
+  "revision_tool_budget": 4,
+  "total_tool_budget": 16,
+  "metadata": {
+    "model_selection_required": true,
+    "submission_protocol": "unified_task_result_v1",
+    "result_scope": "task_result",
+    "incarnation_id": "feb06c1ceef343338c0bd658236a7735",
+    "task_dataset": "webshop",
+    "action_adapter": "webshop",
+    "dataset_capability_policy": {
+      "environment_state": "stateful",
+      "session_scope": "per_agent",
+      "action_execution": "sequential",
+      "commit_policy": "single_committer",
+      "commit_activation": "commit_pending_on_finish",
+      "supports_parallel_reads": true,
+      "action_budget_policy": "shared_total_v1"
+    },
+    "director_delegation": {
+      "role": "Shopping Assistant",
+      "objective": "Find and purchase a yellow manual toothbrush suitable for 7-14 year old kids with sensitive teeth, priced under 50.00 dollars",
+      "scope": "Search for products matching specifications, compare options, and complete the purchase",
+      "expected_output": "Stage purchase of the best observed relevant product within the action budget; select requested options and honestly report unresolved constraints."
+    },
+    "system_managed_contract": {
+      "version": "webshop-terminal-contract-v3-neutral",
+      "dataset": "webshop",
+      "rule_ids": [
+        "public_catalog_search",
+        "interpret_search_previews",
+        "public_candidate_evidence",
+        "product_option_state",
+        "agent_purchase_authority",
+        "complete_environment_purchase",
+        "follow_live_subactions",
+        "report_environment_outcome"
+      ]
+    },
+    "delegation_field_repairs": [
+      {
+        "field": "expected_output",
+        "reason": "webshop_environment_completion",
+        "original_length": 73,
+        "repaired_length": 147
+      }
+    ],
+    "runtime_route": "deepseek",
+    "model_selection_source": "director_set_model",
+    "_runtime_webshop_request_admission_enabled": false,
+    "_runtime_webshop_output_closure": false,
+    "_runtime_is_output_agent": true
+  }
+}

@@ -167,6 +167,14 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
         if child:
             child.close_all()
 
+    def session_binding(self, agent_id: str) -> str | None:
+        """Read-only real resource identity; never copies another node's session."""
+        child = self._episodes.get(agent_id)
+        if child is None:
+            return None
+        pending = child._pending_sessions.get(agent_id)
+        return child._active_session or (pending.session_id if pending else None)
+
     def result_for(self, agent_id: str | None) -> dict:
         child = self._episodes.get(str(agent_id))
         if child:

@@ -1,0 +1,354 @@
+{
+  "source_records": "state/formal-eval/webshop-nonpurchase-recovery-39-20260930-133326/results/records.jsonl",
+  "source_sha256": "c238ade64c46f50caa122c0b728200d76eef23fd047f812412250e344ade8d21",
+  "task_id": "webshop/goal-00060",
+  "task": "i want to find a yellow manual toothbrush suitable for 7-14 year old kids with sensitive teeth, and price lower than 50.00 dollars",
+  "artifact_id": "artifact_1",
+  "react_trace": [
+    {
+      "round_index": 0,
+      "phase": "initial",
+      "action": {
+        "call_id": "call_00_PCXD0thLO16I6hzKr9nW3734",
+        "name": "webshop_search",
+        "arguments": {
+          "query": "yellow manual toothbrush for kids 7-14 sensitive teeth"
+        }
+      },
+      "observation": {
+        "name": "webshop_search",
+        "status": "ok",
+        "output": {
+          "done": false,
+          "page_text": "Instruction: [SEP] i want to find a yellow manual toothbrush suitable for 7-14 year old kids with sensitive teeth, and price lower than 50.00 dollars [SEP] Back to Search [SEP] Page 1 (Total results: 50) [SEP] Next > [SEP] B09RFM8Q7G [SEP] Children Manual Toothbrushes U-Shape 360° Thorough Cleansing Toothbrush for 1-14 Years Old Kids Dental Care Toothbrush [SEP] $16.99 [SEP] B09NSNT7MK [SEP] 2 Pack Kids U-Shaped Toothbrush, U-Type Toothbrush Whole Mouth Toothbrush with 2 Replacement U-Shaped Heads, 360°Oral Cleaning Teeth Manual Training Toothbrush for Kids 2-7 Years [SEP] $12.99 [SEP] B09QQ16D9H [SEP] U-Shaped Kids Toothbrush, Manual Training Tooth Brush with Soft Silicone Brush Head, 360° Manual Toothbrush Oral Cleaning Tools for Children, Whitening Massage Toothbrush Whole Mouth [SEP] $100.0 [SEP] B09N35Q5BC [SEP] Kids Toothbrushes U Shape ,JIUJIU Food Grade Soft Silicone Brush Head, 3 Sided Teeth Cleaning Removable Manual Toothbrushes for Child/Sensitive Teeth (Rainbow, Yellow(Age 2-7)) [SEP] $9.99 [SEP] B09QYB74DX [SEP] Kids Toothbrushes All Rounded Children U Shape Toothbrush Food Grade Soft Silicone Brush Head Manual Training Toothbrush for Kids [SEP] $14.88 [SEP] B09KTKPGHX [SEP] Kids U-Shaped Manual Toothbrush,Silica Toddler Toothbrush Cartoon Handle 360 Degrees Cleaning Hand-Held Soft Bristle Whitening Toothbrush Baby Supplies for Birthday Gift Pink Llarge Duck [SEP] $0.01 [SEP] B09NSMFF37 [SEP] 2 Packs Kids U-Shaped Manual Training Toothbrush, U-Type Toothbrush Whole Mouth Toothbrush with Soft Silicone Head, 360°Oral Cleaning Teeth Whitening Gums Massage for Kids 2-7 Years [SEP] $11.99 [SEP] B09PDW691R [SEP] Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,S) [SEP] $8.99 [SEP] B09PDW6V6Q [SEP] Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,L) [SEP] $8.99 [SEP] B09MFS17P2 [SEP] NUOBESTY Kids U Shaped Electric Toothbrush New Model Electric Toothbrush Automatic Electric Whitening Toothbrush for 2-9 Years Children Yellow [SEP] $100.0",
+          "page_type": "search_results",
+          "purchased": false,
+          "reward": 0.0,
+          "state_version": 2,
+          "steps": 1,
+          "termination_reason": "active",
+          "valid_subactions": [
+            {
+              "kind": "navigate",
+              "label": "back to search",
+              "target_id": "back_to_search:2"
+            },
+            {
+              "kind": "navigate",
+              "label": "next >",
+              "target_id": "next_page:2"
+            },
+            {
+              "kind": "open_product",
+              "label": "Children Manual Toothbrushes U-Shape 360° Thorough Cleansing Toothbrush for 1-14 Years Old Kids Dental Care Toothbrush",
+              "target_id": "open_product:1:B09RFM8Q7G",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "2 Pack Kids U-Shaped Toothbrush, U-Type Toothbrush Whole Mouth Toothbrush with 2 Replacement U-Shaped Heads, 360°Oral Cleaning Teeth Manual Training Toothbrush for Kids 2-7 Years",
+              "target_id": "open_product:2:B09NSNT7MK",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "U-Shaped Kids Toothbrush, Manual Training Tooth Brush with Soft Silicone Brush Head, 360° Manual Toothbrush Oral Cleaning Tools for Children, Whitening Massage Toothbrush Whole Mouth",
+              "target_id": "open_product:3:B09QQ16D9H",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "Kids Toothbrushes U Shape ,JIUJIU Food Grade Soft Silicone Brush Head, 3 Sided Teeth Cleaning Removable Manual Toothbrushes for Child/Sensitive Teeth (Rainbow, Yellow(Age 2-7))",
+              "target_id": "open_product:4:B09N35Q5BC",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "Kids Toothbrushes All Rounded Children U Shape Toothbrush Food Grade Soft Silicone Brush Head Manual Training Toothbrush for Kids",
+              "target_id": "open_product:5:B09QYB74DX",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "Kids U-Shaped Manual Toothbrush,Silica Toddler Toothbrush Cartoon Handle 360 Degrees Cleaning Hand-Held Soft Bristle Whitening Toothbrush Baby Supplies for Birthday Gift Pink Llarge Duck",
+              "target_id": "open_product:6:B09KTKPGHX",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "2 Packs Kids U-Shaped Manual Training Toothbrush, U-Type Toothbrush Whole Mouth Toothbrush with Soft Silicone Head, 360°Oral Cleaning Teeth Whitening Gums Massage for Kids 2-7 Years",
+              "target_id": "open_product:7:B09NSMFF37",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,S)",
+              "target_id": "open_product:8:B09PDW691R",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,L)",
+              "target_id": "open_product:9:B09PDW6V6Q",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            },
+            {
+              "kind": "open_product",
+              "label": "NUOBESTY Kids U Shaped Electric Toothbrush New Model Electric Toothbrush Automatic Electric Whitening Toothbrush for 2-9 Years Children Yellow",
+              "target_id": "open_product:10:B09MFS17P2",
+              "inspection_status": "not_inspected",
+              "visit_count": 0,
+              "candidate_evidence": {
+                "product_identity_scope": "search_preview",
+                "selectable_options_status": "unknown_until_product_page",
+                "preview_variant_can_reject_candidate": false,
+                "preview_variant_can_verify_candidate": false,
+                "product_page_evidence_available": false
+              }
+            }
+          ],
+          "action_effect": {
+            "kind": "search",
+            "value": "yellow manual toothbrush for kids 7-14 sensitive teeth"
+          },
+          "observation_truncated": false,
+          "candidate_coverage": {
+            "visible_products": 10,
+            "inspected_products": 0,
+            "uninspected_products": 10,
+            "result_set_repeated": false
+          },
+          "search_decision_state": {
+            "result_set_repeated": false,
+            "variant_constraints_resolved_by_search": false,
+            "option_verification_action_kind": "open_product",
+            "search_adds_option_evidence": false,
+            "candidate_selection": "agent_decides; no target is forced",
+            "exclusion_evidence_rule": "Selectable-option mismatch is established only by inspected product-page evidence, never by a search-preview variant.",
+            "selection_evidence_rule": "A matching search-preview variant is also unverified; use public product identity and stable attributes when deciding which candidate to inspect."
+          }
+        }
+      },
+      "remaining_budget": {
+        "phase": 15,
+        "total": 15
+      }
+    },
+    {
+      "round_index": 1,
+      "phase": "initial",
+      "action": {
+        "call_id": "call_00_Jqr2kmo0PMh1BYJIiWXE1477",
+        "name": "webshop_click",
+        "arguments": {
+          "target_id": "open_product:9:B09PDW6V6Q",
+          "state_version": 2
+        }
+      },
+      "observation": {
+        "name": "webshop_click",
+        "status": "ok",
+        "output": {
+          "done": false,
+          "page_text": "Instruction: [SEP] i want to find a yellow manual toothbrush suitable for 7-14 year old kids with sensitive teeth, and price lower than 50.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,L) [SEP] Price: $8.99 [SEP] Rating: N.A. [SEP] Description [SEP] Features [SEP] Reviews [SEP] Buy Now",
+          "page_type": "product",
+          "purchased": false,
+          "reward": 0.0,
+          "state_version": 3,
+          "steps": 2,
+          "termination_reason": "active",
+          "valid_subactions": [
+            {
+              "kind": "navigate",
+              "label": "back to search",
+              "target_id": "back_to_search:3",
+              "navigation_effect": "return_to_search"
+            },
+            {
+              "kind": "navigate",
+              "label": "< prev",
+              "target_id": "previous_page:3",
+              "navigation_effect": "return_to_current_product_page"
+            },
+            {
+              "kind": "view_section",
+              "label": "description",
+              "target_id": "view_description:B09PDW6V6Q",
+              "evidence_status": "not_yet_observed",
+              "action_semantics": "Agent-chosen public section inspection; reopening retained evidence adds no new evidence."
+            },
+            {
+              "kind": "view_section",
+              "label": "features",
+              "target_id": "view_features:B09PDW6V6Q",
+              "evidence_status": "not_yet_observed",
+              "action_semantics": "Agent-chosen public section inspection; reopening retained evidence adds no new evidence."
+            },
+            {
+              "kind": "view_section",
+              "label": "reviews",
+              "target_id": "view_reviews:B09PDW6V6Q",
+              "evidence_status": "not_yet_observed",
+              "action_semantics": "Agent-chosen public section inspection; reopening retained evidence adds no new evidence."
+            },
+            {
+              "kind": "purchase",
+              "label": "Buy Now",
+              "target_id": "purchase:B09PDW6V6Q"
+            }
+          ],
+          "action_effect": {
+            "kind": "open_product",
+            "value": "b09pdw6v6q"
+          },
+          "product": {
+            "asin": "B09PDW6V6Q",
+            "price": 8.99,
+            "title": "Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,L)"
+          },
+          "purchase_visible": true,
+          "selected_options": {},
+          "unselected_option_groups": [],
+          "observation_truncated": false,
+          "commit_pending": false,
+          "commit_ready": false
+        }
+      },
+      "remaining_budget": {
+        "phase": 14,
+        "total": 14
+      }
+    },
+    {
+      "round_index": 2,
+      "phase": "initial",
+      "action": {
+        "call_id": "call_00_2UfHxsmWWE4JTQ1zFi0Z8266",
+        "name": "webshop_click",
+        "arguments": {
+          "target_id": "view_features:B09PDW6V6Q",
+          "state_version": 3
+        }
+      },
+      "observation": {
+        "name": "webshop_click",
+        "status": "ok",
+        "output": {
+          "done": false,
+          "page_text": "Instruction: [SEP] i want to find a yellow manual toothbrush suitable for 7-14 year old kids with sensitive teeth, and price lower than 50.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] Useful U-shaped brush head: the soft U-shaped brush head of toothbrush is made of quality silicone, which can brush and clean the teeth in 360 degrees, especially designed for children's tender and sensitive teeth [SEP] Comfortable handle: the lovely toothbrush handle the is made of quality plastic, strong and durable; It can be firmly grasped when brushing teeth, and is designed in a proper size for kids' hands, lightweight and comfortable to apply [SEP] Nice performance: the U-type toothbrush is designed with soft bristles, giving your children a gentle cleaning, and the soft brush head helps access hard-to-reach areas and achieves a more thorough cleaning [SEP] Perfect Gift: This Product with a cute appearance and packaging, full of childishness. It is the best choice as a gift for your mom, wife, girlfriends on birthday, Thanksgiving Day, Christmas, Halloween, or other festivals. [SEP] · 【Services】: We are committed to providing all customers with good-quality products and a 100% satisfactory shopping experience. We also offer 24-hour online customer service. Any problems with this blue wig, we provide Return and Exchange.",
+          "page_type": "product_section",
+          "purchased": false,
+          "reward": 0.0,
+          "state_version": 4,
+          "steps": 3,
+          "termination_reason": "active",
+          "valid_subactions": [
+            {
+              "kind": "navigate",
+              "label": "back to search",
+              "target_id": "back_to_search:4",
+              "navigation_effect": "return_to_search"
+            },
+            {
+              "kind": "navigate",
+              "label": "< prev",
+              "target_id": "previous_page:4",
+              "navigation_effect": "return_to_current_product_page"
+            }
+          ],
+          "action_effect": {
+            "kind": "view_features",
+            "value": "features"
+          },
+          "product": {
+            "asin": "B09PDW6V6Q",
+            "price": 8.99,
+            "title": "Lroveb Kids U Shaped Toothbrush Manual Training Tooth Brush with Soft Silicone Brush Head Small-car Modeling Design Toothbrush for Children & Toddlers (S for 2-6,L for 7-12)(Yellow,L)"
+          },
+          "purchase_visible": false,
+          "selected_options": {},
+          "unselected_option_groups": [],
+          "observation_truncated": false,
+          "commit_pending": false,
+          "commit_ready": false
+        }
+      },
+      "remaining_budget": {
+        "phase": 13,
+        "total": 13
+      }
+    }
+  ]
+}

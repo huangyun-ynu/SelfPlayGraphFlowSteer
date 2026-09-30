@@ -1,19 +1,21 @@
 {
-  "schema": "spgfs-webshop-baseline-v2",
+  "schema": "spgfs-webshop-baseline-v3",
   "status": "official_training_implementation",
-  "selected_on": "2026-09-25",
-  "selected_version": "M02",
-  "selected_version_name": "合并＋身份修复",
-  "source_run": "state/experiments/webshop-merged-identity-128-20260924-run1/candidate",
-  "source_version_id": "webshop-merged-identity-128-20260924-run1",
+  "selected_on": "2026-09-30",
+  "selected_version": "M02-V3-engineering-20260930",
+  "selected_version_name": "累积修复＋自动记忆＋导航/预留/计划/规格工程修复",
+  "source_run": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-engineering-affected-128-20260930-164051",
+  "source_version_id": "webshop-engineering-affected-128-20260930-164051",
   "metrics": {
     "examples": 128,
-    "strict_successes": 62,
-    "strict_success_rate": 0.484375,
-    "mean_reward": 0.7352213541666667,
-    "mean_score_100": 73.52213541666667
+    "strict_successes": 64,
+    "strict_success_rate": 0.5,
+    "purchased": 126,
+    "not_purchased": 2,
+    "unsubmitted": 0,
+    "mean_reward": 0.731640625
   },
-  "metrics_scope": "Historical fixed-DeepSeek, no-skill, 128-example reference evaluation; not a new training result.",
+  "metrics_scope": "One recorded original-official 128-task evaluation with fixed DeepSeek Flash; not a dynamic-route training result.",
   "webshop": {
     "enabled": true,
     "service_url": "http://127.0.0.1:18020",
@@ -29,20 +31,22 @@
     "search_observation_mode": "legacy",
     "compatibility_profile": "m02_merged_identity_v1",
     "worker_guidance_policy": "merged_checklist_v1",
-    "worker_memory_policy": "factual_memory_v1",
+    "worker_memory_policy": "factual_memory_v2",
     "worker_execution_policy": "graph_tools_v1",
     "native_conversation_history": false,
-    "env_feedback_enabled": false
+    "env_feedback_enabled": false,
+    "purchase_budget_policy": "completion_reserve_v2",
+    "scheduling_policy": "bounded_research_v1"
   },
   "canvas": {
     "remaining_token_admission_enabled": false,
-    "max_total_tokens_webshop": 350000
+    "max_total_tokens_webshop": 350000,
+    "webshop_action_budget_policy": "shared_total_v1",
+    "submission_protocol": "unified_task_result_v1"
   },
   "formal_training": {
     "configs": [
-      "configs/formal_training.toml",
-      "configs/formal_training_h200.local.toml",
-      "configs/formal_eval_h200.local.toml"
+      "configs/formal_training.toml"
     ],
     "entrypoint": "scripts/formal/run_experiment.sh",
     "model_selection": "Director selects logical model; program selects physical endpoint",
@@ -74,7 +78,12 @@
     "qwen_proposer_thinking": true,
     "fixed_worker_override": false,
     "skillbank": "Preserve formal PATS learning pipeline; do not import S01 handcrafted WebShop cards.",
-    "training_started_by_promotion": false
+    "training_started_by_promotion": false,
+    "training_rows": 512,
+    "task_pool": "state/formal-data/webshop-restored512-20260930-v1/validated_task_pool.jsonl",
+    "scorer": "official",
+    "goals": "assets/webshop/prepared/goals.jsonl",
+    "director_prompt_variant": "v3"
   },
   "evaluation": {
     "director_model": "Qwen3.5-9B",
@@ -84,59 +93,26 @@
     ],
     "deepseek": {
       "served_model": "deepseek-flash",
-      "enable_thinking": true,
+      "enable_thinking": false,
       "reasoning_effort": "low",
       "max_tokens": 16384,
-      "max_concurrency": 20,
+      "max_concurrency": 50,
       "api_surface": "chat_completions",
       "network_path": "direct"
     },
     "director_skill_root": "",
     "skill_context": "off",
-    "workers": 24,
+    "workers": 40,
     "seeds": [
       0
     ],
     "dataset": "data/formal/eval/webshop_official_test_128.jsonl"
   },
-  "active_eval_config": "configs/webshop_official_eval.toml",
-  "historical_eval_config": "state/experiments/webshop-merged-identity-128-20260924-run1/effective.local.toml",
-  "entrypoint": "scripts/formal/run_webshop_official_eval.sh",
-  "source_artifacts": {
-    "manifest.json": {
-      "path": "state/experiments/webshop-merged-identity-128-20260924-run1/manifest.json",
-      "sha256": "27dcec2a12ec14c5cedbafb92224f9776a37833e9cfca854d14111129dd27e61"
-    },
-    "comparison/comparison.json": {
-      "path": "state/experiments/webshop-merged-identity-128-20260924-run1/comparison/comparison.json",
-      "sha256": "9b646c0b3f84b07811fc4f0c0ab6cd95f7165359b74fe0218ec9837e323644c8"
-    },
-    "effective.local.toml": {
-      "path": "state/experiments/webshop-merged-identity-128-20260924-run1/effective.local.toml",
-      "sha256": "cc281157df8fa7fea4326aa187baffe48f0a3398464428e002b4a160b233d80c"
-    }
-  },
+  "entrypoint": "scripts/formal/run_experiment.sh",
   "dataset_sha256": "35fbda3aef098050f649ca569a8c8e1c8f3a4dbf0e8c800ba3fade74f7335328",
-  "frozen_source": "state/experiments/webshop-merged-identity-128-20260924-run1/snapshots/candidate/src",
-  "frozen_source_hashes": "state/formal-training/webshop-m02-promotion-20260925/frozen-source-sha256.json",
-  "frozen_source_python_files": 90,
-  "compatibility_notes": {
-    "section_memory_max_chars": 1400,
-    "max_inspected_products": 6,
-    "excluded_later_branches": [
-      "W10 detail-unlimited",
-      "W11 history",
-      "M03 memory-source change",
-      "S01 skill cards",
-      "Native",
-      "SkillFlow bridge"
-    ],
-    "new_sidecar_native_fields_removed": [
-      "raw_available_actions",
-      "valid_subactions[].raw_action"
-    ]
-  },
-  "supersedes": "configs/history/webshop_w08_budget_off_20260924.json",
-  "provenance_note": "User-selected M02 inference behavior promoted into the shared training code. Formal model choice and endpoint pools differ intentionally from the sealed fixed-DeepSeek reference; no new 128-example accuracy claim.",
-  "promotion_record": "docs/WEBSHOP_FORMAL_PROMOTION_2026-09-25.zh-CN.md"
+  "frozen_source": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-engineering-affected-128-20260930-164051/evaluated_source",
+  "supersedes": "configs/history/webshop_before_engineering_20260930.json",
+  "provenance_note": "User selected original official instructions and scoring. Runtime promoted selectively while retaining inactive quality experimentation. Original 512-row official training expansion is retained.",
+  "promotion_record": "docs/WEBSHOP_ENGINEERING_FORMAL_PROMOTION_20260930.zh-CN.md",
+  "source_commit": "d662f39"
 }

@@ -162,10 +162,13 @@ max_submission_repairs = 1
 allow_web_fallback = false
 
 [director]
-prompt_variant = "v2.2"
+prompt_variant = "v3"
 
 # The formal launcher owns the pinned official WebShop sidecar on port 18020.
 [webshop]
+# Formal WebShop: evaluated engineering fixes d662f39; original official scoring.
+purchase_budget_policy = "completion_reserve_v2"
+scheduling_policy = "bounded_research_v1"
 enabled = true
 service_url = "http://127.0.0.1:18020"
 timeout_s = 240.0
@@ -182,7 +185,7 @@ search_observation_mode = "legacy"
 
 compatibility_profile = "m02_merged_identity_v1"
 worker_guidance_policy = "merged_checklist_v1"
-worker_memory_policy = "factual_memory_v1"
+worker_memory_policy = "factual_memory_v2"
 worker_execution_policy = "graph_tools_v1"
 native_conversation_history = false
 env_feedback_enabled = false

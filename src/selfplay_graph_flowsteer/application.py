@@ -431,12 +431,22 @@ class WebShopConfig:
     worker_execution_policy: str = "graph_tools_v1"
     native_conversation_history: bool = False
     compatibility_profile: str = "current"
+    purchase_budget_policy: str = "off"
+    scheduling_policy: str = "off"
 
     def validate(self) -> None:
         section_memory_limit(self.compatibility_profile)
+        if self.scheduling_policy not in {"off", "bounded_research_v1"}:
+            raise ValueError("unknown webshop.scheduling_policy")
+        if self.scheduling_policy != "off" and (self.worker_execution_policy != "graph_tools_v1" or not self.staged_commit_enabled):
+            raise ValueError("WebShop scheduling requires graph_tools_v1 and staged commit")
+        if self.purchase_budget_policy not in {"off", "completion_reserve_v1", "completion_reserve_v2"}:
+            raise ValueError("unknown webshop.purchase_budget_policy")
+        if self.purchase_budget_policy != "off" and (self.worker_execution_policy != "graph_tools_v1" or not self.staged_commit_enabled):
+            raise ValueError("purchase reservation requires graph_tools_v1 and staged commit")
         if self.compatibility_profile == M02_PROFILE and (
             self.worker_execution_policy != "graph_tools_v1"
-            or self.worker_memory_policy != "factual_memory_v1"
+            or self.worker_memory_policy not in {"factual_memory_v1", "factual_memory_v2"}
             or self.worker_guidance_policy != "merged_checklist_v1"
             or self.search_observation_mode != "legacy"
             or self.max_observation_chars != 0
@@ -461,9 +471,11 @@ class WebShopConfig:
             raise ValueError(
                 "skillflow_native_v1 requires legacy, unlimited observations, staged commit, baseline guidance and feedback off"
             )
-        if self.worker_memory_policy != "factual_memory_v1":
+        if self.worker_memory_policy == "factual_memory_v2" and self.worker_execution_policy != "graph_tools_v1":
+            raise ValueError("factual_memory_v2 requires graph_tools_v1")
+        if self.worker_memory_policy not in {"factual_memory_v1", "factual_memory_v2"}:
             raise ValueError(
-                "webshop.worker_memory_policy must be factual_memory_v1"
+                "webshop.worker_memory_policy must be factual_memory_v1 or factual_memory_v2"
             )
         if self.worker_guidance_policy not in WEBSHOP_WORKER_GUIDANCE_POLICIES:
             raise ValueError(
@@ -794,6 +806,11 @@ class AdaptiveApplicationConfig:
         self.retrieval.validate()
         self.aime_actions.validate()
         self.webshop.validate()
+        if self.webshop.enabled and (self.webshop.purchase_budget_policy != "off" or self.webshop.scheduling_policy != "off"):
+            shop_canvas = self.canvas.for_dataset("webshop")
+            if (shop_canvas.action_budget_policy != "shared_total_v1"
+                    or shop_canvas.submission_protocol != "unified_task_result_v1"):
+                raise ValueError("purchase reservation requires shared_total_v1 and unified_task_result_v1")
         self.alfworld.validate()
         self.swe.validate()
         self.director_reward.validate()
@@ -1527,6 +1544,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             worker_execution_policy=str(webshop.get("worker_execution_policy", "graph_tools_v1")),
             native_conversation_history=bool(webshop.get("native_conversation_history", False)),
             compatibility_profile=str(webshop.get("compatibility_profile", "current")),
+            purchase_budget_policy=str(webshop.get("purchase_budget_policy", "off")),
+            scheduling_policy=str(webshop.get("scheduling_policy", "off")),
         ),
         alfworld=ALFWorldConfig(
             task_prompt_source=str(alfworld.get("task_prompt_source", "dataset")),
@@ -2730,6 +2749,8 @@ def create_adaptive_application(
             webshop_worker_execution_policy=config.webshop.worker_execution_policy,
             webshop_native_conversation_history=config.webshop.native_conversation_history,
             webshop_compatibility_profile=config.webshop.compatibility_profile,
+            webshop_purchase_budget_policy=config.webshop.purchase_budget_policy,
+            webshop_scheduling_policy=config.webshop.scheduling_policy,
         )
     else:
         if director_backend is None:
@@ -2782,6 +2803,8 @@ def create_adaptive_application(
                 webshop_worker_execution_policy=config.webshop.worker_execution_policy,
                 webshop_native_conversation_history=config.webshop.native_conversation_history,
                 webshop_compatibility_profile=config.webshop.compatibility_profile,
+                webshop_purchase_budget_policy=config.webshop.purchase_budget_policy,
+                webshop_scheduling_policy=config.webshop.scheduling_policy,
             )
         else:
             worker_executor = ModelAgentExecutor(
@@ -2795,6 +2818,8 @@ def create_adaptive_application(
                 webshop_worker_execution_policy=config.webshop.worker_execution_policy,
                 webshop_native_conversation_history=config.webshop.native_conversation_history,
                 webshop_compatibility_profile=config.webshop.compatibility_profile,
+                webshop_purchase_budget_policy=config.webshop.purchase_budget_policy,
+                webshop_scheduling_policy=config.webshop.scheduling_policy,
             )
         if distiller_backend is None:
             distiller_backend = runtime_backends[config.skill_distiller_runtime]

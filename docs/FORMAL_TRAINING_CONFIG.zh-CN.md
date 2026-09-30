@@ -53,11 +53,11 @@ DeepSeek 路由的请求并发上限也为 24；它与轨迹并发分别控制�
 Worker 的输入与输出，包括修订和重跑，不包含 Director tokens，也不是单次请求的输出上限。
 该设置同步至当前训练/评测配置及源码默认值；已完成实验的配置快照保留原值。
 
-WebShop 正式训练采用 M02，启用 `m02_merged_identity_v1`，并使用 V3 提交、各节点独立
-会话和每题共享 16 次工具动作。修正索引和测试集隔离后的 444 条训练数据继续保留。
-正式训练仍由 Director 选择逻辑模型，物理接口由程序轮换，Qwen thinking 开启。
-此前恢复的 `235e670` 对应历史 **64/128（50%）**，现存旧版本分支；当前 V3 尚未重测。
-历史来源见 [WebShop 恢复记录](WEBSHOP_MAIN_RESTORE_20260929.zh-CN.md)。
+WebShop 当前正式版本为 **M02＋V3 engineering-20260930**，已合入本次真实128题验证的累积修复：自动事实记忆v2、购买预留v2、调研调度，以及导航/预留误释放/可选计划/规格解析修复。唯一正式配置为 `configs/formal_training.toml`，全题共享16次环境动作，记忆自动注入，不增加读取工具或额度。
+
+按用户选择，使用原始官方题面与评分；正式端口18020，goals为 `assets/webshop/prepared/goals.jsonl`。保留此前补齐的512条原始官方训练题，组合池为 `state/formal-data/webshop-restored512-20260930-v1/validated_task_pool.jsonl`，共3584题；WebShop训练与测试goal ID无交集。quality改写数据、评分器和独立脚本保留为实验，不由正式入口选择。
+
+正式训练继续由Director选择Worker模型并使用现有PATS/SkillBank流程。本次参考评测使用固定DeepSeek Flash、thinking关闭、请求并发50：64/128满分、126购买、2未购买、全部提交，平均奖励0.731641；该成绩不代表动态路由训练成绩。版本来源和启动校验见 [正式升级记录](WEBSHOP_ENGINEERING_FORMAL_PROMOTION_20260930.zh-CN.md)。
 
 本工作区当前已恢复的私密配置状态如下（只记录状态，不在文档中复制密钥正文）：
 

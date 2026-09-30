@@ -280,6 +280,13 @@ class WebShopSessionLifecycle:
                 status = health()
                 if status.get("status") != "ok":
                     raise RuntimeError("WebShop service health check failed")
+            quality = task.metadata.get("webshop_quality", {})
+            service_version = status.get("scorer_version", "official")
+            if quality or service_version != "official":
+                if not isinstance(quality, dict) or quality.get("version") != service_version:
+                    raise RuntimeError("WebShop task and service use different scoring versions")
+                if quality.get("scorer_sha256") != status.get("scorer_sha256"):
+                    raise RuntimeError("WebShop task and service use different scoring code")
             self._task = task
             self._results = {}
             self._transaction_journals = {}
@@ -419,6 +426,10 @@ class WebShopSessionLifecycle:
             session_id = str(payload.get("session_id", "")).strip()
             if not session_id:
                 raise RuntimeError("WebShop session creation returned no session_id")
+            quality = self._task.metadata.get("webshop_quality", {})
+            if quality and payload.get("instruction_sha256") != quality.get("prompt_sha256"):
+                self.client.close_session(session_id)
+                raise RuntimeError("WebShop task and environment instructions differ")
             self._active_agent = agent_id
             self._owner_agent = agent_id
             self._active_session = session_id

@@ -1,0 +1,5474 @@
+{
+  "summary": {
+    "tasks": 128,
+    "counts": {
+      "prev_labels_checked": 780,
+      "actual_event:reserved": 310,
+      "actual_event:unknown_return_path": 31,
+      "executed_prev_from:product_section": 73,
+      "actual_event:plan_update_ignored": 64,
+      "error:invalid_action_arguments": 5,
+      "corrected_option_observations": 11,
+      "corrected_option:cottonwood": 6,
+      "corrected_option:cantaloupe": 4,
+      "error:stateful_action_deferred": 2,
+      "error:purchase_budget_reserved": 7,
+      "actual_event:rejected": 9,
+      "actual_event:released": 5,
+      "error:purchase_plan_incomplete": 1,
+      "error:invalid_completion_plan": 1,
+      "corrected_option:lieutenant": 1
+    },
+    "advertised_product_ids_checked": 1578,
+    "nonexistent_product_ids": [],
+    "wrong_navigation": 0,
+    "fake_option_products": 0,
+    "reserved_section_transitions": 42,
+    "section_reservations_lost": 0,
+    "preflight_mismatches": 0,
+    "release_count_mismatches": [],
+    "ignored_count_mismatches": []
+  },
+  "tasks": [
+    {
+      "task_id": "webshop/goal-00352",
+      "counts": {
+        "prev_labels_checked": 10,
+        "actual_event:reserved": 4,
+        "actual_event:unknown_return_path": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 5,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 1
+      },
+      "replay_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00478",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00269",
+      "counts": {
+        "prev_labels_checked": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00090",
+      "counts": {
+        "prev_labels_checked": 9,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "7 piece king comforter set floral machine washable",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for floral 7-piece king comforter sets under $80; current candidate B08R6JMWTY is $89.99 (over budget) and lacks floral evidence.",
+                "unresolved_constraints": [
+                  "current candidate price $89.99 exceeds $80 ceiling",
+                  "floral decoration unverified",
+                  "machine washable unverified"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "7 piece king comforter set floral machine washable",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Current product is $146.83, exceeding the $80 ceiling; search for affordable 7-piece king floral comforter sets.",
+                "unresolved_constraints": [
+                  "price under 80.00",
+                  "7 piece",
+                  "king",
+                  "floral",
+                  "machine washable"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 4
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00362",
+      "counts": {
+        "prev_labels_checked": 3,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_88ONSuKovdVkGcUFycIV5791",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B09LLL248D",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09LLL248D",
+                "options": {},
+                "requirement_quotes": [
+                  "a2442 pro 14\" 2021 m1 pro max touch id hard shell case",
+                  "price lower than 60.00 dollars"
+                ],
+                "verified_requirements": [],
+                "unresolved_constraints": [
+                  "price and options unverified until product page inspection"
+                ],
+                "reason": "Inspect top candidate to verify product type, price, and selectable options."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 15
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00369",
+      "counts": {
+        "prev_labels_checked": 7,
+        "actual_event:plan_update_ignored": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "hair removal wax bottle",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a high quality hair removal wax bottle under $40; current candidate is an empty refillable bottle, not actual wax.",
+                "unresolved_constraints": [
+                  "Current candidate is an empty container, not hair removal wax product",
+                  "Quality not established"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 12
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00241",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00342",
+      "counts": {
+        "prev_labels_checked": 7,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00004",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:4",
+              "state_version": 4,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B06XW8PL68",
+                "reason": "Return to product page to stage Buy Now for the observed 12\" subwoofer package at $100, within the $200 ceiling."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 13
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00311",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00029",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00487",
+      "counts": {
+        "prev_labels_checked": 4,
+        "error:invalid_action_arguments": 1,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 13,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:4",
+              "state_version": 4,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09rsk8nnp",
+                "options": {},
+                "requirement_quotes": [
+                  "long handled body brush",
+                  "price lower than 80.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Product type: long handle back & body shower scrub brush",
+                  "Price $14.0 is below $80 ceiling"
+                ],
+                "unresolved_constraints": [
+                  "Handle length not yet confirmed from features"
+                ],
+                "reason": "Return to product page to stage Buy Now for the inspected long-handled body brush",
+                "owner": "agent_1",
+                "phase": "explore",
+                "version": 1
+              }
+            }
+          },
+          "code": "invalid_action_arguments",
+          "remaining": 13,
+          "kind": "navigate"
+        }
+      ],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00082",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00365",
+      "counts": {
+        "prev_labels_checked": 7,
+        "corrected_option_observations": 6,
+        "corrected_option:cottonwood": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_6lW5brytAa2DnmR4665m4615",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:3:B07MWSX8Z7",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B07MWSX8Z7",
+                "options": {
+                  "size": "35W x 36L",
+                  "color": "Rockdale"
+                },
+                "reason": "Inspect the retro relaxed fit boot cut jean matching the requested product type and options."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 15
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00318",
+      "counts": {
+        "prev_labels_checked": 7,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 5,
+        "actual_event:unknown_return_path": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 5,
+        "unknown_return_path": 2
+      },
+      "replay_event_counts": {
+        "reserved": 5,
+        "unknown_return_path": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00284",
+      "counts": {
+        "prev_labels_checked": 8,
+        "actual_event:reserved": 4,
+        "actual_event:unknown_return_path": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 3
+      },
+      "replay_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00045",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 13,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00186",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00024",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "high speed 3 foot red USB cable",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for the requested product type and attributes; inspect candidates before selecting options and buying."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 16
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00248",
+      "counts": {
+        "prev_labels_checked": 9,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00380",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00063",
+      "counts": {
+        "prev_labels_checked": 7,
+        "actual_event:plan_update_ignored": 4,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 4,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 4,
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:7:B09PPMHNMS",
+              "state_version": 7,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09PPMHNMS",
+                "options": {
+                  "size": "20 plus",
+                  "color": "kahuna"
+                },
+                "reason": "Inspect Lee Plus Size Relaxed Fit Cargo Capri Pant; verify size 20 plus and color options including kahuna."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Planned option group/value was not observed on this product.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "call_00_Z6aF8kcZ56l9nUoMzdKY9691",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "Kahuna capri pant relaxed fit plus size",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09ppmhnms",
+                "options": {
+                  "size": "20 plus",
+                  "color": "midway teal"
+                },
+                "requirement_quotes": [
+                  "kahuna colored capri pant",
+                  "relaxed fit",
+                  "size 20 plus",
+                  "price lower than 90.00 dollars"
+                ],
+                "unresolved_constraints": [
+                  "relaxed fit not yet verified on product page"
+                ],
+                "reason": "Re-inspect retained candidate b09ppmhnms which showed size 20 plus and teal color options"
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "purchase_budget_reserved",
+            "message": "The proposed path is unknown or unaffordable; existing reservation retained.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 8
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "Kahuna capri pant",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08SQHTMPR",
+                "options": {
+                  "size": "20 plus"
+                },
+                "requirement_quotes": [
+                  "kahuna colored capri pant",
+                  "relaxed fit",
+                  "size 20 plus",
+                  "price lower than 90.00 dollars"
+                ],
+                "verified_requirements": [
+                  "capri pant"
+                ],
+                "unresolved_constraints": [
+                  "Kahuna color not yet observed",
+                  "relaxed fit not yet verified",
+                  "size 20 plus not yet selected",
+                  "price under $90 not yet confirmed for a specific variant"
+                ],
+                "accept_partial": true,
+                "reason": "Reformulate around product noun plus distinguishing attribute to find Kahuna color; retain Lee cargo capri as fallback."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 7
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B08SQHTMPR",
+              "state_version": 11,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08SQHTMPR",
+                "options": {
+                  "size": "20 plus"
+                },
+                "requirement_quotes": [
+                  "kahuna colored capri pant",
+                  "relaxed fit",
+                  "size 20 plus",
+                  "price lower than 90.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Capri pant product type (Lee Women's Flex-to-go Mid Rise Cargo Capri Pant)"
+                ],
+                "unresolved_constraints": [
+                  "Kahuna color not yet observed",
+                  "Relaxed fit not yet verified",
+                  "Size 20 plus availability not yet verified",
+                  "Price range $17.93-$69.28 spans below $90 ceiling"
+                ],
+                "reason": "Inspect the most relevant capri pant candidate to verify color, fit, size 20 plus availability and price."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 6
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00134",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "Samsung Galaxy Tab S7 512GB tablet",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a 512GB Galaxy Tab S7 under $770; current candidate is Tab S7 Plus at $798.92 which exceeds ceiling.",
+                "unresolved_constraints": [
+                  "price under $770",
+                  "512GB storage",
+                  "USB port"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 12
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00433",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:plan_update_ignored": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "hooded sweatshirt 3x-large",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a hooded long-sleeve sweatshirt in 3X-Large under $50; inspect candidates and stage Buy.",
+                "unresolved_constraints": [
+                  "3X-Large availability unverified",
+                  "hooded sweatshirt type unverified",
+                  "price under $50 unverified"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 7
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "hooded sweatshirt 3x-large",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Reformulate around product noun and size to find hooded sweatshirt candidates; prior searches returned shirts/tees."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 5
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "hooded sweatshirt 3x-large",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Reformulate around product noun 'hooded sweatshirt' with size 3x-large; prior searches returned only t-shirts/shirts, so change query terms to find actual hooded sweatshirts."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 3
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00420",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "x-large tall long sleeve flannel shirt sea cliff blue plaid",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for the requested flannel shirt variant; reserve budget for inspection, option selection and Buy."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 16
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00043",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00040",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 2,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 5,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00163",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:plan_update_ignored": 6
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 6
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 6
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "red lace closure booties socks",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Reformulate query around product noun and distinguishing attribute; inspect candidates for red lace closure water booties & socks under $50."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 14
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:4:B09NC4MSCV",
+              "state_version": 8,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09NC4MSCV",
+                "options": {},
+                "requirement_quotes": [
+                  "lace closure water booties & socks of red color",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [],
+                "unresolved_constraints": [
+                  "red color not yet verified",
+                  "lace closure not yet verified",
+                  "water booties & socks product type not yet verified"
+                ],
+                "accept_partial": true,
+                "reason": "Inspect the closest bootie candidate with lace-up closure and price range $34.49-$36.99, entirely under $50."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 9
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "red lace closure water booties socks women",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09nc4mscv",
+                "options": {
+                  "color": "red"
+                },
+                "reason": "Search for red variant; current inspected candidate lacks red color option."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Planned option group/value was not observed on this product.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 8
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:4:B09NC4MSCV",
+              "state_version": 10,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09NC4MSCV",
+                "options": {
+                  "color": "red"
+                },
+                "requirement_quotes": [
+                  "lace closure water booties & socks of red color",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Price range $34.49 to $36.99 is below $50.00",
+                  "Lace Up Closure booties style"
+                ],
+                "unresolved_constraints": [
+                  "Red color not yet confirmed among observed options (black, brown)",
+                  "Water booties & socks product type not fully confirmed"
+                ],
+                "reason": "Inspect the observed candidate to check for red color and water booties & socks attributes before staging purchase."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Planned option group/value was not observed on this product.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 7
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:2:B09NC4MSCV",
+              "state_version": 12,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09NC4MSCV",
+                "options": {
+                  "color": "red"
+                },
+                "requirement_quotes": [
+                  "lace closure water booties & socks of red color",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Product type: women's booties (ankle/mid-calf boots)",
+                  "Price range $34.49-$36.99 is below the $50.00 ceiling"
+                ],
+                "unresolved_constraints": [
+                  "Red color not yet confirmed among selectable options (observed options: black, brown)",
+                  "Lace closure and water booties & socks attributes not yet verified"
+                ],
+                "reason": "Inspect the one already-observed candidate to check selectable color options and details before staging a purchase."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Planned option group/value was not observed on this product.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 5
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:4:B09NC4MSCV",
+              "state_version": 14,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09NC4MSCV",
+                "options": {
+                  "color": "red"
+                },
+                "requirement_quotes": [
+                  "lace closure water booties & socks of red color",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Price range $34.49 to $36.99 is entirely below the $50.00 ceiling"
+                ],
+                "unresolved_constraints": [
+                  "Red color not yet confirmed as a selectable option (observed options: black, brown)",
+                  "Lace closure and water booties & socks attributes not yet verified"
+                ],
+                "accept_partial": true,
+                "reason": "Re-inspect the only observed candidate to check whether a red option is available before staging Buy."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Planned option group/value was not observed on this product.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 3
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00170",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00122",
+      "counts": {
+        "prev_labels_checked": 7,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00319",
+      "counts": {
+        "prev_labels_checked": 10,
+        "actual_event:reserved": 7,
+        "actual_event:unknown_return_path": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 7,
+        "unknown_return_path": 3
+      },
+      "replay_event_counts": {
+        "reserved": 7,
+        "unknown_return_path": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00345",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00139",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 2,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 11,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 9,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00358",
+      "counts": {
+        "prev_labels_checked": 8,
+        "corrected_option_observations": 4,
+        "corrected_option:cantaloupe": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00268",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 2,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 6,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 4,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00235",
+      "counts": {
+        "prev_labels_checked": 3,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_95Q85XMERa57SpfjFng07882",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B09K3QFPVP",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09K3QFPVP",
+                "options": {
+                  "color": "White Fur"
+                },
+                "requirement_quotes": [
+                  "faux fur white andeworld swivel barrel chair",
+                  "price lower than 310.00 dollars"
+                ],
+                "reason": "Top candidate matches brand Andeworld, faux fur, white, swivel barrel chair; price $284.95 under 310."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 15
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00481",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 8,
+          "retained": true,
+          "cost": 3
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00367",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00188",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00143",
+      "counts": {
+        "prev_labels_checked": 3,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00232",
+      "counts": {
+        "prev_labels_checked": 6,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00407",
+      "counts": {
+        "prev_labels_checked": 7,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2,
+        "actual_event:unknown_return_path": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 9,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2,
+        "unknown_return_path": 1
+      },
+      "replay_event_counts": {
+        "reserved": 2,
+        "unknown_return_path": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00282",
+      "counts": {
+        "prev_labels_checked": 7,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00075",
+      "counts": {
+        "prev_labels_checked": 8,
+        "actual_event:reserved": 5,
+        "actual_event:unknown_return_path": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 5,
+        "unknown_return_path": 4
+      },
+      "replay_event_counts": {
+        "reserved": 5,
+        "unknown_return_path": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00202",
+      "counts": {
+        "prev_labels_checked": 6,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00071",
+      "counts": {
+        "prev_labels_checked": 3,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_8FR4QVUD4Szs40zI8ZwO2750",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:6:B00U3TE9ZU",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B00U3TE9ZU",
+                "options": {
+                  "color": "21"
+                },
+                "reason": "Candidate matches SPF50+ and color 21 in title, price $13 under $30; inspect to verify options and long-lasting claim."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 15
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00291",
+      "counts": {
+        "prev_labels_checked": 6,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00135",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 8,
+          "retained": true,
+          "cost": 3
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "red camellia fleece jacket xlarge plus size machine washable",
+              "completion_plan": {
+                "decision": "reserve",
+                "requirement_quotes": [
+                  "xlarge plus red camellia fleece jacket",
+                  "machine washed",
+                  "price lower than 110.00 dollars"
+                ],
+                "unresolved_constraints": [
+                  "color/pattern red camellia",
+                  "size xlarge plus",
+                  "machine washable",
+                  "price under $110"
+                ],
+                "reason": "Search for red camellia fleece jacket candidates to inspect."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 16
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00427",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00293",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00221",
+      "counts": {
+        "prev_labels_checked": 10,
+        "error:stateful_action_deferred": 1,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "call_01_L62Mmcg8GXOv9rEvBRiF3742",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B087Q9W1JJ",
+              "state_version": 10
+            }
+          },
+          "code": "stateful_action_deferred",
+          "remaining": 6,
+          "kind": "open_product"
+        }
+      ],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "women palm leaves art print 16x24",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a 16x24 art print with women and palm leaves under $40; current candidate B087Q9W1JJ is botanical/tropical but lacks women and price range exceeds $40."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 11
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00354",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00453",
+      "counts": {
+        "prev_labels_checked": 9,
+        "error:purchase_budget_reserved": 1,
+        "actual_event:plan_update_ignored": 3,
+        "actual_event:rejected": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 3,
+        "rejected": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 3,
+        "rejected": 1
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "select_option:color:pink",
+              "state_version": 16,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09SYBDNR7",
+                "options": {
+                  "color": "pink"
+                },
+                "reason": "Select pink variant of observed non-toxic mouth guard container under $30, then Buy."
+              }
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 1,
+          "kind": "select_option"
+        }
+      ],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "pink non toxic mouth guard",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find pink non-toxic mouth guard under $30; inspect candidates and select pink option if available."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 13
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:5:B09SYBDNR7",
+              "state_version": 15,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09SYBDNR7",
+                "options": {
+                  "color": "pink"
+                },
+                "requirement_quotes": [
+                  "pink",
+                  "non toxic",
+                  "price lower than 30.00 dollars"
+                ],
+                "verified_requirements": [
+                  "pink color option available",
+                  "non-toxic material stated in features",
+                  "price $6.39 under $30"
+                ],
+                "unresolved_constraints": [
+                  "product is a mouth guard container/case, not a wearable mouth guard"
+                ],
+                "reason": "Inspect the pink, non-toxic, affordable candidate and select pink before Buy"
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "purchase_budget_reserved",
+            "message": "The proposed path is unknown or unaffordable; existing reservation retained.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 2
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "select_option:color:pink",
+              "state_version": 16,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09SYBDNR7",
+                "options": {
+                  "color": "pink"
+                },
+                "reason": "Select pink variant of observed non-toxic mouth guard container under $30, then Buy."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "purchase_budget_reserved",
+            "message": "The proposed path is unknown or unaffordable; existing reservation retained.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": false,
+          "remaining_before": 1
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00340",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 2,
+        "actual_event:unknown_return_path": 2,
+        "actual_event:released": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "20 ft HDMI cable 4 pack",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B000IJY8DS",
+                "options": {},
+                "requirement_quotes": [
+                  "20 foot long 4 pack of gold plated hdmi male to male cables",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [],
+                "unresolved_constraints": [
+                  "20-foot length, 4-pack quantity, gold plating, and under-$40 price not yet verified on any inspected product page"
+                ],
+                "accept_partial": true,
+                "reason": "Reformulate query around product noun and distinguishing attribute (20 ft, 4 pack) to find a closer candidate; retain B000IJY8DS as fallback."
+              }
+            }
+          },
+          "page": "search_results",
+          "reserved_asin": "b000ijy8ds",
+          "public_path_cost": null
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "20 ft HDMI cable 4 pack gold plated male to male",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B0787ZJ3GX",
+                "options": {
+                  "size": "20 ft, 2 pack"
+                },
+                "requirement_quotes": [
+                  "20 foot long 4 pack of gold plated hdmi male to male cables",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [
+                  "HDMI cable",
+                  "20 ft length available as option"
+                ],
+                "unresolved_constraints": [
+                  "4 pack not confirmed",
+                  "gold plated not confirmed"
+                ],
+                "reason": "Search for a 4-pack gold-plated 20ft HDMI male-to-male cable under $40."
+              }
+            }
+          },
+          "page": "search_results",
+          "reserved_asin": "b0787zj3gx",
+          "public_path_cost": null
+        }
+      ],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 2,
+        "unknown_return_path": 2,
+        "released": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 2,
+        "unknown_return_path": 2,
+        "released": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "20 foot HDMI male to male cable 4 pack gold plated",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for the requested 20ft 4-pack gold plated HDMI male-to-male cables under $40; current candidate is 25ft single cable, not matching length or pack size.",
+                "unresolved_constraints": [
+                  "need 20 foot length",
+                  "need 4 pack",
+                  "need gold plated male to male HDMI"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "20 ft HDMI cable 4 pack gold plated male to male",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for 20ft 4-pack gold-plated HDMI male-to-male cables under $40; inspect best candidate and stage Buy Now within remaining budget."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 6
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00097",
+      "counts": {
+        "prev_labels_checked": 7,
+        "error:purchase_plan_incomplete": 1,
+        "actual_event:reserved": 5,
+        "actual_event:rejected": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 5,
+        "rejected": 1
+      },
+      "replay_event_counts": {
+        "reserved": 5,
+        "rejected": 1
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "purchase:B08ZXYPGDK",
+              "state_version": 9,
+              "purchase_evidence": {
+                "verified_requirements": [
+                  "Product type: Fitbit Versa bands (fits Fitbit Versa 3 & Sense)",
+                  "Lightweight: features state 'soft, lightweight and waterproof' TPU material",
+                  "For men and women: features state suitable for women and men",
+                  "Size large: selected_options size=large",
+                  "Price $9.99 is under $40.00 ceiling"
+                ],
+                "unresolved_constraints": [
+                  "Color not specified by user; default black+blue+gray retained"
+                ]
+              },
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08ZXYPGDK",
+                "options": {
+                  "size": "large",
+                  "color": "black+blue+gray"
+                },
+                "requirement_quotes": [
+                  "light weight fitbit versa bands for men women",
+                  "size large",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [
+                  "lightweight TPU material",
+                  "fits Fitbit Versa 3 & Sense",
+                  "for women and men",
+                  "price $9.99 under $40"
+                ],
+                "unresolved_constraints": [
+                  "color not specified by user"
+                ],
+                "accept_partial": true,
+                "reason": "Large size selected; stage purchase of best observed relevant candidate"
+              }
+            }
+          },
+          "code": "purchase_plan_incomplete",
+          "remaining": 8,
+          "kind": "purchase"
+        }
+      ],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00185",
+      "counts": {
+        "prev_labels_checked": 9,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "mint green snow boots rubber outsole",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for mint green snow boots with rubber outsole under $50; current candidate is green but size/color/outsole unverified."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 12
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00417",
+      "counts": {
+        "prev_labels_checked": 7,
+        "error:purchase_budget_reserved": 2,
+        "actual_event:plan_update_ignored": 4,
+        "actual_event:rejected": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 4,
+        "rejected": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 4,
+        "rejected": 2
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "tall storage cabinet white and grey under 70",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find affordable tall white/grey storage cabinet under $70; current candidate is $269.99, over budget.",
+                "unresolved_constraints": [
+                  "price under $70 not yet found",
+                  "white and grey color",
+                  "tall"
+                ]
+              }
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 2,
+          "kind": null
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "back_to_search:15",
+              "state_version": 15,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09rwrcwfz",
+                "options": {},
+                "requirement_quotes": [
+                  "storage space that is white and grey and also tall",
+                  "price lower than 70.00 dollars"
+                ],
+                "verified_requirements": [
+                  "HIFIT 71\" H Storage Cabinet is tall storage cabinet",
+                  "Title states White and Grey"
+                ],
+                "unresolved_constraints": [
+                  "Price at observation $149.99 exceeds $70.00 ceiling"
+                ],
+                "accept_partial": true,
+                "reason": "Return to search results to look for an affordable white/grey tall storage cabinet under $70 before staging."
+              }
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 2,
+          "kind": "navigate"
+        }
+      ],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "tall storage cabinet white and grey",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find affordable tall white/grey storage cabinet under $70; current candidate is $149.99, over budget.",
+                "unresolved_constraints": [
+                  "price under $70",
+                  "white and grey color",
+                  "tall"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "tall white and grey storage cabinet under 70",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Current HIFIT cabinet is $149.99, over the $70 ceiling. Search for affordable tall white/grey storage cabinets.",
+                "unresolved_constraints": [
+                  "price under $70",
+                  "white and grey color",
+                  "tall"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 5
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "tall storage cabinet white and grey under 70",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find affordable tall white/grey storage cabinet under $70; current candidate is $269.99, over budget.",
+                "unresolved_constraints": [
+                  "price under $70 not yet found",
+                  "white and grey color",
+                  "tall"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": false,
+          "remaining_before": 2
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "back_to_search:15",
+              "state_version": 15,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09rwrcwfz",
+                "options": {},
+                "requirement_quotes": [
+                  "storage space that is white and grey and also tall",
+                  "price lower than 70.00 dollars"
+                ],
+                "verified_requirements": [
+                  "HIFIT 71\" H Storage Cabinet is tall storage cabinet",
+                  "Title states White and Grey"
+                ],
+                "unresolved_constraints": [
+                  "Price at observation $149.99 exceeds $70.00 ceiling"
+                ],
+                "accept_partial": true,
+                "reason": "Return to search results to look for an affordable white/grey tall storage cabinet under $70 before staging."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "purchase_budget_reserved",
+            "message": "The proposed path is unknown or unaffordable; existing reservation retained.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": false,
+          "remaining_before": 2
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00167",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 2,
+        "actual_event:unknown_return_path": 1,
+        "actual_event:released": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "12ft HDMI cable male to male high speed",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B004Y35TXW",
+                "options": {},
+                "requirement_quotes": [
+                  "ten 12 foot high speed hdmi male to male cables",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [],
+                "unresolved_constraints": [
+                  "12-foot length not yet observed",
+                  "total price for ten cables under $50 not verified"
+                ],
+                "accept_partial": true,
+                "reason": "Reformulate query around product noun and distinguishing attribute (12ft) to find a matching length candidate."
+              }
+            }
+          },
+          "page": "search_results",
+          "reserved_asin": "b004y35txw",
+          "public_path_cost": null
+        }
+      ],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 2,
+        "unknown_return_path": 1,
+        "released": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 2,
+        "unknown_return_path": 1,
+        "released": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "12 foot high speed HDMI male to male cable",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a 12-foot male-to-male HDMI cable candidate; current inspected product is 25 feet, which does not match the requested 12-foot length.",
+                "unresolved_constraints": [
+                  "Current candidate B004Y35TXW is 25 feet, not 12 feet",
+                  "Need ten cables total under $50"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:2:B00M7B8KMA",
+              "state_version": 9,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B00M7B8KMA",
+                "options": {},
+                "requirement_quotes": [
+                  "ten 12 foot high speed hdmi male to male cables",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Search result title shows 12ft High Speed HDMI cable"
+                ],
+                "unresolved_constraints": [
+                  "Male-to-male connectors not yet verified on product page",
+                  "Total price for ten units under $50.00 not yet verified"
+                ],
+                "reason": "Inspect the 12ft MIYAKO HDMI cable product page to verify connectors and price before staging purchase."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 8
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00152",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:15",
+              "state_version": 15,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B00MYRXWOS",
+                "reason": "Return to product page to stage Buy Now for the observed affordable cookie product."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 2
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00030",
+      "counts": {
+        "prev_labels_checked": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00121",
+      "counts": {
+        "prev_labels_checked": 10,
+        "error:stateful_action_deferred": 1,
+        "error:purchase_budget_reserved": 1,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 6,
+        "actual_event:unknown_return_path": 1,
+        "actual_event:rejected": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 5,
+          "retained": true,
+          "cost": 4
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 6,
+        "unknown_return_path": 1,
+        "rejected": 1
+      },
+      "replay_event_counts": {
+        "reserved": 6,
+        "unknown_return_path": 1,
+        "rejected": 1
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "call_01_IZfbmgLl75QUFHhmjvKx2615",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "eggplant purple oval soft rug easy to clean"
+            }
+          },
+          "code": "stateful_action_deferred",
+          "remaining": 5,
+          "kind": null
+        },
+        {
+          "action": {
+            "call_id": "call_00_X8QCmzmjEqxyZFGYCLLy4413",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "oval soft rug eggplant purple easy to clean"
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 5,
+          "kind": null
+        }
+      ],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00155",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 11,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00060",
+      "counts": {
+        "prev_labels_checked": 8,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "yellow manual toothbrush kids 7-14 sensitive teeth",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a yellow manual toothbrush for kids 7-14 with sensitive teeth under $50; current candidate is U-shaped silicone, not clearly a manual bristle toothbrush for 7-14 sensitive teeth."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 12
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "yellow manual toothbrush kids 7-14 sensitive teeth",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a yellow manual toothbrush for kids 7-14 with sensitive teeth under $50; current candidate is U-shaped silicone for 2-7 years, likely wrong age range.",
+                "unresolved_constraints": [
+                  "age range 7-14 not confirmed",
+                  "manual toothbrush type vs U-shaped silicone",
+                  "sensitive teeth suitability"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 5
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00477",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00341",
+      "counts": {
+        "prev_labels_checked": 5,
+        "error:invalid_action_arguments": 1,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 12,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "view_features:B09PKGTSJ4",
+              "state_version": 4,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09pkgtsj4",
+                "options": {
+                  "color": "black"
+                },
+                "requirement_quotes": [
+                  "black colored easy to apply bun maker",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Product type: bun maker (BUN BARZ donut hair bun maker)",
+                  "Price $17.99 below $40.00 ceiling",
+                  "Color option black selected"
+                ],
+                "unresolved_constraints": [
+                  "'easy to apply' not yet confirmed via description/features"
+                ],
+                "reason": "Inspect features to confirm ease of application before staging Buy Now.",
+                "owner": "agent_1",
+                "phase": "explore",
+                "version": 1
+              }
+            }
+          },
+          "code": "invalid_action_arguments",
+          "remaining": 13,
+          "kind": "view_section"
+        }
+      ],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "black easy to apply bun maker",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for black bun makers under $40, then inspect and buy best candidate."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 16
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00386",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:6",
+              "state_version": 6,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B086PZX6CT",
+                "reason": "Return to product page to stage Buy Now for the observed tempered glass coffee table with wooden frame at $100, under $240."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 11
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00105",
+      "counts": {
+        "prev_labels_checked": 9,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "black hair removal cream",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Re-search to obtain current valid targets for inspecting candidates; prior session ended at research handoff with only B09P1DRK3B inspected.",
+                "unresolved_constraints": [
+                  "No observed evidence confirms black color for any candidate",
+                  "Quality/ease-of-use only from seller text"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 8
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "view_features:B097D4L47N",
+              "state_version": 12,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B097D4L47N",
+                "reason": "Inspect features of the affordable ROPALIA hair removal cream to check quality/ease-of-use before staging purchase."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 5
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00494",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 12,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00400",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 9,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00271",
+      "counts": {
+        "prev_labels_checked": 6,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "old fashioned popcorn 40 pack",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a 40-pack old-fashioned popcorn under $90; current product only offers up to 10-bag sizes."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 5
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:4:B07NM32TPQ",
+              "state_version": 13,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B07NM32TPQ",
+                "options": {},
+                "requirement_quotes": [
+                  "forty pack of old-fashioned popcorn",
+                  "price lower than 90.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Old-fashioned popcorn product type"
+                ],
+                "unresolved_constraints": [
+                  "Forty-pack size not yet confirmed",
+                  "Price under $90 not yet confirmed for this candidate"
+                ],
+                "reason": "Inspect unvisited Amish Country old-fashioned popcorn sampler pack to check pack size and price."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 4
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00055",
+      "counts": {
+        "prev_labels_checked": 3,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00330",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 13,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00299",
+      "counts": {
+        "prev_labels_checked": 12,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 6,
+        "actual_event:unknown_return_path": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 3
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 4,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 6,
+        "unknown_return_path": 1
+      },
+      "replay_event_counts": {
+        "reserved": 6,
+        "unknown_return_path": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00256",
+      "counts": {
+        "prev_labels_checked": 7,
+        "actual_event:reserved": 3,
+        "actual_event:unknown_return_path": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 10,
+          "retained": true,
+          "cost": 3
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3,
+        "unknown_return_path": 1
+      },
+      "replay_event_counts": {
+        "reserved": 3,
+        "unknown_return_path": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00065",
+      "counts": {
+        "prev_labels_checked": 10,
+        "error:invalid_action_arguments": 1,
+        "executed_prev_from:product_section": 2,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 6,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 4,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 3
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:11",
+              "state_version": 11,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b07vc9hh8c",
+                "options": {},
+                "requirement_quotes": [
+                  "all natural but no artificial ingredients",
+                  "savory and spicy sauce",
+                  "3 pack",
+                  "sweet kick mustard flavor",
+                  "price lower than 140.00 dollars"
+                ],
+                "verified_requirements": [
+                  "3 pack (Pack of 3)",
+                  "price $20.00 under $140.00",
+                  "mustard flavor"
+                ],
+                "unresolved_constraints": [
+                  "all natural / no artificial ingredients not yet confirmed",
+                  "sweet kick flavor not yet confirmed"
+                ],
+                "reason": "Return to product page to check options and stage Buy for the observed 3-pack mustard under budget.",
+                "owner": "agent_1",
+                "phase": "explore",
+                "version": 1
+              }
+            }
+          },
+          "code": "invalid_action_arguments",
+          "remaining": 6,
+          "kind": "navigate"
+        }
+      ],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "all natural sweet kick spicy mustard sauce 3 pack",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find all-natural sweet kick spicy mustard sauce 3-pack under $140",
+                "unresolved_constraints": [
+                  "need 3-pack",
+                  "need sweet kick flavor",
+                  "need all natural no artificial ingredients"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 13
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "all natural sweet kick mustard sauce 3 pack",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find a 3-pack sweet kick mustard sauce under $140; current candidate is garlic aioli mustard, not sweet kick.",
+                "unresolved_constraints": [
+                  "sweet kick flavor not verified",
+                  "all natural / no artificial ingredients not verified"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 9
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00371",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 2,
+        "actual_event:reserved": 6
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 10,
+          "retained": true,
+          "cost": 3
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 6
+      },
+      "replay_event_counts": {
+        "reserved": 6
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00213",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00107",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 2,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 4
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 5,
+          "retained": true,
+          "cost": 4
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00054",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 11,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00471",
+      "counts": {
+        "prev_labels_checked": 4,
+        "error:purchase_budget_reserved": 3,
+        "actual_event:plan_update_ignored": 6,
+        "actual_event:rejected": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 6,
+        "rejected": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 6,
+        "rejected": 3
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "designed house grey under 100 dollars",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for affordable grey designed house candidates; current inspected product exceeds $100 ceiling."
+              }
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 2,
+          "kind": null
+        },
+        {
+          "action": {
+            "call_id": "call_00_9vZjKPpBBg4t6N2jvzAm6039",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "grey house bed frame under 100 dollars"
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 2,
+          "kind": null
+        },
+        {
+          "action": {
+            "call_id": "call_00_IyDY6ftJ3MG55vE4Jgrs3763",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "grey house bed frame"
+            }
+          },
+          "code": "purchase_budget_reserved",
+          "remaining": 2,
+          "kind": null
+        }
+      ],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "grey dollhouse",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for the requested product type (designed house) in grey under $100; prior queries returned irrelevant items."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 14
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "designed house grey",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Find grey designed house under $100"
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 12
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:2:B09165T5PZ",
+              "state_version": 7,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09165T5PZ",
+                "options": {},
+                "requirement_quotes": [
+                  "designed house with grey color",
+                  "price lower than 100.00 dollars"
+                ],
+                "verified_requirements": [],
+                "unresolved_constraints": [
+                  "price 263.99 exceeds 100.00 ceiling",
+                  "grey color variant unverified"
+                ],
+                "reason": "Inspect the grey house-shaped loft bed candidate to verify color and price."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "designed house grey under 100 dollars",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for affordable grey designed house candidates; current inspected product is $263.99, over budget."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 9
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "grey house bed frame under 100 dollars",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for affordable grey house bed frames under $100; no candidate inspected yet.",
+                "unresolved_constraints": [
+                  "grey color",
+                  "price under $100"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 4
+        },
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "designed house grey under 100 dollars",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for affordable grey designed house candidates; current inspected product exceeds $100 ceiling."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": false,
+          "remaining_before": 2
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00129",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00064",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 13,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00051",
+      "counts": {
+        "prev_labels_checked": 8,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00255",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00219",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00440",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00012",
+      "counts": {
+        "prev_labels_checked": 3,
+        "error:invalid_completion_plan": 1,
+        "actual_event:rejected": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "rejected": 1
+      },
+      "replay_event_counts": {
+        "rejected": 1
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "call_00_MQytQgEJ1eo1tw37GgnO0336",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "purchase:B08B5XZ7LR",
+              "state_version": 5,
+              "purchase_evidence": {
+                "verified_requirements": [
+                  "Product type: remote control for LG Blu-ray DVD home theater system (title explicitly states 'Remote for LG Blu-ray Disc Player Home Theater System')",
+                  "Price $7.95 is below the $70.00 maximum ceiling",
+                  "Compatible with numerous LG home theater models listed in title (BH5140, LHB655, LHB675, etc.)"
+                ],
+                "unresolved_constraints": [
+                  "Exact model compatibility for the user's specific LG system is not confirmed against a stated model number (user did not specify a model)",
+                  "Description/Features sections not inspected; no additional compatibility detail verified"
+                ]
+              },
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08B5XZ7LR",
+                "reason": "Best observed relevant LG Blu-ray home theater remote, $7.95 under $70 ceiling, no required option groups"
+              }
+            }
+          },
+          "code": "invalid_completion_plan",
+          "remaining": 12,
+          "kind": "purchase"
+        }
+      ],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00273",
+      "counts": {
+        "prev_labels_checked": 5,
+        "error:invalid_action_arguments": 1,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 12,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:5",
+              "state_version": 5,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b07mlh8shq",
+                "options": {
+                  "flavor": "brick oven pizza - family size"
+                },
+                "requirement_quotes": [
+                  "high protein puffed snack",
+                  "brick oven",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Product is a protein puffs snack (high protein puffed snack)",
+                  "Price $22.99 is under $40.00"
+                ],
+                "unresolved_constraints": [
+                  "Brick oven cooking method not yet confirmed from description/features"
+                ],
+                "reason": "Return to product page to stage Buy Now for the brick oven pizza protein puffs.",
+                "owner": "agent_1",
+                "phase": "explore",
+                "version": 2
+              }
+            }
+          },
+          "code": "invalid_action_arguments",
+          "remaining": 12,
+          "kind": "navigate"
+        }
+      ],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00457",
+      "counts": {
+        "prev_labels_checked": 9,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4,
+        "actual_event:unknown_return_path": 2,
+        "actual_event:released": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [
+        {
+          "action": {
+            "call_id": "call_00_uXYvmjyDifG4vPDw3BuN2850",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B091JWFHMX",
+              "state_version": 12
+            }
+          },
+          "page": "product",
+          "reserved_asin": "b07pjyn7ts",
+          "public_path_cost": null
+        }
+      ],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 2,
+        "released": 1
+      },
+      "replay_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 2,
+        "released": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00193",
+      "counts": {
+        "prev_labels_checked": 6,
+        "actual_event:plan_update_ignored": 2,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 2,
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "8 pack 8 inch portable hair extensions wine red",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for wine red 8-pack 8-inch portable hair extensions under $40; current candidate is 6-pack 1B spring twist, not matching pack count or color."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 10
+        },
+        {
+          "action": {
+            "call_id": "call_00_5c92NOm69eBkmfL4Lprx6732",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:7:B08MJZS7HQ",
+              "state_version": 9,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08MJZS7HQ",
+                "options": {
+                  "size": "8 inch",
+                  "color": "dark&light wine"
+                },
+                "requirement_quotes": [
+                  "8-pack of 8-inch portable hair extensions",
+                  "color needs to be wine red",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [
+                  "8-inch length shown in title",
+                  "price $19.99 under $40"
+                ],
+                "unresolved_constraints": [
+                  "pack count is 6, not 8",
+                  "wine red color not yet confirmed as selectable"
+                ],
+                "reason": "Inspect 8-inch wine-toned candidate to verify pack count and color options"
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 8
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00328",
+      "counts": {
+        "prev_labels_checked": 12,
+        "executed_prev_from:product_section": 3,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00234",
+      "counts": {
+        "prev_labels_checked": 8,
+        "corrected_option_observations": 1,
+        "corrected_option:lieutenant": 1,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 7,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00197",
+      "counts": {
+        "prev_labels_checked": 13,
+        "executed_prev_from:product_section": 5,
+        "actual_event:reserved": 5
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 8,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 6,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 4,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 5
+      },
+      "replay_event_counts": {
+        "reserved": 5
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00126",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00264",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_JnjMsvYpxKC7ywwSyyum6185",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B08WYY37SB",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08WYY37SB",
+                "reason": "Top candidate: spicy fried fish seasoning, vegetarian-suitable, $100 < $140."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 15
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00206",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 6,
+        "actual_event:unknown_return_path": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 8,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 6,
+        "unknown_return_path": 1
+      },
+      "replay_event_counts": {
+        "reserved": 6,
+        "unknown_return_path": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00069",
+      "counts": {
+        "prev_labels_checked": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00244",
+      "counts": {
+        "prev_labels_checked": 7,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00085",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00157",
+      "counts": {
+        "prev_labels_checked": 6,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00203",
+      "counts": {
+        "prev_labels_checked": 8,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00397",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:4",
+              "state_version": 4,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09NQYNZ24",
+                "reason": "Return to product page to stage Buy Now for the observed affordable high-quality bagel."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 13
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00201",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00061",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00109",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_jFaMyjav49SClcw5bopI2951",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:2:B09D8ZJB4P",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B09D8ZJB4P",
+                "options": {},
+                "requirement_quotes": [
+                  "wall lamp with clear glass",
+                  "price lower than 190.00 dollars"
+                ],
+                "verified_requirements": [],
+                "unresolved_constraints": [
+                  "clear glass not yet verified on product page",
+                  "price not yet verified on product page"
+                ],
+                "reason": "Inspect a clear-glass wall lamp candidate well under budget."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 15
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00424",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00419",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00446",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_8ji9fMiKARBG8JVOp90Z9825",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B01L0VPIIQ",
+              "state_version": 5,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B01L0VPIIQ",
+                "reason": "140-foot coaxial cable at $19.95, within budget; inspect to verify options and details"
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 12
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00132",
+      "counts": {
+        "prev_labels_checked": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00411",
+      "counts": {
+        "prev_labels_checked": 8,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4,
+        "actual_event:unknown_return_path": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 10,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 1
+      },
+      "replay_event_counts": {
+        "reserved": 4,
+        "unknown_return_path": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00214",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00216",
+      "counts": {
+        "prev_labels_checked": 3,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00010",
+      "counts": {
+        "prev_labels_checked": 5,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00031",
+      "counts": {
+        "prev_labels_checked": 9,
+        "actual_event:reserved": 7,
+        "actual_event:unknown_return_path": 5,
+        "actual_event:released": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [
+        {
+          "action": {
+            "call_id": "call_00_95BfiAlWdxT7TFV9JbZl2666",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B07HHKYNX4",
+              "state_version": 12
+            }
+          },
+          "page": "product",
+          "reserved_asin": "b07d96svd2",
+          "public_path_cost": null
+        }
+      ],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 7,
+        "unknown_return_path": 5,
+        "released": 1
+      },
+      "replay_event_counts": {
+        "reserved": 7,
+        "unknown_return_path": 5,
+        "released": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00434",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00370",
+      "counts": {
+        "prev_labels_checked": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00438",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00094",
+      "counts": {
+        "prev_labels_checked": 7,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "call_00_x85VJk6L9ZJEF33jUqzL1028",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:1:B083S8VGP7",
+              "state_version": 8,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B083S8VGP7",
+                "options": {
+                  "size": "x-large"
+                },
+                "requirement_quotes": [
+                  "x-large casual dresses with long sleeves",
+                  "price lower than 40.00 dollars"
+                ],
+                "reason": "Long sleeve casual dress, price range $0.89-$1.89 well under $40; inspect for XL option."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 9
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00436",
+      "counts": {
+        "prev_labels_checked": 4,
+        "actual_event:reserved": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 2
+      },
+      "replay_event_counts": {
+        "reserved": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00387",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 4
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 11,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 4
+      },
+      "replay_event_counts": {
+        "reserved": 4
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00447",
+      "counts": {
+        "prev_labels_checked": 4,
+        "executed_prev_from:product_section": 1,
+        "actual_event:plan_update_ignored": 1,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1,
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:4",
+              "state_version": 4,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B07RW28RPF",
+                "reason": "Return to product page to stage Buy Now for gluten-free high-protein bar under $50."
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 13
+        }
+      ]
+    },
+    {
+      "task_id": "webshop/goal-00351",
+      "counts": {
+        "prev_labels_checked": 8,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00118",
+      "counts": {
+        "prev_labels_checked": 2,
+        "actual_event:reserved": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 1
+      },
+      "replay_event_counts": {
+        "reserved": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00428",
+      "counts": {
+        "prev_labels_checked": 10,
+        "executed_prev_from:product_section": 3,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00194",
+      "counts": {
+        "prev_labels_checked": 5,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00053",
+      "counts": {
+        "prev_labels_checked": 6,
+        "executed_prev_from:product_section": 1,
+        "error:invalid_action_arguments": 1,
+        "actual_event:reserved": 3
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 3
+      },
+      "replay_event_counts": {
+        "reserved": 3
+      },
+      "error_actions": [
+        {
+          "action": {
+            "call_id": "call_00_tCnJQZxpuDWdQmuAJ5dg6078",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "select_option:scent:2 pcs=green+beige",
+              "state_version": 7,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b09cf4x81y",
+                "options": {
+                  "scent": "2 pcs=green+beige"
+                },
+                "requirement_quotes": [
+                  "beige or green shower brush",
+                  "long handle",
+                  "price lower than 50.00 dollars"
+                ],
+                "verified_requirements": [
+                  "long handle (approx 17.3 inches)",
+                  "price $13.94 under $50",
+                  "beige+green variant available"
+                ],
+                "unresolved_constraints": [
+                  "scent option not yet selected"
+                ],
+                "reason": "Select the green+beige option then stage Buy Now.",
+                "owner": "agent_1",
+                "phase": "explore",
+                "version": 1
+              }
+            }
+          },
+          "code": "invalid_action_arguments",
+          "remaining": 10,
+          "kind": "select_option"
+        }
+      ],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00015",
+      "counts": {
+        "prev_labels_checked": 12,
+        "executed_prev_from:product_section": 1,
+        "actual_event:reserved": 5,
+        "actual_event:unknown_return_path": 2
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [
+        {
+          "owner": "agent_1",
+          "remaining": 10,
+          "retained": true,
+          "cost": 3
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 6,
+          "retained": true,
+          "cost": 2
+        },
+        {
+          "owner": "agent_1",
+          "remaining": 4,
+          "retained": true,
+          "cost": 2
+        }
+      ],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "reserved": 5,
+        "unknown_return_path": 2
+      },
+      "replay_event_counts": {
+        "reserved": 5,
+        "unknown_return_path": 2
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": []
+    },
+    {
+      "task_id": "webshop/goal-00225",
+      "counts": {
+        "prev_labels_checked": 1,
+        "actual_event:plan_update_ignored": 1
+      },
+      "bad_navigation": [],
+      "fake_option_products": [],
+      "reserved_section_transitions": [],
+      "released_unreachable_paths": [],
+      "preflight_mismatches": [],
+      "actual_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "replay_event_counts": {
+        "plan_update_ignored": 1
+      },
+      "error_actions": [],
+      "ignored_plan_feedback": [
+        {
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "almond nut butter chocolate 4 pack",
+              "completion_plan": {
+                "decision": "reserve",
+                "reason": "Search for actual almond nut butter product (not bars) with chocolate flavor and 4-pack size under $60",
+                "unresolved_constraints": [
+                  "organic",
+                  "gluten free",
+                  "kosher certified",
+                  "chocolate flavor",
+                  "4-pack size",
+                  "price < $60"
+                ]
+              }
+            }
+          },
+          "feedback": {
+            "status": "ignored",
+            "code": "invalid_completion_plan",
+            "message": "Use reserve, an inspected ASIN and a legal option map.",
+            "existing_plan_retained": false,
+            "instruction": "The optional reserve update was not applied. The attached action is checked separately against the existing reservation and remaining budget. Do not repeat this plan unchanged."
+          },
+          "action_executed": true,
+          "remaining_before": 13
+        }
+      ]
+    }
+  ]
+}

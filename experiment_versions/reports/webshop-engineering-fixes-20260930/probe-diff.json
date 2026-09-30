@@ -1,0 +1,201 @@
+{
+  "frozen_source_matches_prior_goldens": true,
+  "snapshot_count": 7,
+  "changed_snapshots": [
+    "inspection_routed_False",
+    "inspection_routed_True"
+  ],
+  "changes": [
+    {
+      "path": [
+        "inspection_routed_False",
+        "initial_progress",
+        "prompt_projection",
+        "prompt_context_chars_sum"
+      ],
+      "before": 13732,
+      "after": 13810
+    },
+    {
+      "path": [
+        "inspection_routed_False",
+        "initial_progress",
+        "prompt_projection",
+        "raw_context_chars_sum"
+      ],
+      "before": 11932,
+      "after": 11971
+    },
+    {
+      "path": [
+        "inspection_routed_False",
+        "requests",
+        0,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "action_decision_support",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_False",
+        "requests",
+        0,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "valid_subactions",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_False",
+        "requests",
+        1,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "action_decision_support",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_False",
+        "requests",
+        1,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "valid_subactions",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_True",
+        "initial_progress",
+        "prompt_projection",
+        "prompt_context_chars_sum"
+      ],
+      "before": 13732,
+      "after": 13810
+    },
+    {
+      "path": [
+        "inspection_routed_True",
+        "initial_progress",
+        "prompt_projection",
+        "raw_context_chars_sum"
+      ],
+      "before": 11932,
+      "after": 11971
+    },
+    {
+      "path": [
+        "inspection_routed_True",
+        "requests",
+        0,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "action_decision_support",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_True",
+        "requests",
+        0,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "valid_subactions",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_True",
+        "requests",
+        1,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "action_decision_support",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    },
+    {
+      "path": [
+        "inspection_routed_True",
+        "requests",
+        1,
+        "messages",
+        1,
+        "content",
+        "<json>",
+        "action_environment",
+        "state",
+        "valid_subactions",
+        0,
+        "navigation_effect"
+      ],
+      "before": null,
+      "after": "return_to_search"
+    }
+  ],
+  "unchanged_snapshots": [
+    "director_v22",
+    "empty_canvas",
+    "pending_model_deletion",
+    "purchase_malformed_False",
+    "purchase_malformed_True"
+  ]
+}

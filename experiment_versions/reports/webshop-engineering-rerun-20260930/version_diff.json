@@ -1,0 +1,17 @@
+{
+  "baseline": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-memory-auto-history-128-20260930-153948",
+  "changed_sources": [
+    "src/selfplay_graph_flowsteer/runtime.py",
+    "src/selfplay_graph_flowsteer/webshop_action_reserve.py",
+    "src/selfplay_graph_flowsteer/webshop_memory.py",
+    "src/selfplay_graph_flowsteer/webshop_memory_projection.py",
+    "src/selfplay_graph_flowsteer/webshop_navigation.py",
+    "src/selfplay_graph_flowsteer/webshop_sidecar.py"
+  ],
+  "previously_committed_memory_guards": [
+    "webshop_memory.py",
+    "webshop_memory_projection.py"
+  ],
+  "engineering_commit": "d662f39",
+  "runtime_policy": "completion_reserve_v2"
+}

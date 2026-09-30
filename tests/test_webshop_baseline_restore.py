@@ -1,4 +1,4 @@
-"""Keep the recorded 235e670 WebShop behavior separate from later datasets."""
+"""Preserve recorded behavior with reviewed public-name and navigation fixes."""
 
 import hashlib
 import json
@@ -21,6 +21,20 @@ def test_original_worker_requests_recovery_staging_and_director_surface():
     expected = json.loads(
         (ROOT / "tests/fixtures/webshop_235e670_behavior_sha256.json").read_text()
     )
+    # The candidate-title correction intentionally adds public names to memory
+    # and Worker requests. Against the frozen 39-task baseline, these four
+    # snapshots differ only in preview_title and prompt-size accounting; see
+    # experiment_versions/reports/webshop-candidate-title-fix-20260930/probe-diff.json.
+    # Keep the original golden intact for historical reproduction.
+    expected.update(json.loads(
+        (ROOT / "tests/fixtures/webshop_candidate_title_behavior_sha256.json").read_text()
+    ))
+    # The navigation fix adds the public back-to-search effect to two inspection
+    # snapshots, with the corresponding character counts. All other behavior is
+    # unchanged; see webshop-engineering-fixes-20260930/probe-diff.json.
+    expected.update(json.loads(
+        (ROOT / "tests/fixtures/webshop_engineering_behavior_sha256.json").read_text()
+    ))
     actual = probe()
     assert set(actual) == set(expected)
     for name, value in actual.items():
@@ -49,7 +63,7 @@ def test_formal_webshop_v3_retains_model_profile_and_corrected_training_rows():
         config.canvas.for_dataset(d).submission_protocol == "unified_task_result_v1"
         for d in ("swe_bench", "alfworld")
     )
-    assert len((ROOT / "data/formal/train/webshop.jsonl").read_text().splitlines()) == 444
+    assert len((ROOT / "data/formal/train/webshop.jsonl").read_text().splitlines()) == 512
 
 
 def test_webshop_gateway_preserves_old_text_interpretation(monkeypatch):

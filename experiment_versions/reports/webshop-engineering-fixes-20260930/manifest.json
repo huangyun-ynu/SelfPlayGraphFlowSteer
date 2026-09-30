@@ -1,0 +1,65 @@
+{
+  "base_commit": "520deb374a04db572886c81ebe3117f52b3ec038",
+  "branch": "fix/webshop-memory-v2",
+  "source_run": "webshop-memory-auto-history-128-20260930-153948",
+  "source_records_sha256": "93bd74d4815f3ff496a17804e82930b5e5a6a80da592e79355e313b4df692a92",
+  "fixture": "tests/fixtures/webshop_engineering_128_real_trajectories.json.gz",
+  "fixture_sha256": "8d5e8f658d2141d384400e0e5b3476af81093b0460564e2fcd0acf7d29618466",
+  "fixture_task_count": 128,
+  "section_regression_checkpoints": 33,
+  "section_regression_tasks": [
+    "00040",
+    "00045",
+    "00051",
+    "00063",
+    "00075",
+    "00085",
+    "00107",
+    "00121",
+    "00132",
+    "00135",
+    "00139",
+    "00163",
+    "00186",
+    "00197",
+    "00225",
+    "00234",
+    "00268",
+    "00273",
+    "00299",
+    "00319",
+    "00328",
+    "00386",
+    "00400",
+    "00407",
+    "00428",
+    "00436",
+    "00457"
+  ],
+  "source_sha256": {
+    "src/selfplay_graph_flowsteer/runtime.py": "f87e36751c327c1a62329e578c104827ddfab4751755ef745c62e46877299d3c",
+    "src/selfplay_graph_flowsteer/webshop_action_reserve.py": "057a93ec41191c2210e38e341c558fe587ff44654b4175713e79b7468da5d984",
+    "src/selfplay_graph_flowsteer/webshop_sidecar.py": "80c921589bdc9ef251b22035ad7873ccbaf6209242da6dc520d0668777922e36",
+    "src/selfplay_graph_flowsteer/webshop_navigation.py": "51875c4af702252d5b3cc014e43642ab5adcee812d91df849a6431fcaea1ec8e"
+  },
+  "prior_memory_guards_preserved": true,
+  "tests": {
+    "passed": 391,
+    "new_engineering_tests": 56,
+    "log_sha256": "1ee30b77b6055d821f4b6e797872870d9f885f36ff2b1e731d7d0a73716c46fa"
+  },
+  "real_environment": {
+    "passed": 5,
+    "model_calls": 0,
+    "purchase_calls": 0,
+    "new_evaluation_scores": false,
+    "all_owned_workers_stopped": true
+  },
+  "probe": {
+    "frozen_source_matches_prior_goldens": true,
+    "reviewed_changed_snapshots": 2,
+    "unchanged_snapshots": 5,
+    "before_sha256": "df2bce70b210f6314b42d2b0a1a8fba3b61b6179d2fd14480bab8c63d5ebbf90",
+    "after_sha256": "9df7c72c1ca75ac27901a0061e0e2f8a763f63909225080546f45d75c3690cff"
+  }
+}

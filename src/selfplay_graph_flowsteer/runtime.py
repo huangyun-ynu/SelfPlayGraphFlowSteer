@@ -64,9 +64,14 @@ from .webshop_guidance import (
     MERGED_PAGE_CHECKLIST,
     webshop_worker_guidance,
 )
+from .webshop_action_reserve import PurchaseReservation, POLICY as PURCHASE_RESERVE_POLICY, GUIDANCE as PURCHASE_RESERVE_GUIDANCE, FLEXIBLE_GUIDANCE as PURCHASE_FLEXIBLE_GUIDANCE, FLEXIBLE_POLICY as PURCHASE_FLEXIBLE_POLICY, POLICIES as PURCHASE_RESERVE_POLICIES, action_specs_with_plan, recovery_feedback as webshop_recovery_feedback
+from .webshop_scheduling import SchedulingState, POLICY as WEBSHOP_SCHEDULING_POLICY, GUIDANCE as WEBSHOP_SCHEDULING_GUIDANCE, runtime_status as webshop_runtime_status
 from .webshop_identity import visible_product_asin
+from .webshop_navigation import annotate_navigation
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
 from .webshop_profiles import section_memory_limit
+from .webshop_memory import WebShopMemory, POLICY as MEMORY_V2, JOURNAL_KEY as MEMORY_JOURNAL_KEY, GUIDANCE as MEMORY_GUIDANCE
+from .webshop_memory_projection import project_memory, action_decision_support as memory_action_support
 
 WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
 WORKER_PROTOCOL_FAILURE_SENTINEL = "WORKER_PROTOCOL_FAILURE"
@@ -235,6 +240,7 @@ class AgentActionUsage:
     initial_used: int = 0
     revision_used: int = 0
     total_used: int = 0
+    research_used: int = 0
     closure_session: str | None = None
     closure_owner: str | None = None
     closure_active: bool = False
@@ -249,7 +255,8 @@ class AgentActionUsage:
 class ActionBudgetLedger:
     usage: dict[str, AgentActionUsage] = field(default_factory=dict)
     text_protocol_repairs: dict[str, int] = field(default_factory=dict)
-
+    purchase_reserve: PurchaseReservation = field(default_factory=PurchaseReservation)
+    webshop_scheduling: SchedulingState = field(default_factory=SchedulingState)
     @staticmethod
     def shared_total(node: AgentNode) -> bool:
         return node.metadata.get("dataset_capability_policy", {}).get("action_budget_policy") == "shared_total_v1"
@@ -257,6 +264,8 @@ class ActionBudgetLedger:
     def reset(self) -> None:
         self.usage.clear()
         self.text_protocol_repairs.clear()
+        self.purchase_reserve = PurchaseReservation()
+        self.webshop_scheduling = SchedulingState()
 
     def begin_webshop_closure(
         self,
@@ -382,6 +391,7 @@ class ActionBudgetLedger:
         revision: bool,
         scope: str | None = None,
         closure_session: str | None = None,
+        research: bool = False,
     ) -> tuple[bool, str | None]:
         current = self.usage.setdefault(scope or node.agent_id, AgentActionUsage())
         if current.total_used >= node.total_tool_budget:
@@ -405,6 +415,7 @@ class ActionBudgetLedger:
                 return False, "initial_action_budget_exhausted"
             current.initial_used += 1
         current.total_used += 1
+        current.research_used += int(research)
         return True, None
 
 
@@ -431,16 +442,26 @@ class ModelAgentExecutor:
     webshop_worker_execution_policy: str = "graph_tools_v1"
     webshop_native_conversation_history: bool = False
     webshop_compatibility_profile: str = "current"
+    webshop_purchase_budget_policy: str = "off"
+    webshop_scheduling_policy: str = "off"
 
     def __post_init__(self) -> None:
         section_memory_limit(self.webshop_compatibility_profile)
+        if self.webshop_scheduling_policy not in {"off", WEBSHOP_SCHEDULING_POLICY}:
+            raise ValueError("unknown webshop.scheduling_policy")
+        if self.webshop_purchase_budget_policy not in {"off", *PURCHASE_RESERVE_POLICIES}:
+            raise ValueError("unknown webshop.purchase_budget_policy")
+        if self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES:
+            self.budget_ledger.purchase_reserve.policy = self.webshop_purchase_budget_policy
         if self.webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
             raise ValueError("unknown webshop.worker_execution_policy")
-        if self.webshop_worker_memory_policy != "factual_memory_v1":
+        if self.webshop_worker_memory_policy not in {"factual_memory_v1", MEMORY_V2}:
             raise ValueError("unknown webshop.worker_memory_policy")
 
     def reset(self) -> None:
         self.budget_ledger.reset()
+        if self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES:
+            self.budget_ledger.purchase_reserve.policy = self.webshop_purchase_budget_policy
         self.budget_scope = None
         self.nq_evidence_context = None
 
@@ -472,7 +493,61 @@ class ModelAgentExecutor:
                 idle_s=0.0,
             )
 
-    def execute(
+    def execute(self, **kwargs) -> AgentArtifact:
+        if ((self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES or self.webshop_scheduling_policy == WEBSHOP_SCHEDULING_POLICY)
+                and kwargs["node"].metadata.get("action_adapter") == "webshop"):
+            if not self.budget_ledger.shared_total(kwargs["node"]):
+                raise ValueError("purchase reservation requires shared_total_v1")
+            # Native lifecycle and the whole-question ledger form one transaction.
+            with self.budget_ledger.purchase_reserve.lock:
+                if self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES:
+                    self.budget_ledger.purchase_reserve.policy = self.webshop_purchase_budget_policy
+                return self._execute_scheduled(**kwargs)
+        return self._execute_reserved(**kwargs)
+
+    def _execute_scheduled(self, **kwargs) -> AgentArtifact:
+        if self.webshop_scheduling_policy != WEBSHOP_SCHEDULING_POLICY:
+            return self._execute_reserved(**kwargs)
+        node = kwargs["node"]
+        lifecycle = next((getattr(self.tools[name], "lifecycle", None) for name in node.allowed_tools
+                          if name in self.tools and getattr(self.tools[name], "lifecycle", None)), None)
+        if lifecycle is None:
+            raise ValueError("WebShop scheduling requires a real lifecycle")
+        state = lifecycle.result_for(node.agent_id)
+        packets = [*kwargs["upstream"], *kwargs["peers"]]
+        scope = self.budget_scope or node.agent_id
+        usage = self.budget_ledger.usage.get(scope, AgentActionUsage())
+        used_before = usage.total_used
+        manager = self.budget_ledger.webshop_scheduling
+        reason = manager.blocker(node, state, packets,
+            remaining=max(0, node.total_tool_budget - usage.total_used), research_used=usage.research_used)
+        if reason:
+            return webshop_runtime_status(node, state, reason,
+                budget=self.budget_ledger.webshop_audit(node, scope=scope),
+                scheduling=manager.snapshot(total=node.total_tool_budget,
+                    remaining=max(0, node.total_tool_budget - usage.total_used), research_used=usage.research_used),
+                prior=kwargs.get("prior"))
+        artifact = self._execute_reserved(**kwargs)
+        usage = self.budget_ledger.usage.get(scope, AgentActionUsage())
+        state = lifecycle.result_for(node.agent_id)
+        manager.record(node, state, packets,
+            actions_used=usage.total_used-used_before, artifact=artifact)
+        reason = manager.blocker(node, state, packets,
+            remaining=max(0,node.total_tool_budget-usage.total_used),research_used=usage.research_used)
+        if (reason == "webshop_no_work_recovery_exhausted"
+                and state.get("resource_status") != "unknown"
+                and state.get("termination_reason") not in {"agent_never_executed", "missing_output_agent", "environment_step_failed"}
+                and not state.get("commit_pending") and not state.get("purchased")
+                and not artifact.webshop_progress.get("policy_failure")):
+            # The second real execution itself provides an eligible failure.
+            # No third graph edit or paid report is needed just to close it.
+            artifact.webshop_progress.update(state="typed_policy_failure", stop_reason=reason,
+                policy_failure={"code":reason,"runtime_terminal":True,"attribution":"model_policy"})
+        artifact.webshop_progress["scheduling"] = manager.snapshot(total=node.total_tool_budget,
+            remaining=max(0,node.total_tool_budget-usage.total_used),research_used=usage.research_used)
+        return artifact
+
+    def _execute_reserved(
         self,
         *,
         task: str,
@@ -714,6 +789,20 @@ class ModelAgentExecutor:
             allowed_tools = {name: tool for name, tool in allowed_tools.items() if name == "search"}
         action_specs = [action_spec_from_tool(tool) for tool in allowed_tools.values()]
         action_adapter = str(node.metadata.get("action_adapter", ""))
+        purchase_reserve = (self.budget_ledger.purchase_reserve
+            if action_adapter == "webshop" and self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES else None)
+        scheduling_enabled = action_adapter == "webshop" and self.webshop_scheduling_policy == WEBSHOP_SCHEDULING_POLICY
+        purchase_binding = None
+        if purchase_reserve is not None:
+            for tool in allowed_tools.values():
+                getter = getattr(getattr(tool, "lifecycle", None), "session_binding", None)
+                if callable(getter):
+                    purchase_binding = getter(node.agent_id)
+                    break
+            if not purchase_binding:
+                raise ValueError("purchase reservation requires a live node-private session binding")
+            purchase_reserve.observe(node.agent_id, purchase_binding, initial_environment_state)
+            action_specs = action_specs_with_plan(action_specs, purchase_reserve.policy)
         webshop_strategy_variant = (
             _webshop_strategy_variant(seed) if action_adapter == "webshop" else ""
         )
@@ -728,6 +817,19 @@ class ModelAgentExecutor:
             if action_adapter == "webshop" and isinstance(webshop_transaction_journal, dict)
             else {}
         )
+        webshop_memory = None
+        if (action_adapter == "webshop" and self.webshop_worker_memory_policy == MEMORY_V2
+                and not stateless_environment_owner):
+            session = str(initial_environment_state.get("session_id", ""))
+            for tool in allowed_tools.values():
+                getter = getattr(getattr(tool, "lifecycle", None), "session_binding", None)
+                if callable(getter) and getter(node.agent_id):
+                    session = str(getter(node.agent_id))
+                    break
+            if purchase_binding:
+                session = json.dumps(purchase_binding, sort_keys=True)
+            webshop_memory = WebShopMemory(webshop_journal, owner=node.agent_id, task=task, session=session)
+            webshop_memory.observe(initial_environment_state)
         webshop_journal_restored = bool(webshop_journal.get("schema_version"))
         webshop_product_inspections = _webshop_restore_keyed_records(
             webshop_journal.get("product_inspections"), key="asin"
@@ -766,6 +868,8 @@ class ModelAgentExecutor:
                 product_inspections=webshop_product_inspections,
                 candidate_ledger=webshop_candidate_ledger,
             )
+        if webshop_memory is not None:
+            webshop_memory.annotate(initial_environment_state)
         swe_commit_required = bool(
             action_adapter == "swe_bench"
             and is_task_result(node, legacy_selected="code_commit"
@@ -844,6 +948,8 @@ class ModelAgentExecutor:
                 ),
                 "webshop_progress": (
                     _webshop_progress_prompt(
+                        memory_store=webshop_memory,
+                        planned_asin=str((purchase_reserve.plan or {}).get("asin", "")) if purchase_reserve else "",
                         section_max_chars=section_memory_limit(self.webshop_compatibility_profile),
                         queries=webshop_queries,
                         visited_products=webshop_visited_products,
@@ -870,6 +976,12 @@ class ModelAgentExecutor:
                             webshop_journal.get("strategy_checkpoint_purchase_deferrals")
                         ),
                         current_state=initial_environment_state,
+                        remaining_budget=(
+                            self.budget_ledger.remaining(
+                                node, revision=revision, scope=self.budget_scope,
+                                closure_session=closure_session,
+                            ) if self.budget_ledger.shared_total(node) else None
+                        ),
                         purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
                     )
                     if action_adapter == "webshop"
@@ -1014,6 +1126,8 @@ class ModelAgentExecutor:
                 "task. Use only the assigned_task plus visible upstream, prior, peer, and "
                 "Action evidence. "
             )
+        if webshop_memory is not None:
+            instruction += MEMORY_GUIDANCE
         if is_unified_node(node):
             instruction += result_instruction(node, contract_dataset or action_adapter)
         instruction += _worker_output_instruction(
@@ -1032,6 +1146,15 @@ class ModelAgentExecutor:
         if (action_adapter == "webshop" and not stateless_environment_owner
                 and (not is_unified_node(node) or is_task_result(node))):
             instruction += webshop_worker_guidance(self.webshop_worker_guidance_policy)
+        if purchase_reserve is not None:
+            instruction += (PURCHASE_FLEXIBLE_GUIDANCE if purchase_reserve.policy == PURCHASE_FLEXIBLE_POLICY else PURCHASE_RESERVE_GUIDANCE)
+            context["action_environment"]["purchase_reservation"] = purchase_reserve.snapshot(
+                context["action_environment"]["remaining"]["total"], node.agent_id)
+        if scheduling_enabled:
+            instruction += WEBSHOP_SCHEDULING_GUIDANCE
+            usage = self.budget_ledger.usage.get(self.budget_scope or node.agent_id, AgentActionUsage())
+            context["action_environment"]["scheduling"] = self.budget_ledger.webshop_scheduling.worker_snapshot(node,
+                total=node.total_tool_budget, remaining=max(0,node.total_tool_budget-usage.total_used), research_used=usage.research_used)
         prompt_context = _action_context_for_prompt(
             context,
             action_adapter=action_adapter,
@@ -1222,6 +1345,9 @@ class ModelAgentExecutor:
                 purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
             )
 
+            if webshop_memory is not None:
+                webshop_journal[MEMORY_JOURNAL_KEY] = webshop_memory.persist()
+
         force_finalize = False
         qa_previous_response = ""
         finalization_reason = "action_phase_complete"
@@ -1247,6 +1373,17 @@ class ModelAgentExecutor:
         student_recovery_margin = 0 if action_adapter == "webshop" else STUDENT_EXECUTION_REPAIRS
         for interaction_round in range(max_interaction_rounds + swe_recovery_margin + student_recovery_margin):
             self._check_deadline()
+            if scheduling_enabled and not is_task_result(node) and not force_finalize:
+                usage = self.budget_ledger.usage.get(self.budget_scope or node.agent_id, AgentActionUsage())
+                if usage.research_used >= self.budget_ledger.webshop_scheduling.research_limit(node.total_tool_budget):
+                    force_finalize = True
+                    finalization_reason = "webshop_research_budget_handoff"
+            if purchase_reserve is not None and not force_finalize:
+                reserve_stop = purchase_reserve.blocker(node.agent_id, is_task_result(node),
+                    self.budget_ledger.remaining(node, revision=revision, scope=self.budget_scope)["total"])
+                if reserve_stop:
+                    force_finalize = True
+                    finalization_reason = reserve_stop
             if interaction_round >= max_interaction_rounds and not force_finalize:
                 force_finalize = True
                 finalization_reason = "interaction_round_limit"
@@ -1309,6 +1446,23 @@ class ModelAgentExecutor:
                 token_out += recovery_token_out
                 protocol_diagnostics.extend(recovery_diagnostics)
                 break
+            request_messages = messages
+            if purchase_reserve is not None and purchase_reserve.policy == PURCHASE_FLEXIBLE_POLICY:
+                env_context = context["action_environment"]
+                correction = webshop_recovery_feedback(env_context.get("state", {}),
+                    _webshop_completion_steps(env_context.get("state", {}),
+                        remaining_budget=env_context.get("remaining")),
+                    last_error=env_context.get("last_error"),
+                    no_progress=webshop_semantic_no_progress_streak,
+                    searches=webshop_searches_since_last_product_open)
+                if correction:
+                    request_messages = [*messages, {"role": "user", "content": json.dumps(
+                        {"webshop_action_correction": correction}, ensure_ascii=False)}]
+                    protocol_diagnostics.append({"stage": "webshop_action_correction",
+                        "interaction_round": interaction_round,
+                        "remaining_actions": correction["remaining_actions"],
+                        "last_error_code": correction["last_error_code"],
+                        "no_progress_streak": webshop_semantic_no_progress_streak})
             try:
                 request_credit = (
                     execution_credit - token_in - token_out
@@ -1358,7 +1512,7 @@ class ModelAgentExecutor:
                     )
                     request_credit -= reserve
                 response = self._generate_with_credit(
-                    messages,
+                    request_messages,
                     credit_limit=request_credit,
                     pre_reserved_closure_tokens=closure_reserve(),
                     cap_output=submission_credit or full_graph_credit,
@@ -1500,6 +1654,27 @@ class ModelAgentExecutor:
                     "action_count": len(calls),
                 })
             if not calls:
+                if (purchase_reserve is not None and purchase_reserve.policy == PURCHASE_FLEXIBLE_POLICY
+                        and scheduling_enabled and is_task_result(node) and not force_finalize
+                        and not environment_terminal
+                        and not any(context["action_environment"].get("state", {}).get(k)
+                                    for k in ("commit_pending", "purchased", "done"))
+                        and context["action_environment"]["remaining"]["total"] > 0
+                        and not self.budget_ledger.webshop_scheduling.completion_reminder_sent):
+                    self.budget_ledger.webshop_scheduling.completion_reminder_sent = True
+                    budget = context["action_environment"]["remaining"]["total"]
+                    protocol_diagnostics.append(_protocol_response_diagnostic(response,
+                        stage="webshop_completion_scope_reminder", rejection_reason="purchase_not_prepared"))
+                    messages.extend([{"role":"assistant","content":response.text},
+                        {"role":"user","content":(
+                            f"Your current scope is task_result, with {budget} shared environment actions still available. "
+                            "The old local research limit does not prevent further shopping. Complete the original task: "
+                            "use a useful affordable action to improve the candidate or select/Buy the best observed relevant candidate. "
+                            "completion_plan is optional; truthful purchase_evidence is required for Buy. "
+                            "A report alone does not purchase. If no meaningful affordable action or acceptable candidate exists, "
+                            "return an honest final report with that specific reason. This is the only scope reminder for this question.") }])
+                    max_interaction_rounds += 1
+                    continue
                 if self.nq_evidence_context is not None and selected_output_agent:
                     corpus_validation = self.nq_evidence_context.validate(node.agent_id, response.text)
                     if corpus_validation.get("reason") in {
@@ -1736,6 +1911,37 @@ class ModelAgentExecutor:
                     action_preflight_rejection = _action_preflight_rejection(
                         allowed_tools[action_name], arguments
                     )
+                    purchase_completion_progress = False
+                    local_purchase_handoff = (scheduling_enabled and not is_task_result(node)
+                        and action_name == "webshop_click" and str(arguments.get("target_id", "")).startswith("purchase:"))
+                    if local_purchase_handoff and action_preflight_rejection is None:
+                        action_preflight_rejection = {"code":"webshop_research_handoff_required",
+                            "message":"Local research cannot purchase. Ask the Director to promote this same session owner to task_result.",
+                            "details":{"stop_reason":"webshop_research_budget_handoff"}}
+                        force_finalize = True
+                        finalization_reason = "webshop_research_budget_handoff"
+                    if purchase_reserve is not None and action_preflight_rejection is None:
+                        if action_name == "webshop_click" and str(arguments.get("target_id", "")).startswith("purchase:"):
+                            from .webshop import _validate_purchase_evidence
+                            _, action_preflight_rejection = _validate_purchase_evidence(arguments.get("purchase_evidence"))
+                        if action_preflight_rejection is None:
+                            action_preflight_rejection, purchase_completion_progress = purchase_reserve.preflight(
+                                owner=node.agent_id, binding=purchase_binding,
+                                state=context["action_environment"].get("state", {}),
+                                name=action_name, arguments=arguments,
+                                remaining=_webshop_completion_steps(context["action_environment"].get("state", {}),
+                                    remaining_budget=remaining_before), task_result=is_task_result(node), task=task)
+                        else:
+                            action_preflight_rejection, _ = purchase_reserve.fail(node.agent_id, is_task_result(node),
+                                remaining_before["total"], action_preflight_rejection["code"], action_preflight_rejection["message"])
+                    elif purchase_reserve is not None and action_preflight_rejection is not None and not local_purchase_handoff:
+                        action_preflight_rejection, _ = purchase_reserve.fail(node.agent_id, is_task_result(node),
+                            remaining_before["total"], action_preflight_rejection["code"], action_preflight_rejection["message"])
+                    if purchase_reserve is not None and action_preflight_rejection is not None:
+                        reserve_stop = action_preflight_rejection.get("details", {}).get("stop_reason")
+                        if reserve_stop:
+                            force_finalize = True
+                            finalization_reason = reserve_stop
                     stage_rejection = _swe_action_stage_rejection(
                         action_name,
                         commit_required=swe_commit_required,
@@ -1848,6 +2054,7 @@ class ModelAgentExecutor:
                         if node.operation_policy_configured:
                             permitted, budget_error = self.budget_ledger.consume(
                                 node,
+                                research=scheduling_enabled and not is_task_result(node),
                                 revision=revision,
                                 scope=self.budget_scope,
                                 closure_session=closure_session,
@@ -1945,6 +2152,8 @@ class ModelAgentExecutor:
                                             if isinstance(observation["output"], dict)
                                             else {}
                                         )
+                                        if purchase_reserve is not None:
+                                            purchase_reserve.observe(node.agent_id, purchase_binding, webshop_state)
                                         if closure_session is not None:
                                             self.budget_ledger.observe_webshop_steps(
                                                 node,
@@ -1961,6 +2170,8 @@ class ModelAgentExecutor:
                                             and evidence_signature
                                             in webshop_seen_evidence_signatures
                                         )
+                                        if webshop_memory is not None:
+                                            webshop_memory.observe(webshop_state, action=action_name, arguments=arguments)
                                         _update_webshop_product_inspections(
                                             section_max_chars=section_memory_limit(self.webshop_compatibility_profile),
                                             action_name=action_name,
@@ -1982,6 +2193,8 @@ class ModelAgentExecutor:
                                             product_inspections=(webshop_product_inspections),
                                             candidate_ledger=webshop_candidate_ledger,
                                         )
+                                        if webshop_memory is not None:
+                                            webshop_memory.annotate(webshop_state)
                                         if action_name == "webshop_search":
                                             webshop_searches_since_last_product_open += 1
                                         elif action_name == "webshop_click" and str(
@@ -2002,7 +2215,7 @@ class ModelAgentExecutor:
                                         new_evidence = bool(
                                             evidence_signature and not evidence_seen
                                         )
-                                        if objective_changed or new_evidence:
+                                        if objective_changed or new_evidence or purchase_completion_progress:
                                             webshop_semantic_no_progress_streak = 0
                                         else:
                                             webshop_semantic_no_progress_streak += 1
@@ -2013,7 +2226,16 @@ class ModelAgentExecutor:
                                             webshop_semantic_no_progress_streak
                                             >= _WEBSHOP_SEMANTIC_STALL_FUSE_THRESHOLD
                                             and webshop_completion_path_fuse_deferrals < 1
-                                            and _webshop_has_feasible_completion_path(webshop_state)
+                                            and _webshop_has_feasible_completion_path(
+                                                webshop_state,
+                                                remaining_budget=(
+                                                    self.budget_ledger.remaining(
+                                                        node, revision=revision,
+                                                        scope=self.budget_scope,
+                                                        closure_session=closure_session,
+                                                    ) if self.budget_ledger.shared_total(node) else None
+                                                ),
+                                            )
                                         ):
                                             # Re-entering a live product page can restore the
                                             # current option/purchase targets without exposing
@@ -2185,6 +2407,10 @@ class ModelAgentExecutor:
                                         error_message,
                                     )
                                     if action_adapter == "webshop":
+                                        if purchase_reserve is not None:
+                                            lifecycle = getattr(allowed_tools[action_name], "lifecycle", None)
+                                            failed_state = lifecycle.result_for(node.agent_id)
+                                            purchase_reserve.observe(node.agent_id, purchase_binding, failed_state)
                                         if _webshop_error_is_model_policy(error_message):
                                             webshop_semantic_no_progress_streak += 1
                                             webshop_semantic_no_progress_count += 1
@@ -2219,7 +2445,14 @@ class ModelAgentExecutor:
                                                 if (
                                                     webshop_completion_path_fuse_deferrals < 1
                                                     and _webshop_has_feasible_completion_path(
-                                                        current_webshop_state
+                                                        current_webshop_state,
+                                                        remaining_budget=(
+                                                            self.budget_ledger.remaining(
+                                                                node, revision=revision,
+                                                                scope=self.budget_scope,
+                                                                closure_session=closure_session,
+                                                            ) if self.budget_ledger.shared_total(node) else None
+                                                        ),
                                                     )
                                                 ):
                                                     webshop_completion_path_fuse_deferrals += 1
@@ -2329,6 +2562,8 @@ class ModelAgentExecutor:
                     )
                 elif action_adapter == "webshop":
                     context["action_environment"]["webshop_progress"] = _webshop_progress_prompt(
+                        memory_store=webshop_memory,
+                        planned_asin=str((purchase_reserve.plan or {}).get("asin", "")) if purchase_reserve else "",
                         section_max_chars=section_memory_limit(self.webshop_compatibility_profile),
                         queries=webshop_queries,
                         visited_products=webshop_visited_products,
@@ -2345,6 +2580,10 @@ class ModelAgentExecutor:
                             webshop_strategy_checkpoint_purchase_deferrals
                         ),
                         current_state=webshop_state,
+                        remaining_budget=(
+                            context["action_environment"]["remaining"]
+                            if self.budget_ledger.shared_total(node) else None
+                        ),
                         purchase_evidence_checkpoint=(webshop_purchase_evidence_checkpoint),
                     )
                     _record_webshop_state_guidance_delivery(
@@ -2352,6 +2591,13 @@ class ModelAgentExecutor:
                         context["action_environment"].get("webshop_progress"),
                         interaction_round=interaction_round,
                     )
+                if scheduling_enabled:
+                    usage = self.budget_ledger.usage.get(self.budget_scope or node.agent_id, AgentActionUsage())
+                    context["action_environment"]["scheduling"] = self.budget_ledger.webshop_scheduling.worker_snapshot(node,
+                        total=node.total_tool_budget, remaining=max(0,node.total_tool_budget-usage.total_used), research_used=usage.research_used)
+                if purchase_reserve is not None:
+                    context["action_environment"]["purchase_reservation"] = purchase_reserve.snapshot(
+                        context["action_environment"]["remaining"]["total"], node.agent_id)
                 latest_context_for_prompt = _action_context_for_prompt(
                     context,
                     action_adapter=action_adapter,
@@ -2553,7 +2799,9 @@ class ModelAgentExecutor:
             )
         if action_adapter == "webshop":
             sync_webshop_journal()
-            stalled = finalization_reason == "webshop_semantic_no_progress_fuse"
+            reserve_failed = finalization_reason in {"purchase_plan_abandoned", "purchase_plan_repair_exhausted"}
+            stalled = (finalization_reason == "webshop_semantic_no_progress_fuse"
+                       or (reserve_failed and is_task_result(node)))
             staged_output: dict[str, Any] = {}
             for turn in reversed(react_trace):
                 observation = turn.get("observation") if isinstance(turn, dict) else None
@@ -2565,7 +2813,7 @@ class ModelAgentExecutor:
             policy_failure = (
                 {
                     "status": "typed_policy_failure",
-                    "code": "webshop_semantic_no_progress",
+                    "code": finalization_reason if reserve_failed else "webshop_semantic_no_progress",
                     "attribution": "model_policy",
                     "fuse_threshold": _WEBSHOP_SEMANTIC_STALL_FUSE_THRESHOLD,
                     "semantic_no_progress_count": webshop_semantic_no_progress_count,
@@ -2580,6 +2828,9 @@ class ModelAgentExecutor:
                 else {}
             )
             artifact.webshop_progress = {
+                **({"purchase_reservation": purchase_reserve.snapshot(
+                    self.budget_ledger.remaining(node, revision=revision, scope=self.budget_scope)["total"], node.agent_id),
+                    "purchase_reservation_events": copy.deepcopy(purchase_reserve.events)} if purchase_reserve is not None else {}),
                 "trusted": True,
                 "execution_accounting": execution_accounting(
                     events=backend_request_events,
@@ -2607,6 +2858,8 @@ class ModelAgentExecutor:
                     if commit_ready
                     else "completed" if environment_terminal
                     else "needs_recovery" if finalization_reason == "protocol_recovery_exhausted"
+                    else "research_paused" if finalization_reason == "webshop_research_budget_handoff"
+                    else "purchase_reserve_paused" if finalization_reason.startswith("purchase_reserve_") or reserve_failed
                     else "active"
                 ),
                 "stop_reason": finalization_reason,
@@ -2656,6 +2909,20 @@ class ModelAgentExecutor:
                 "policy_failure": policy_failure,
                 "prompt_projection": _webshop_prompt_projection_summary(prompt_projection_stats),
             }
+            if webshop_memory is not None:
+                sync_webshop_journal()
+                artifact.webshop_progress["memory"] = webshop_memory.persist()
+                artifact.webshop_progress["memory_projection"] = copy.deepcopy(context["action_environment"]["webshop_progress"])
+                # Relay only identity/visit facts; full owner-private payloads stay in its store.
+                artifact.webshop_progress["candidate_ledger"] = [
+                    {"asin": k, "preview_title": webshop_memory.title(k)[:240],
+                     "title_excerpt": len(webshop_memory.title(k)) > 240,
+                     "inspection_status": "inspected" if p["opened"] else "not_inspected"}
+                    for k, p in webshop_memory.data["products"].items()]
+                artifact.webshop_progress["product_inspections"] = [
+                    {"asin": k, "sections_viewed": list(p["sections"]), "visit_count": p["visit_count"]}
+                    for k, p in webshop_memory.data["products"].items() if p["opened"]]
+                artifact.webshop_progress["worker_memory_policy"] = MEMORY_V2
             if artifact.webshop_progress["state"] == "needs_recovery":
                 budget = self.budget_ledger.webshop_audit(node, scope=self.budget_scope)
                 artifact.webshop_progress["model_stop_report"] = artifact.summary
@@ -3057,6 +3324,8 @@ class RoutedModelAgentExecutor:
         webshop_worker_execution_policy: str = "graph_tools_v1",
         webshop_native_conversation_history: bool = False,
         webshop_compatibility_profile: str = "current",
+        webshop_purchase_budget_policy: str = "off",
+        webshop_scheduling_policy: str = "off",
         dataset_route_overrides: dict[str, dict[str, str]] | None = None,
     ) -> None:
         if not backends:
@@ -3073,7 +3342,7 @@ class RoutedModelAgentExecutor:
         self.max_tool_rounds = int(max_tool_rounds)
         self.alfworld_worker_guidance_policy = str(alfworld_worker_guidance_policy)
         self.webshop_worker_guidance_policy = str(webshop_worker_guidance_policy)
-        if webshop_worker_memory_policy != "factual_memory_v1":
+        if webshop_worker_memory_policy not in {"factual_memory_v1", MEMORY_V2}:
             raise ValueError("unknown webshop.worker_memory_policy")
         self.webshop_worker_memory_policy = str(webshop_worker_memory_policy)
         if webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
@@ -3082,6 +3351,12 @@ class RoutedModelAgentExecutor:
         self.webshop_native_conversation_history = webshop_native_conversation_history
         section_memory_limit(webshop_compatibility_profile)
         self.webshop_compatibility_profile = webshop_compatibility_profile
+        if webshop_purchase_budget_policy not in {"off", *PURCHASE_RESERVE_POLICIES}:
+            raise ValueError("unknown webshop.purchase_budget_policy")
+        self.webshop_purchase_budget_policy = webshop_purchase_budget_policy
+        if webshop_scheduling_policy not in {"off", WEBSHOP_SCHEDULING_POLICY}:
+            raise ValueError("unknown webshop.scheduling_policy")
+        self.webshop_scheduling_policy = webshop_scheduling_policy
         self.dataset_route_overrides = {
             canonical_dataset_name(dataset): {
                 str(selected): str(target) for selected, target in overrides.items()
@@ -3089,6 +3364,8 @@ class RoutedModelAgentExecutor:
             for dataset, overrides in (dataset_route_overrides or {}).items()
         }
         self.budget_ledger = ActionBudgetLedger()
+        if self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES:
+            self.budget_ledger.purchase_reserve.policy = self.webshop_purchase_budget_policy
         self.deadline_monotonic: float | None = None
         self.rollout_deadline: RolloutDeadline | None = None
         self.budget_scope: str | None = None
@@ -3096,6 +3373,8 @@ class RoutedModelAgentExecutor:
 
     def reset(self) -> None:
         self.budget_ledger.reset()
+        if self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES:
+            self.budget_ledger.purchase_reserve.policy = self.webshop_purchase_budget_policy
         self.budget_scope = None
         self.nq_evidence_context = None
 
@@ -3170,6 +3449,8 @@ class RoutedModelAgentExecutor:
                 webshop_worker_execution_policy=self.webshop_worker_execution_policy,
                 webshop_native_conversation_history=self.webshop_native_conversation_history,
                 webshop_compatibility_profile=self.webshop_compatibility_profile,
+                webshop_purchase_budget_policy=self.webshop_purchase_budget_policy,
+                webshop_scheduling_policy=self.webshop_scheduling_policy,
                 budget_ledger=self.budget_ledger,
                 deadline_monotonic=self.deadline_monotonic,
                 rollout_deadline=self.rollout_deadline,
@@ -3384,7 +3665,39 @@ class MultiAgentRuntime:
                 "remaining": max(0, total_limit - usage.total_used),
                 "initial_used": usage.initial_used, "revision_used": usage.revision_used,
                 "closure_used": usage.closure_used,
-                "reset_on_node_edit": False}
+                "reset_on_node_edit": False,
+                **({"purchase_reservation": ledger.purchase_reserve.snapshot(max(0, total_limit - usage.total_used))}
+                   if ledger is not None and getattr(self.executor, "webshop_purchase_budget_policy", "off") in PURCHASE_RESERVE_POLICIES else {})}
+
+    @property
+    def webshop_scheduling_enabled(self):
+        return getattr(self.executor, "webshop_scheduling_policy", "off") == WEBSHOP_SCHEDULING_POLICY
+
+    def webshop_scheduling_status(self, total):
+        if not self.webshop_scheduling_enabled:
+            return None
+        ledger = self.executor.budget_ledger
+        usage = ledger.usage.get("tool-rollout:whole-graph", AgentActionUsage())
+        return ledger.webshop_scheduling.snapshot(total=total,
+            remaining=max(0,total-usage.total_used),research_used=usage.research_used)
+
+    def webshop_scheduling_blocker(self, node, graph=None):
+        if not self.webshop_scheduling_enabled or node.metadata.get("action_adapter") != "webshop":
+            return None
+        ledger = self.executor.budget_ledger
+        usage = ledger.usage.get("tool-rollout:whole-graph", AgentActionUsage())
+        sources = (graph.directed_predecessors(node.agent_id) | graph.bidirectional_neighbors(node.agent_id)) if graph else set()
+        packets = [self.artifacts[key] for key in sorted(sources) if key in self.artifacts]
+        return ledger.webshop_scheduling.blocker(node,self.environment_result_for(node.agent_id),packets,
+            remaining=max(0,node.total_tool_budget-usage.total_used),research_used=usage.research_used)
+
+    def webshop_reservation_blocker(self, node):
+        ledger = getattr(self.executor, "budget_ledger", None)
+        if (ledger is None or node.metadata.get("action_adapter") != "webshop"
+                or getattr(self.executor, "webshop_purchase_budget_policy", "off") not in PURCHASE_RESERVE_POLICIES):
+            return None
+        return ledger.purchase_reserve.blocker(node.agent_id, is_task_result(node),
+            self.shared_tool_budget_status(node.total_tool_budget)["remaining"])
 
     def swe_execution_blocker(self, node: AgentNode) -> str | None:
         """A fresh SWE workspace needs tools; in-flight finalization is separate."""
@@ -3453,6 +3766,12 @@ class MultiAgentRuntime:
             artifact = copy.deepcopy(artifact)
             self.artifacts[agent_id] = artifact
         artifact.environment_result = dict(result)
+        ledger = getattr(self.executor, "budget_ledger", None)
+        if ledger is not None and getattr(self.executor, "webshop_purchase_budget_policy", "off") in PURCHASE_RESERVE_POLICIES:
+            manager = ledger.purchase_reserve
+            manager.observe(agent_id, manager.bindings.get(agent_id), result)
+            artifact.webshop_progress["purchase_reservation"] = manager.snapshot(
+                artifact.webshop_progress.get("action_budget", {}).get("total_remaining", 0), agent_id)
         return dict(result)
 
     def discard_environment_candidate(self, agent_id: str) -> None:
@@ -4071,6 +4390,14 @@ class MultiAgentRuntime:
                 artifact_id=artifact.artifact_id,
             )
             return artifact, True, 0, 0
+        if self.webshop_scheduling_enabled and node.metadata.get("action_adapter") == "webshop":
+            status = self.shared_tool_budget_status(node.total_tool_budget)
+            resource = self.environment_result_for(agent_id)
+            if status["remaining"] <= 0 and (not resource or resource.get("resource_status") == "unknown"
+                    or resource.get("termination_reason") in {"agent_never_executed","missing_output_agent","environment_step_failed"}
+                    or resource.get("commit_pending") or resource.get("commit_ready")):
+                report.blocked_agents[agent_id] = "webshop_no_safe_runtime_finalization"
+                return None, False, 0, 0
         blocker = self.swe_execution_blocker(node)
         if blocker is not None:
             report.blocked_agents[agent_id] = blocker
@@ -4191,6 +4518,7 @@ class MultiAgentRuntime:
             artifact_id=artifact.artifact_id,
             token_in=artifact.token_in,
             token_out=artifact.token_out,
+            runtime_only=bool(artifact.webshop_progress.get("runtime_only")),
         )
         if is_unified_node(node):
             report.attempt_artifacts.append(copy.deepcopy(artifact))
@@ -4566,6 +4894,9 @@ class MultiAgentRuntime:
                 if callable(getattr(lifecycle, "cache_signature", None))
             ]
             payload["webshop_execution_policy"] = NATIVE_POLICY
+            payload["webshop_purchase_budget_policy"] = getattr(self.executor, "webshop_purchase_budget_policy", "off")
+            if self.webshop_scheduling_enabled:
+                payload["webshop_scheduling_policy"] = WEBSHOP_SCHEDULING_POLICY
             payload["action_environment"]["native_conversation_history"] = bool(
                 getattr(self.executor, "webshop_native_conversation_history", False)
             )
@@ -4739,6 +5070,7 @@ class MultiAgentRuntime:
         artifact_id: str,
         token_in: int = 0,
         token_out: int = 0,
+        runtime_only: bool = False,
     ) -> None:
         phase = "revision" if revision else "initial"
         report.execution_events.append(
@@ -4756,6 +5088,10 @@ class MultiAgentRuntime:
                 "token_out": int(token_out),
             }
         )
+        if runtime_only:
+            report.execution_events[-1]["runtime_only"] = True
+            report.execution_events[-1]["worker_requests"] = 0
+            return
         if cache_hit:
             report.cache_hits += 1
             if revision:
@@ -4812,7 +5148,21 @@ def _observation_failed(turn: dict[str, Any]) -> bool:
     return status in _FAILURE_STATUSES or output_status in _FAILURE_STATUSES
 
 
+def _webshop_reservation_pause(artifact: AgentArtifact) -> bool:
+    progress = artifact.webshop_progress
+    if (progress.get("trusted") is True and progress.get("state") == "research_paused"
+            and progress.get("stop_reason") == "webshop_research_budget_handoff"
+            and progress.get("scheduling", {}).get("policy") == WEBSHOP_SCHEDULING_POLICY):
+        return True
+    return bool(progress.get("trusted") is True
+        and progress.get("state") == "purchase_reserve_paused"
+        and progress.get("stop_reason") in {"purchase_reserve_promote_owner", "purchase_reserve_other_owner"}
+        and progress.get("purchase_reservation", {}).get("policy") in PURCHASE_RESERVE_POLICIES)
+
+
 def _terminal_tool_failure(artifact: AgentArtifact) -> bool:
+    if _webshop_reservation_pause(artifact):
+        return False
     turns = [turn for turn in artifact.react_trace if isinstance(turn, dict)]
     return bool(turns and _observation_failed(turns[-1]))
 
@@ -4908,6 +5258,7 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
         else:
             successful_call_ids.append(call_id)
 
+    reservation_pause = _webshop_reservation_pause(artifact)
     terminal_tool_failure_observed = bool(turns and _observation_failed(turns[-1]))
     terminal_protocol_failure_observed = _terminal_protocol_failure(artifact)
     all_tool_actions_failed_observed = bool(turns and not successful_call_ids)
@@ -4962,6 +5313,7 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
     # requires an observed candidate file, so this is not a generic bypass.
     terminal_tool_failure = (
         terminal_tool_failure_observed
+        and not reservation_pause
         and not grounded_failure
         and not typed_policy_failure
         and not swe_post_commit_no_progress
@@ -4973,7 +5325,7 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
         and not webshop_staged_purchase_protocol_complete
     )
     all_tool_actions_failed = (
-        all_tool_actions_failed_observed and not grounded_failure and not typed_policy_failure
+        all_tool_actions_failed_observed and not reservation_pause and not grounded_failure and not typed_policy_failure
     )
     recovered_tool_failure = bool(
         failed_call_ids
@@ -6097,10 +6449,19 @@ def _webshop_progress_prompt(
     completion_path_fuse_deferrals: int = 0,
     strategy_checkpoint_purchase_deferrals: int = 0,
     current_state: dict[str, Any] | None = None,
+    remaining_budget: dict[str, int] | None = None,
     purchase_evidence_checkpoint: dict[str, Any] | None = None,
     section_max_chars: int = 0,
+    memory_store: WebShopMemory | None = None,
+    planned_asin: str = "",
 ) -> dict[str, Any]:
     """Return a bounded WebShop transaction journal, never the full ReAct history."""
+
+    if memory_store is not None:
+        return project_memory(memory_store, state=current_state or {}, remaining=remaining_budget,
+            recent_actions=recent_actions, no_progress=semantic_no_progress_streak,
+            planned_asin=planned_asin)
+
 
     state = current_state if isinstance(current_state, dict) else {}
     live_product = _webshop_public_product_state(state)
@@ -6236,7 +6597,7 @@ def _webshop_progress_prompt(
         searches_since_last_product_open=searches_since_last_product_open,
     )
     page_type = str(state.get("page_type", "")).strip().casefold()
-    remaining_steps = state.get("remaining_steps")
+    remaining_steps = _webshop_completion_steps(state, remaining_budget=remaining_budget)
     unselected_groups = state.get("unselected_option_groups", [])
     unselected_groups = (
         [str(value)[:80] for value in unselected_groups if str(value).strip()]
@@ -6251,7 +6612,15 @@ def _webshop_progress_prompt(
         return_steps = int(page_type == "product_section")
         latest_selected_options = _webshop_public_product_state(state)["selected_options"]
         prompt["completion_budget"] = {
-            "remaining_environment_steps": int(remaining_steps),
+            **(
+                {
+                    "remaining_action_steps": remaining_steps,
+                    "budget_source": "runtime_action_ledger",
+                    "remaining_environment_steps": state.get("remaining_steps"),
+                }
+                if remaining_budget is not None
+                else {"remaining_environment_steps": remaining_steps}
+            ),
             "current_page_type": page_type,
             "return_to_product_steps": return_steps,
             "visible_unselected_option_groups": unselected_groups,
@@ -7307,7 +7676,26 @@ def _response_backend_request_events(response: Any) -> list[dict[str, Any]]:
     return [dict(event) for event in events if isinstance(event, dict)]
 
 
-def _webshop_has_feasible_completion_path(state: object) -> bool:
+def _webshop_completion_steps(
+    state: object, *, remaining_budget: dict[str, int] | None = None,
+) -> int | None:
+    """Bound completion by the runtime ledger and any reported environment cap.
+
+    Legacy observations may omit remaining_steps. Keep that field's meaning as
+    environment evidence; do not inject a synthetic value into the observation.
+    Shared-budget callers supply the already charged ledger, including on resume.
+    """
+    payload = state if isinstance(state, dict) else {}
+    values = [payload.get("remaining_steps")]
+    if remaining_budget is not None:
+        values.extend(remaining_budget.get(key) for key in ("total", "phase", "environment"))
+    known = [max(0, value) for value in values if isinstance(value, int) and not isinstance(value, bool)]
+    return min(known) if known else None
+
+
+def _webshop_has_feasible_completion_path(
+    state: object, *, remaining_budget: dict[str, int] | None = None,
+) -> bool:
     """Whether the latest public product state can still reach a purchase.
 
     This is deliberately task-agnostic: it neither decides which option groups
@@ -7319,7 +7707,7 @@ def _webshop_has_feasible_completion_path(state: object) -> bool:
     payload = state if isinstance(state, dict) else {}
     if str(payload.get("page_type", "")).strip().casefold() != "product":
         return False
-    remaining_steps = payload.get("remaining_steps")
+    remaining_steps = _webshop_completion_steps(payload, remaining_budget=remaining_budget)
     if (
         not isinstance(remaining_steps, int)
         or isinstance(remaining_steps, bool)
@@ -7559,6 +7947,7 @@ def _annotate_webshop_product_state(
 ) -> None:
     """Attach public evidence-retention status without choosing the next Action."""
 
+    annotate_navigation(payload)
     if str(payload.get("page_type", "")) not in {"product", "product_section"}:
         return
     product = payload.get("product", {})
@@ -7586,10 +7975,6 @@ def _annotate_webshop_product_state(
                 "Agent-chosen public section inspection; reopening retained evidence adds "
                 "no new evidence."
             )
-        elif target_id.startswith("previous_page:"):
-            item["navigation_effect"] = "return_to_current_product_page"
-        elif target_id.startswith("back_to_search:"):
-            item["navigation_effect"] = "return_to_search"
 
 
 def _update_webshop_candidate_ledger(
@@ -7614,7 +7999,8 @@ def _update_webshop_candidate_ledger(
             record["asin"] = asin[:100]
             record["appearance_count"] = int(record.get("appearance_count", 0)) + 1
             record["last_visible_position"] = position
-            title = str(item.get("title", "")).strip()
+            # Legacy search actions expose the public product name as label.
+            title = str(item.get("title") or "").strip() or str(item.get("label") or "").strip()
             if title:
                 record["preview_title"] = title[:240]
             price = item.get("price")
@@ -8026,6 +8412,8 @@ def _webshop_context_for_prompt(
                 )
                 if key in progress
             }
+            if progress.get("worker_memory_policy") == MEMORY_V2:
+                packet["webshop_progress"].pop("purchase_evidence_checkpoint", None)
         return packet
 
     retained_packets = 0
@@ -8053,6 +8441,16 @@ def _webshop_context_for_prompt(
             progress = environment.get("webshop_progress")
             progress = progress if isinstance(progress, dict) else {}
             state["decision_phase"] = _webshop_decision_phase(state)
+            if progress.get("schema") == MEMORY_V2:
+                for action in state.get("valid_subactions", []):
+                    if not isinstance(action.get("memory_fact"), dict):
+                        continue
+                    name = str(action.get("target_id", "")).split(":", 1)[0].removeprefix("view_")
+                    current_asin = str((state.get("product") or {}).get("asin", "")).casefold()
+                    excerpt = next((e for e in progress.get("evidence", [])
+                                    if e.get("section") == name and e.get("asin") == current_asin), None)
+                    if excerpt:
+                        action["memory_fact"]["evidence_in_prompt"] = excerpt["evidence_in_prompt"]
             state["action_decision_support"] = _webshop_action_decision_support(
                 state,
                 progress=progress,
@@ -8075,6 +8473,12 @@ def _webshop_context_for_prompt(
             state if isinstance(state, dict) else {},
             progress=environment.get("webshop_progress"),
         )
+        if (environment.get("webshop_progress") or {}).get("schema") == MEMORY_V2:
+            matrix = environment["public_constraint_matrix"]
+            for key in ("current_product", "current_selected_options", "visible_unselected_option_groups"):
+                matrix.pop(key, None)
+            matrix["live_product_and_options_ref"] = "action_environment.state"
+
 
     prompt_chars = len(json.dumps(projected, ensure_ascii=False, separators=separators))
     if stats is not None:
@@ -8116,6 +8520,8 @@ def _webshop_action_decision_support(
 ) -> list[dict[str, Any]]:
     """Describe public effects of legal Actions without ranking or choosing one."""
 
+    if progress.get("schema") == MEMORY_V2:
+        return memory_action_support(state)
     inspections = progress.get("product_inspections", [])
     inspected_asins = (
         {

@@ -1,0 +1,21 @@
+{
+  "config_differences": {
+    "canvas.submission_journal_dir": {
+      "before": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-memory-auto-history-128-20260930-153948/submissions",
+      "after": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-engineering-affected-128-20260930-164051/submissions"
+    },
+    "runtime_routing.health_state_path": {
+      "before": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-memory-auto-history-128-20260930-153948/route_health.json",
+      "after": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-engineering-affected-128-20260930-164051/route_health.json"
+    },
+    "trace.path": {
+      "before": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-memory-auto-history-128-20260930-153948/traces.jsonl",
+      "after": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-webshop-memory/state/formal-eval/webshop-engineering-affected-128-20260930-164051/traces.jsonl"
+    },
+    "webshop.service_url": {
+      "before": "http://127.0.0.1:51085",
+      "after": "http://127.0.0.1:40667"
+    }
+  },
+  "tasks_byte_identical": true
+}

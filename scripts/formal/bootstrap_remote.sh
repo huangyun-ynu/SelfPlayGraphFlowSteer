@@ -60,6 +60,7 @@ fi
 
 python - <<'PY'
 from pathlib import Path
+import os
 
 from selfplay_graph_flowsteer.application import load_adaptive_config
 from selfplay_graph_flowsteer.curriculum import FixedTaskPool
@@ -67,7 +68,7 @@ from selfplay_graph_flowsteer.curriculum import FixedTaskPool
 root = Path.cwd()
 config = load_adaptive_config(root / "configs/formal_training.toml")
 pool = FixedTaskPool.from_jsonl(
-    [root / "state/formal-data/validated_task_pool.jsonl"],
+    [Path(os.environ["SPGFS_FORMAL_TASK_POOL"])],
     require_ads_metadata=True,
     require_validation_manifest=True,
 )

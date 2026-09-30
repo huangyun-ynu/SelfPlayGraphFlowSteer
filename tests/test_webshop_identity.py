@@ -60,7 +60,8 @@ def test_legacy_revisit_updates_memory_and_support_without_restoring_search_fiel
     _update_webshop_candidate_ledger(first, product_inspections=inspections, candidate_ledger=ledger)
     assert set(ledger) == {ASIN.lower(), OTHER.lower()}
     assert all(record["inspection_status"] == "not_inspected" for record in ledger.values())
-    assert all("preview_price" not in record and "preview_title" not in record for record in ledger.values())
+    assert all("preview_price" not in record for record in ledger.values())
+    assert all(record["preview_title"] == "Same title" for record in ledger.values())
 
     _update_webshop_product_inspections(
         action_name="webshop_click", arguments={"target_id": f"open_product:1:{ASIN}"},

@@ -1,6 +1,10 @@
+# 当前 WebShop 正式版本
+
+2026-09-30 已选择 `M02-V3-engineering-20260930`（评测源码 `d662f39`），原始官方评分；唯一正式执行配置是 `configs/formal_training.toml`。见 [升级记录](../docs/WEBSHOP_ENGINEERING_FORMAL_PROMOTION_20260930.zh-CN.md)。
+
 # 实验源码版本
 
-> 2026-09-29 当前正式版本已固定为 Git 标签 `unified-v3-20260929`。
+> 2026-09-29 历史正式版本固定为 Git 标签 `unified-v3-20260929`。
 > 七个数据集统一 V3，AIME 复核实验已撤回；包含最新 AIME、HotpotQA、HealthBench 评测记录。
 > 版本范围、源码哈希和 91 项定向验证见 [版本快照](checkpoints/unified-v3-20260929/README.zh-CN.md)。
 

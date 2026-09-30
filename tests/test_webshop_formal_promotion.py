@@ -46,12 +46,14 @@ def load_formal(name, monkeypatch):
     return config
 
 
-@pytest.mark.parametrize("name", ["formal_training.toml", "formal_training_h200.local.toml",
-                                  "formal_eval_h200.local.toml"])
+@pytest.mark.parametrize("name", ["formal_training.toml"])
 def test_formal_m02_config_preserves_model_choices_and_thinking(name, monkeypatch):
     config = load_formal(name, monkeypatch)
     assert config.webshop.compatibility_profile == M02_PROFILE
     assert config.webshop.worker_guidance_policy == "merged_checklist_v1"
+    assert config.webshop.worker_memory_policy == "factual_memory_v2"
+    assert config.webshop.purchase_budget_policy == "completion_reserve_v2"
+    assert config.webshop.scheduling_policy == "bounded_research_v1"
     assert config.worker_routes_for("webshop") == (
         "gpt", "grok", "gemini", "deepseek", "minimax")
     assert not config.dataset_route_overrides.get("webshop")
@@ -66,6 +68,10 @@ def test_formal_m02_config_preserves_model_choices_and_thinking(name, monkeypatc
 
 def test_m02_rejects_accidental_native_or_history_mix(monkeypatch):
     config = load_formal("formal_training.toml", monkeypatch)
+    # Exercise the M02 compatibility check independently of the promoted
+    # scheduler/reservation prerequisite checks, which also reject native mode.
+    config = replace(config, webshop=replace(config.webshop,
+        purchase_budget_policy="off", scheduling_policy="off"))
     for change in ({"worker_execution_policy": "skillflow_native_v1"},
                    {"worker_memory_policy": "skillflow_history_v1"},
                    {"worker_guidance_policy": "laser_checklist_v1"}):

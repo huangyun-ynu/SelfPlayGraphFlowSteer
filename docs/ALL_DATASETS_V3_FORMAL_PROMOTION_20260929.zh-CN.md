@@ -1,3 +1,5 @@
+> 2026-09-30 WebShop 后续升级已生效：自动记忆v2和累积工程修复进入正式训练，原始官方评分、512条原始训练题。唯一正式配置为 `configs/formal_training.toml`；下文为历史V3协议切换记录。见 [最新升级说明](WEBSHOP_ENGINEERING_FORMAL_PROMOTION_20260930.zh-CN.md)。
+
 # 七个数据集统一 V3 正式协议（2026-09-29）
 
 用户确认将原先仍使用旧协议的五个数据集全部切到 V3，包括 WebShop。
@@ -39,7 +41,10 @@ WebShop 的局部搜索责任不再被强制改写成购买责任。完整任务
 - `configs/formal_eval_h200.local.toml`
 - `configs/formal_eval_worker08_main_v22.local.toml`（文件名保留；当前七种数据集实际使用 V3）
 
-原有全局 Director 默认值仍保留；七种数据集都由
+2026-09-30 已将主配置 `formal_training.toml` 和当前本机入口
+`formal_eval_worker08_main_v22.local.toml` 的全局 `director.prompt_variant` 设为 `v3`。
+两份 H200 本地文件作为历史副本保留，存在其他配置差异，不代表当前正式主配置。
+七种数据集仍由
 `canvas.submission_protocol_by_dataset` 显式覆盖为 V3。执行清单、PATS 契约和训练
 校验读取生效后的数据集协议；旧协议回执不能混入新协议的训练批次。
 

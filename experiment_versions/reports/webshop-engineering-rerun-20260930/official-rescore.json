@@ -1,0 +1,2445 @@
+[
+  {
+    "task_id": "webshop/goal-00352",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": false,
+      "title_score": 0.25,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09PBDCN4P",
+    "selected_options": {
+      "color": "k"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00478",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.23809523809523808,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08QR8FGSY",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00269",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.75,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.47619047619047616,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09QHXS4C4",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00090",
+    "score": 0.25,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.13043478260869565,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": false,
+      "w_price": 0.25
+    },
+    "asin": "B005Y8GE6C",
+    "selected_options": {
+      "size": "king (104 in x 92 in)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00362",
+    "score": 0.3333333333333333,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.45454545454545453,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09LLL248D",
+    "selected_options": {
+      "size": "2021 macbook pro 14 inch a2442"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00369",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.5,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B09R52KSTK",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00241",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.9523809523809523,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09D77KB16",
+    "selected_options": {
+      "color": "r901"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00342",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.6666666666666666,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.2916666666666667,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08P2ZLW3V",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00004",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.4444444444444444,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B06XW8PL68",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00311",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09NYBZX2T",
+    "selected_options": {
+      "color": "mt7308",
+      "size": "4x-large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00029",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.5,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B0999DWR51",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00487",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.2,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B09RSK8NNP",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00082",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.38461538461538464,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09PDMRSDN",
+    "selected_options": {
+      "color": "brown-black"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00365",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.16666666666666666
+    },
+    "asin": "B07MWSX8Z7",
+    "selected_options": {
+      "color": "rockdale",
+      "fit type": "relaxed",
+      "size": "35w x 36l"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00318",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.23076923076923078,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08CKG5FXQ",
+    "selected_options": {
+      "color": "b-635"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00284",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.1111111111111111,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B099T8L7Y3",
+    "selected_options": {
+      "size": "12 oz"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00045",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.6666666666666666,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.5769230769230769,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B073JD8VLR",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00186",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": false,
+      "title_score": 0.5555555555555556,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08R9PJHK1",
+    "selected_options": {
+      "size": "xx-large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00024",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.2857142857142857,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B07DC54RV7",
+    "selected_options": {
+      "color": "red",
+      "size": "3 feet"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00248",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B0007SMLUM",
+    "selected_options": {
+      "flavor": "triple blend flakes",
+      "size": "1 pound (pack of 1)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00380",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.16,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B0967D7RZN",
+    "selected_options": {
+      "color": "fairy girl with wing elves flying butterflies decorative square"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00063",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08SQHTMPR",
+    "selected_options": {
+      "color": "kahuna",
+      "size": "20 plus"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00134",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08STVQLVR",
+    "selected_options": {
+      "size": "512gb",
+      "style": "s7 tablet"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00433",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.2857142857142857,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09NPRBBKV",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00420",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.7,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09J1NLWM1",
+    "selected_options": {
+      "color": "sea cliff blue plaid",
+      "size": "x-large tall"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00043",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.23529411764705882,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09SLPRWZ8",
+    "selected_options": {
+      "color": "black",
+      "size": "5.5"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00040",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B005FKMUHQ",
+    "selected_options": {
+      "color": "navy linen",
+      "style": "futon and chaise set"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00163",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.13333333333333333,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09NC4MSCV",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00170",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": false,
+      "title_score": 0.4782608695652174,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B096T52BZ2",
+    "selected_options": {
+      "style": "island vanilla spray pefume + hair & body spray"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00122",
+    "score": 0.06666666666666667,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": false,
+      "title_score": 0.058823529411764705,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B07749BRF3",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00319",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.375,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09RWR48QS",
+    "selected_options": {
+      "color": "2-pink",
+      "size": "large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00345",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.9629629629629629,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B09G2X4GDX",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00139",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08B1MCFKL",
+    "selected_options": {
+      "color": "dark denim | red orange",
+      "size": "10"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00358",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B01HEXEHWC",
+    "selected_options": {
+      "color": "tangerine"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00268",
+    "score": 0.25,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.2857142857142857,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09LD3LKCN",
+    "selected_options": {
+      "color": "amd ryzen 7 3700u",
+      "size": "64gb ram 1tb ssd"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00235",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.7272727272727273,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09K3QFPVP",
+    "selected_options": {
+      "color": "faux fur white"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00481",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.55,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B01K8O6W86",
+    "selected_options": {
+      "color": "black",
+      "size": "1 pack"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00367",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.5714285714285714,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08CZ3CSZ9",
+    "selected_options": {
+      "color": "purple",
+      "size": "xx-large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00188",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.4,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08LD7DZLK",
+    "selected_options": {
+      "color": "set of 2 plug in"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00143",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.15384615384615385,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B088GX4LPM",
+    "selected_options": {
+      "size": "9x6ft"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00232",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.85,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08PJ86CJD",
+    "selected_options": {
+      "color": "full collection w |  spa hairband",
+      "size": "bundle with spa hairband"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00407",
+    "score": 0.3333333333333333,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.13333333333333333,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08V6KHS9Z",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00282",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.34782608695652173,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08G8CY858",
+    "selected_options": {
+      "color": "grey"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00075",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.7142857142857143,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B00265MIR0",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00202",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.34782608695652173,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08GJ6XXSH",
+    "selected_options": {
+      "flavor name": "authentic michelada mix",
+      "size": "33.8 fl oz (pack of 1)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00071",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B00U3TE9ZU",
+    "selected_options": {
+      "color": "no.21"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00291",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.5,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B07HF3J7DQ",
+    "selected_options": {
+      "size": "110-inch  |  16:9"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00135",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B003NX8C6K",
+    "selected_options": {
+      "color": "red camellia",
+      "size": "x-large plus"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00427",
+    "score": 0.1,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.08333333333333333,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B086PX2KWN",
+    "selected_options": {
+      "color": "blue"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00293",
+    "score": 0.25,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.5,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09B7T8XYS",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00221",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.25,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B087Q9W1JJ",
+    "selected_options": {
+      "size": "16x24 inches (3pcs)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00354",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.5,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08XPF5MVY",
+    "selected_options": {
+      "color": "glitter silver"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00453",
+    "score": 0.06666666666666667,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.09523809523809523,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09SYBDNR7",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00340",
+    "score": 0.4,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.2,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.17647058823529413,
+      "r_option": 0.0,
+      "w_option": 0.6,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B08NRGYRMT",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00097",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.3333333333333333,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08ZXYPGDK",
+    "selected_options": {
+      "color": "black+blue+gray",
+      "size": "large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00185",
+    "score": 0.0,
+    "parts": {
+      "r_type": 0.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.0,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09NY4W83M",
+    "selected_options": {
+      "color": "green",
+      "size": "44"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00417",
+    "score": 0.025,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.09523809523809523,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": false,
+      "w_price": 0.25
+    },
+    "asin": "B09PRBN4DK",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00167",
+    "score": 0.4,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.2,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.6470588235294118,
+      "r_option": 0.0,
+      "w_option": 0.6,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B00M7B8KMA",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00152",
+    "score": 0.0,
+    "parts": {
+      "r_type": 0.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.0,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B00MYRXWOS",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00030",
+    "score": 0.1,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.05555555555555555,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B08FRLYZFD",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00121",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.13333333333333333,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08N9647QC",
+    "selected_options": {
+      "color": "purple",
+      "size": "5' x 8' oval"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00155",
+    "score": 0.8,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.4,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.38095238095238093,
+      "r_option": 0.5,
+      "w_option": 0.4,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B0912C5F9C",
+    "selected_options": {
+      "color": "#bala18 | 60",
+      "size": "20 inch"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00060",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.35714285714285715,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09PDW6V6Q",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00477",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.38461538461538464,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09M7WVFWR",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00341",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.16129032258064516,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09PKGTSJ4",
+    "selected_options": {
+      "color": "black"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00386",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.75,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.45,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B086PZX6CT",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00105",
+    "score": 0.05,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.0625,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B097D4L47N",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00494",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.2857142857142857,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09P154R75",
+    "selected_options": {
+      "color": "a34",
+      "size": "9x6ft | 2.7x1.8m"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00400",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.2,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09L8GZSDM",
+    "selected_options": {
+      "color": "grey",
+      "size": "8"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00271",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.10526315789473684,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B07NM32TPQ",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00055",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.5,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09QQ7754D",
+    "selected_options": {
+      "color": "black"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00330",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.6666666666666666,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.3888888888888889,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B0831JP3PJ",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00299",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.7857142857142857,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B096SRSPR3",
+    "selected_options": {
+      "size": "3 pack"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00256",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.14814814814814814,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B082SJ4DVT",
+    "selected_options": {
+      "color": "coffee"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00065",
+    "score": 0.025,
+    "parts": {
+      "r_type": 0.1,
+      "r_att": 0.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.05555555555555555,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B07VC9HH8C",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00371",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.4117647058823529,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09QZSBGMF",
+    "selected_options": {
+      "color": "l_black",
+      "size": "xx-large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00213",
+    "score": 0.25,
+    "parts": {
+      "r_type": 0.5,
+      "r_att": 0.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": false,
+      "title_score": 0.2,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B099MR9XTQ",
+    "selected_options": {
+      "color": "nickel dimmable 24w 24\" 6000k"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00107",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.2857142857142857,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09GKFNQWT",
+    "selected_options": {
+      "color": "light blue",
+      "size": "11"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00054",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B091TZTD5G",
+    "selected_options": {
+      "color": "amber",
+      "size": "16.9 fl oz (pack of 1)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00129",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.21052631578947367,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B09T3K16KY",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00064",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.75,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.6,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09PLBXXYQ",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00051",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.9565217391304348,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B075FZMXGS",
+    "selected_options": {
+      "color": "salmon brown",
+      "size": "18 x 18-inch"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00255",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.4444444444444444,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08B18D7S7",
+    "selected_options": {
+      "size": "38 mm"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00219",
+    "score": 0.6,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.4,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.2631578947368421,
+      "r_option": 0.0,
+      "w_option": 0.4,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B07SK2MXYZ",
+    "selected_options": {
+      "style": "two light wall (brushed nickel)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00440",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.36363636363636365,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09C63KH2N",
+    "selected_options": {
+      "color": "black | teal | official red",
+      "size": "small"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00012",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.38095238095238093,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B08B5XZ7LR",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00273",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.8888888888888888,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B07MLH8SHQ",
+    "selected_options": {
+      "flavor": "brick oven pizza - family size"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00457",
+    "score": 0.3333333333333333,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.4,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B091JWFHMX",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00193",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.13333333333333333,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B08MJZS7HQ",
+    "selected_options": {
+      "color": "dark & light wine",
+      "size": "8 inch (pack of 7)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00328",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.6666666666666666,
+      "w_att": 0.75,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.15384615384615385,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B0192WA9FW",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00234",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.4,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B0721VG7TS",
+    "selected_options": {
+      "color": "sandblasted blue wash indigo",
+      "size": "40w x 34l"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00197",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.625,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B082N82QWM",
+    "selected_options": {
+      "color": "baby blue"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00126",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.5789473684210527,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B01MXL8AVD",
+    "selected_options": {
+      "flavor name": "jack daniels pecan"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00264",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.8947368421052632,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08WYY37SB",
+    "selected_options": {
+      "flavor name": "fried fish",
+      "size": "1.76 ounce (pack of 3)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00206",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.48148148148148145,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09FLCK3PT",
+    "selected_options": {
+      "color": "medium brown",
+      "size": "8 inch"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00069",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.45454545454545453,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09NN8QQB4",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00244",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.32,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B083QWF56K",
+    "selected_options": {
+      "size": "7x5ft"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00085",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B085QMTTSC",
+    "selected_options": {
+      "flavor name": "caramel",
+      "size": "4.41 ounce"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00157",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.38461538461538464,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09JMV9DHX",
+    "selected_options": {
+      "color": "black",
+      "size": "large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00203",
+    "score": 0.4,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.4,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.3333333333333333,
+      "r_option": 0.0,
+      "w_option": 0.4,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B09873YD7Y",
+    "selected_options": {
+      "color": "white"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00397",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.16666666666666666,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B09NQYNZ24",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00201",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.30434782608695654,
+      "r_option": 0.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B073SRVMRY",
+    "selected_options": {
+      "color": "white | silver",
+      "size": "37x84 inch"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00061",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.7647058823529411,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B092VGFJY3",
+    "selected_options": {
+      "pattern name": "purple"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00109",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.6666666666666666,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B09MDZGVPL",
+    "selected_options": {
+      "color": "gold+clear"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00424",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09BQMH7P7",
+    "selected_options": {
+      "color": "101"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00419",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.21739130434782608,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B07CM2RYPV",
+    "selected_options": {
+      "color": "jet black"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00446",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.5,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.46153846153846156,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B01L0VPIIQ",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00132",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.6666666666666666,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.9130434782608695,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B08SHKMP5B",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00411",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.8125,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09R4V5J3R",
+    "selected_options": {
+      "color": "blue"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00214",
+    "score": 0.6666666666666666,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.45454545454545453,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B074339M3V",
+    "selected_options": {
+      "color": "brown (021)",
+      "size": "large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00216",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.9230769230769231,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B074338PG3",
+    "selected_options": {
+      "size": "pack of 9"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00010",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.6,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.8695652173913043,
+      "r_option": 1.0,
+      "w_option": 0.2,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B0978Q1KK9",
+    "selected_options": {
+      "flavor name": "spicy beef backpack bundle"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00031",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 0.5,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B07HHKYNX4",
+    "selected_options": {
+      "flavor": "himalayan black rock salt coarse grind",
+      "size": "2.8 ounce (pack of 1)"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00434",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.4782608695652174,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09QLWSSMV",
+    "selected_options": {
+      "color": "grey"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00370",
+    "score": 0.75,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.6363636363636364,
+      "r_option": 0.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B01MYDEODT",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00438",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B01NBHBR7S",
+    "selected_options": {
+      "color": "dark cognac brown",
+      "size": "18 inch"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00094",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.2777777777777778,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B083S8VGP7",
+    "selected_options": {
+      "size": "x-large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00436",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B084FWQF1F",
+    "selected_options": {
+      "color": "thyme | white",
+      "size": "5x-large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00387",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.4,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.9047619047619048,
+      "r_option": 1.0,
+      "w_option": 0.4,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B078SJV72L",
+    "selected_options": {
+      "color": "r9 b75+intel i3 3220",
+      "size": "8g ram 128g ssd 1tb hdd"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00447",
+    "score": 0.2,
+    "parts": {
+      "r_type": 0.5,
+      "r_att": 0.3333333333333333,
+      "w_att": 0.6,
+      "query_match": false,
+      "category_match": false,
+      "title_score": 0.18181818181818182,
+      "r_option": 0.0,
+      "w_option": 0.2,
+      "r_price": true,
+      "w_price": 0.2
+    },
+    "asin": "B07RW28RPF",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00351",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.4666666666666667,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09T6Z1R4K",
+    "selected_options": {
+      "color": "black",
+      "size": "large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00118",
+    "score": 0.5,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.1875,
+      "r_price": true,
+      "w_price": 0.5
+    },
+    "asin": "B091T16NPZ",
+    "selected_options": {}
+  },
+  {
+    "task_id": "webshop/goal-00428",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.5,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 1.0,
+      "r_option": 1.0,
+      "w_option": 0.25,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B0962P6LCS",
+    "selected_options": {
+      "color": "tan 1905019-5",
+      "size": "9 wide"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00194",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.26666666666666666,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09MMW35LF",
+    "selected_options": {
+      "size": "large"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00053",
+    "score": 1.0,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 1.0,
+      "w_att": 0.3333333333333333,
+      "query_match": false,
+      "category_match": true,
+      "title_score": 0.3157894736842105,
+      "r_option": 1.0,
+      "w_option": 0.3333333333333333,
+      "r_price": true,
+      "w_price": 0.3333333333333333
+    },
+    "asin": "B09CF4X81Y",
+    "selected_options": {
+      "scent": "2 pcs=green+beige"
+    }
+  },
+  {
+    "task_id": "webshop/goal-00015",
+    "score": 0.25,
+    "parts": {
+      "r_type": 1.0,
+      "r_att": 0.0,
+      "w_att": 0.25,
+      "query_match": true,
+      "category_match": true,
+      "title_score": 0.43478260869565216,
+      "r_option": 0.0,
+      "w_option": 0.5,
+      "r_price": true,
+      "w_price": 0.25
+    },
+    "asin": "B09KBQC4BQ",
+    "selected_options": {
+      "size": "20\" x 20\",only cover"
+    }
+  }
+]

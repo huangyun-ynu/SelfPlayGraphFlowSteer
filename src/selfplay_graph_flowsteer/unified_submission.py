@@ -78,7 +78,88 @@ class UnifiedSubmissionMixin:
                 "counting": "successful_graph_mutations_including_initial_construction",
                 "reset_on_node_edit": False}
 
+    def _webshop_schedule_control(self, assessments=None):
+        if self.dataset != "webshop" or not self.runtime.webshop_scheduling_enabled:
+            return None
+        total = self.action_adapter.total_action_budget
+        status = self.runtime.webshop_scheduling_status(total)
+        assessments = assessments if assessments is not None else {
+            key:self.submission_assessment(key) for key in self.graph.nodes}
+        ready = [key for key,a in assessments.items() if a["submit_ready"]
+                 and (a["payload_kind"] == "purchase" or status["total_remaining"] == 0)]
+        result = {**status, "mode":"finish" if ready else "exhausted" if status["total_remaining"] == 0 else "working",
+                  "finish_targets":ready,"promotion_targets":[],"cleanup_targets":[],
+                  "run_blockers":{key:self.runtime.webshop_scheduling_blocker(node,self.graph)
+                                  for key,node in self.graph.nodes.items() if node.configured}}
+        if result["mode"] == "exhausted":
+            known = []
+            for key,node in self.graph.nodes.items():
+                resource = self.runtime.environment_result_for(key)
+                if (resource and resource.get("resource_status") != "unknown"
+                        and resource.get("termination_reason") not in {"agent_never_executed","missing_output_agent","environment_step_failed"}):
+                    known.append(key)
+                    if node.configured and not is_task_result(node) and not resource.get("commit_pending"):
+                        result["promotion_targets"].append(key)
+            staged = set(self.runtime.environment_commit_ready_agents())
+            result["cleanup_targets"] = [key for key in self.graph.nodes
+                if key not in staged and any(other != key for other in known)]
+        elif result["mode"] == "working" and not self.pending_relation_decision:
+            # Completing a purchase/failure on one node must not trigger more
+            # shopping merely because an unrelated research node is still present.
+            terminal = [key for key,a in assessments.items()
+                if a["blockers"] and all(b.startswith("graph:agents cannot influence output:") for b in a["blockers"])
+                and (key in self.runtime.environment_commit_ready_agents() or a["payload_kind"] == "environment_failure")]
+            if len(terminal) == 1:
+                target = terminal[0]
+                cleanup = [key for key in self.graph.nodes if key != target
+                           and target not in self.graph.reachable_from(key)]
+                if cleanup:
+                    result.update(mode="cleanup",cleanup_targets=cleanup,completion_target=target)
+            if (result["mode"] == "working" and status["research_remaining"] == 0
+                    and not any(node.configured and is_task_result(node) for node in self.graph.nodes.values())):
+                for key,node in self.graph.nodes.items():
+                    resource = self.runtime.environment_result_for(key)
+                    if (node.configured and resource and resource.get("resource_status") != "unknown"
+                            and resource.get("termination_reason") not in {"agent_never_executed","missing_output_agent","environment_step_failed"}
+                            and not resource.get("commit_pending")):
+                        result["promotion_targets"].append(key)
+                if result["promotion_targets"]:
+                    result["mode"] = "handoff"
+        return result
+
     def _director_edit_admission(self, action):
+        scheduling = self._webshop_schedule_control()
+        if scheduling:
+            reason = None
+            if scheduling["mode"] == "finish" and not (
+                    action.action_type is ActionType.FINISH and action.target in scheduling["finish_targets"]):
+                reason = "Submit an existing current result with FINISH; no further Worker execution is necessary."
+            elif scheduling["mode"] == "handoff" and not (
+                    action.action_type is ActionType.SET_PROMPT and action.target in scheduling["promotion_targets"]
+                    and action.result_scope == "task_result"):
+                reason = "The shared research allowance is spent. Explicitly promote one listed existing session owner to task_result; preserve its page and evidence instead of starting another session."
+            elif scheduling["mode"] == "cleanup" and not (
+                    action.action_type is ActionType.DELETE_AGENT and action.target in scheduling["cleanup_targets"]):
+                reason = "A current completion is blocked only by unrelated graph nodes. Delete a listed unrelated node, then FINISH the existing result without rerunning its Worker."
+            elif scheduling["mode"] == "exhausted" and not (
+                    action.action_type is ActionType.FINISH
+                    or (action.action_type is ActionType.DELETE_AGENT and action.target in scheduling["cleanup_targets"])
+                    or (action.action_type is ActionType.SET_PROMPT and action.target in scheduling["promotion_targets"]
+                        and action.result_scope == "task_result")):
+                reason = "No environment actions remain. Delete listed unrelated nodes or promote an existing owner to task_result for a truthful zero-Worker failure receipt."
+            elif action.action_type is ActionType.ADD_AGENT and scheduling["total_remaining"] < 3:
+                reason = "A fresh session needs at least search, open, and Buy. Continue an existing session within the remaining budget."
+            if reason:
+                return self._reject_graph_action(action, code="webshop_scheduling_boundary",
+                    message=reason,rejection_details={"webshop_scheduling":scheduling})
+        if self.dataset == "webshop" and action.action_type is ActionType.DELETE_AGENT:
+            node = self.graph.nodes.get(str(action.target))
+            budget = self.runtime.shared_tool_budget_status(node.total_tool_budget if node else 0)
+            reserve = budget.get("purchase_reservation", {})
+            if reserve.get("owner") == action.target and reserve.get("reserved"):
+                return self._reject_graph_action(action, code="purchase_budget_reserved",
+                    message="Resume or explicitly abandon the protected owner before deleting its live purchase path.",
+                    rejection_details={"purchase_reservation": reserve})
         remaining = self.director_edit_budget()["remaining"]
         if remaining is None:
             return None
@@ -283,6 +364,13 @@ class UnifiedSubmissionMixin:
             return False
         node = self.graph.nodes.get(target)
         if node is None or not node.configured:
+            return False
+        if self.runtime.webshop_scheduling_blocker(node,self.graph) is not None:
+            return False
+        if (self.dataset == "webshop" and self.runtime.webshop_scheduling_enabled
+                and target in self.runtime.environment_commit_ready_agents()):
+            return False
+        if self.runtime.webshop_reservation_blocker(node) is not None:
             return False
         if self.runtime.swe_execution_blocker(node) is not None:
             return False
@@ -566,7 +654,28 @@ class UnifiedSubmissionMixin:
         if protected:
             allowed = ["finish"] if "finish" in allowed else []
             parameters["finish"]["targets"] = protected
+        scheduling = self._webshop_schedule_control(assessments)
+        if scheduling and self.active:
+            if scheduling["mode"] == "finish":
+                allowed = ["finish"]
+                parameters["finish"]["targets"] = scheduling["finish_targets"]
+            elif scheduling["mode"] == "handoff":
+                allowed = [name for name in allowed if name == "set_prompt"]
+                parameters["set_prompt"]["targets"] = scheduling["promotion_targets"]
+                parameters["set_prompt"]["result_scopes"] = ["task_result"]
+            elif scheduling["mode"] == "cleanup":
+                allowed = [name for name in allowed if name == "delete_agent"]
+                parameters["delete_agent"]["targets"] = scheduling["cleanup_targets"]
+            elif scheduling["mode"] == "exhausted":
+                allowed = [name for name in allowed if name in {"finish", "delete_agent", "set_prompt"}]
+                parameters["delete_agent"]["targets"] = scheduling["cleanup_targets"]
+                parameters["set_prompt"]["targets"] = scheduling["promotion_targets"]
+                parameters["set_prompt"]["result_scopes"] = ["task_result"]
+                allowed = [name for name in allowed if parameters.get(name,{}).get("targets")]
+            elif scheduling["total_remaining"] < 3 and "add_agent" in allowed:
+                allowed.remove("add_agent")
         return {
+            **({"webshop_scheduling":scheduling} if scheduling else {}),
             "canvas_version": self.graph.version, "director_action_protocol_version": ACTION_PROTOCOL,
             "submission_contract_version": SUBMISSION_VERSION, "submission_protocol": PROTOCOL,
             "submission_status": self._unified_transaction["state"] if self._unified_transaction else "working",
