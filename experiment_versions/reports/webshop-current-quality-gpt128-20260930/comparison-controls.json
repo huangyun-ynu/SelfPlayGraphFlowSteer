@@ -1,0 +1,15 @@
+{
+  "previous_run": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-eval/webshop-current-quality-128-20260930-095403Z",
+  "tasks_byte_identical": true,
+  "goals_byte_identical": true,
+  "scorer_identical": true,
+  "source_identical": true,
+  "changed_sources": [],
+  "intentional_changes": [
+    "fixed GPT worker route",
+    "15 question workers",
+    "student gateway concurrency 15",
+    "Nexus non-eco concurrency 5",
+    "eco member excluded from GPT pool"
+  ]
+}

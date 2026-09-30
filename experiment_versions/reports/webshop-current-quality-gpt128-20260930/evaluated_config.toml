@@ -1,0 +1,450 @@
+# SWE baseline: swe-65of128-20260928 (65/128 = 50.78125%); dataset-scoped v3.
+# ALFWorld baseline: V3 102/128 plus 20260929 ALF/SWE state fixes; see promotion record.
+# Hotpot baseline: hotpot-8672-20260928 (111/128 strict EM); evidence-first v1, v2.2.
+# Canonical deployment configuration for the seven-dataset formal PATS run.
+# Credentials are loaded from the repository .env and are never stored here.
+[models.proposer]
+base_url = "http://127.0.0.1:18601/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+base_model_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/models/Qwen3.5-9B"
+checkpoint_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-output-contract-v2/checkpoints/proposer"
+trainable = true
+enable_thinking = true
+
+[models.solver]
+base_url = "http://127.0.0.1:18602/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+base_model_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/models/Qwen3.5-9B"
+checkpoint_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-output-contract-v2/checkpoints/solver"
+trainable = true
+enable_thinking = true
+
+[runtime]
+name = "default"
+base_url = "http://127.0.0.1:18603/v1"
+api_key = "EMPTY"
+served_model = "Qwen3.5-9B"
+timeout_s = 120.0
+max_concurrency = 12
+managed_locally = false
+frozen = true
+network_path = "direct"
+request_profile = "qwen"
+
+[runtime_routing]
+health_state_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-eval/webshop-current-quality-gpt128-20260930-100446Z/route_health.json"
+# Director selects each Worker model; equivalent endpoints are pooled below.
+worker_routes = ["gpt", "grok", "gemini", "deepseek", "minimax"]
+skill_distiller = "skill_refiner"
+health_cooldown_s = 600.0
+pool_retry_attempts = 2
+pool_retry_backoff_s = 1.0
+pool_member_queue_wait_s = 0.5
+
+# Dataset candidates: the Director selects each Worker model; no fixed-route remapping.
+[runtime_routing.dataset_worker_routes]
+swe_bench = ["gpt"]
+webshop = ["gpt"]
+
+[runtime_routing.endpoint_pools]
+gpt = ["gpt_student", "gpt"]
+grok = ["grok", "grok45"]
+gemini = ["gemini", "gemini2"]
+gpt_judge = ["gpt_judge", "gpt_judge_eco"]
+
+[canvas]
+# V3 WebShop sessions share the existing 16-call task budget.
+webshop_action_budget_policy = "shared_total_v1"
+submission_journal_dir = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-eval/webshop-current-quality-gpt128-20260930-100446Z/submissions"
+alfworld_terminal_candidate_policy = "finish_only_v1"
+# Predictive admission protection is disabled; hard token and wall-clock limits remain.
+remaining_time_admission_enabled = false
+remaining_token_admission_enabled = false
+max_agents = 4
+max_rounds = 24
+relay_max_chars = 1000
+
+[canvas.max_total_tokens_by_dataset]
+aime = 240000
+nq_open = 240000
+hotpotqa = 240000
+webshop = 350000
+alfworld = 350000
+healthbench_professional = 240000
+swe_bench = 350000
+
+[canvas.worker_token_budget_by_dataset.swe_bench]
+policy = "reported_usage_threshold_v1"
+start_threshold = 350000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
+[canvas.worker_token_budget_by_dataset.alfworld]
+policy = "reported_usage_threshold_v1"
+start_threshold = 350000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
+[solver_skillbank]
+path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-output-contract-v2/runtime_state/director_skillbank.v2.json"
+cases_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-output-contract-v2/runtime_state/director_skill_cases.json"
+usage = "training_only"
+prompt_token_budget = 1024
+retrieve_top_k = 3
+enabled = true
+mode = "director_skill_v2"
+activation_policy = "checked"
+embedding_model_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/models/e5-base-v2"
+
+[solver_skillbank.pats]
+enabled = true
+ema_alpha = 0.1
+revise_threshold = 0.3
+compress_threshold = 0.85
+max_skills = 30
+max_tokens = 2000
+min_groups = 2
+min_evidence_cards = 2
+review_interval = 1
+max_edits = 4
+max_reviews_per_cycle = 3
+max_evidence_groups = 32
+max_policy_lag = 1
+max_review_input_tokens = 20480
+
+[trace]
+path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-eval/webshop-current-quality-gpt128-20260930-100446Z/traces.jsonl"
+
+[verifier]
+mode = "auto"
+
+[answer_submission]
+enabled = true
+# The output Agent owns the answer; retain deterministic extraction only.
+
+# Pure-local Python execution support for AIME Workers.
+[aime_actions]
+enabled = true
+timeout_s = 5.0
+max_output_chars = 8000
+max_code_chars = 12000
+memory_limit_mb = 1024
+max_initial_calls = 3
+max_revision_calls = 1
+max_total_calls = 4
+
+# NQ searches the pinned R2D2 corpus during each rollout.
+# HotpotQA continues to use its supplied Evidence; web fallback is disabled.
+[retrieval]
+enabled = true
+service_url = "http://127.0.0.1:19012/retrieve"
+top_k = 8
+timeout_s = 240.0
+max_tool_rounds = 3
+hotpotqa_search_enabled = false
+nq_frozen_top_k = 0
+nq_evidence_mode = "corpus_tool"
+
+[retrieval.nq_policy]
+profile = "nq-dense8-v1"
+expected_identity_sha256 = "f8129c07a8c438a559bc4983f11dd1c8d48bc362a6035455cb8c20d6b28c9c9e"
+min_nonempty_searches_before_answer = 1
+max_search_calls_per_task = 4
+require_evidence_refs = true
+evidence_token_budget = 12000
+max_submission_repairs = 1
+allow_web_fallback = false
+
+[director]
+prompt_variant = "v3"
+
+# The formal launcher owns the pinned official WebShop sidecar on port 18020.
+[webshop]
+# Formal WebShop: evaluated engineering fixes d662f39; original official scoring.
+purchase_budget_policy = "completion_reserve_v2"
+scheduling_policy = "bounded_research_v1"
+enabled = true
+service_url = "http://127.0.0.1:47325"
+timeout_s = 240.0
+max_observation_chars = 0
+max_query_chars = 500
+max_initial_calls = 12
+max_revision_calls = 4
+max_total_calls = 16
+staged_commit_enabled = true
+max_pending_sessions = 8
+pending_ttl_s = 900.0
+# M02: merged guidance + identity fix; 62/128, mean score 73.5221.
+search_observation_mode = "legacy"
+
+compatibility_profile = "m02_merged_identity_v1"
+worker_guidance_policy = "merged_checklist_v1"
+worker_memory_policy = "factual_memory_v2"
+worker_execution_policy = "graph_tools_v1"
+native_conversation_history = false
+env_feedback_enabled = false
+
+# Local assets are present; the formal environment installs the alfworld extra.
+[alfworld]
+enabled = true
+task_prompt_source = "environment_reset"
+data_root = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/assets/alfworld-data/json_2.1.1"
+max_episode_steps = 50
+max_rollout_steps = 200
+max_observation_chars = 12000
+max_initial_calls = 50
+max_revision_calls = 50
+max_total_calls = 100
+worker_guidance_policy = "factual_memory_v1"
+
+# Local execution storage, trusted remote verifier identity, registry, and
+# pinned dataset revision are provisioned for the formal run.
+[swe]
+enabled = true
+repo_cache_root = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/pats-formal-20260912/swe/repo-cache"
+workspace_root = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-swe65-v1/swe/workspaces"
+artifact_store_root = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-swe65-v1/private/swe/artifacts"
+verifier_registry_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training/private/swe/verifier-registry.json"
+lifecycle_log_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-swe65-v1/private/swe/lifecycle.jsonl"
+verifier_log_path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-swe65-v1/private/swe/verifier-client.jsonl"
+verifier_host = "43.134.20.27"
+verifier_user = "sweeval"
+verifier_identity_file = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training/private/swe/identity"
+verifier_known_hosts_file = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training/private/swe/known_hosts"
+# Optional Tencent Cloud CVM lifecycle. Enable both flags only after exporting
+# TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY in the private .env.
+cvm_auto_start = true
+cvm_auto_stop = true
+cvm_region = "ap-singapore"
+cvm_instance_id = "ins-5n1zolfw"
+cvm_secret_id_env = "TENCENTCLOUD_SECRET_ID"
+cvm_secret_key_env = "TENCENTCLOUD_SECRET_KEY"
+cvm_endpoint = "cvm.tencentcloudapi.com"
+cvm_timeout_s = 600.0
+cvm_poll_s = 5.0
+dataset_revision = "78f471bf655a3137b2e8a75af1501690ec009ec3"
+local_test_timeout_s = 60.0
+# Enables built-in public_tests and public_smoke; fixed argv profiles remain below.
+public_test_environment_root = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/swe/public-test-envs"
+public_test_setup_timeout_s = 600.0
+max_output_chars = 12000
+max_file_chars = 200000
+max_file_bytes = 10485760
+max_patch_bytes = 2000000
+max_initial_calls = 20
+max_revision_calls = 12
+max_total_calls = 32
+duplicate_responsibility_policy = "record_only"
+
+[swe.test_profiles]
+python_syntax = ["python", "-m", "py_compile"]
+
+[healthbench_judge_audit]
+path = "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-training-output-contract-v2/private/healthbench_judge"
+runtime_route = "gpt_student"
+expected_model = "gpt-5.5"
+
+[resources]
+proposer_gpu_id = 1
+solver_gpu_id = 1
+allocated_gpu_ids = [1]
+allow_policy_gpu_colocation = true
+proposer_service_gpu_memory_utilization = 0.32
+solver_service_gpu_memory_utilization = 0.32
+
+# Dedicated between-cycle Skill Distiller route.
+[runtimes.skill_refiner]
+base_url = "https://nexus.itssx.com/api/codex/codex_pro/v1"
+api_key_env = "NEXUS_PRO_API_KEY"
+served_model = "gpt-6-astra"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 20
+timeout_s = 240.0
+max_tokens = 4096
+managed_locally = false
+frozen = true
+
+[runtimes.gpt]
+base_url = "https://nexus.itssx.com/api/codex/codex/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 5
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gpt_eco]
+base_url = "https://nexus.itssx.com/api/codex_eco/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 10
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+# Student gateway joined to the existing gpt worker pool; it uses the same
+# queue, health cooldown, retry, and round-robin endpoint selection logic.
+[runtimes.gpt_student]
+base_url = "https://flowsteer.org:2087/v1"
+api_key_env = "FLOWSTEER_API_KEY"
+served_model = "lab-gpt-5.5-2"
+request_profile = "responses_text"
+api_surface = "responses"
+network_path = "direct"
+reasoning_effort = "low"
+max_concurrency = 15
+timeout_s = 600.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+user_agent = "selfplay-graph-flowsteer/student-gateway"
+
+[runtimes.grok]
+base_url = "https://nexus.itssx.com/api/grok/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "grok-4.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.grok45]
+base_url = "https://nexus.itssx.com/api/grok45/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "grok-4.5"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gemini]
+base_url = "https://uuapi.io/v1"
+api_key_env = "UUAPI_API_KEY"
+served_model = "gemini-3.6-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gemini2]
+base_url = "https://uuapi.io/v1"
+api_key_env = "UUAPI_API_KEY_2"
+served_model = "gemini-3.6-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+max_concurrency = 12
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.deepseek]
+base_url = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+served_model = "deepseek-flash"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+enable_thinking = false
+reasoning_effort = "low"
+max_concurrency = 24
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.minimax]
+base_url = "https://api.minimaxi.com/v1"
+api_key_env = "MINIMAX_API_KEY"
+served_model = "MiniMax-M2.7"
+request_profile = "generic"
+api_surface = "chat_completions"
+network_path = "direct"
+enable_thinking = false
+reasoning_effort = "low"
+max_concurrency = 30
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+# HealthBench Judge shares the same physical GPT endpoint gates and credentials
+# as GPT Worker traffic; only the API surface and request role differ.
+[runtimes.gpt_judge]
+base_url = "https://nexus.itssx.com/api/codex/codex/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "responses"
+network_path = "direct"
+reasoning_effort = "low"
+healthbench_grader_reasoning_effort = "low"
+max_concurrency = 16
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtimes.gpt_judge_eco]
+base_url = "https://nexus.itssx.com/api/codex_eco/v1"
+api_key_env = "NEXUS_API_KEY"
+served_model = "gpt-5.5"
+request_profile = "generic"
+api_surface = "responses"
+network_path = "direct"
+reasoning_effort = "low"
+healthbench_grader_reasoning_effort = "low"
+max_concurrency = 16
+timeout_s = 240.0
+max_tokens = 16384
+managed_locally = false
+frozen = true
+
+[runtime_routing.dataset_endpoint_pools.swe_bench]
+gpt = ["gpt_student", "gpt"]
+
+[canvas.submission_protocol_by_dataset]
+aime = "unified_task_result_v1"
+nq_open = "unified_task_result_v1"
+hotpotqa = "unified_task_result_v1"
+healthbench_professional = "unified_task_result_v1"
+webshop = "unified_task_result_v1"
+alfworld = "unified_task_result_v1"
+swe_bench = "unified_task_result_v1"
+
+[runtimes.gpt.max_concurrency_by_dataset]
+swe_bench = 5
+
+[runtimes.gpt_student.max_concurrency_by_dataset]
+swe_bench = 10

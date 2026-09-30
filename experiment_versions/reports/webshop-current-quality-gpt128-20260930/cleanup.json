@@ -1,0 +1,6 @@
+{
+  "benchmark_stopped": true,
+  "sidecar_stopped": true,
+  "sidecar_port": 47325,
+  "reused_director_retained": true
+}

@@ -1,0 +1,20 @@
+{
+  "REPORT.zh-CN.md": "bfdf9b3bc31b7d347308386084ea83c4fa4a4a20ff6fd3fd8e9e3a27c164e416",
+  "analysis.log": "4059d70a493ee3d02cb750adb596ca7a89741bbfec60bf708eb7e79eff9ffdd1",
+  "analyze_run.py": "0337bda9efe32f81c3ee6c0283f3e4b1fa9b4811b987848ee35b805601eb411a",
+  "cleanup.json": "2b9a70af9287bade8ab84a5bd69fed0818de98496c09aa48b4962c5c6fcf8ddf",
+  "comparison-controls.json": "d09c6b0e95ef8ec1105bbc0c1c4fcbb5f31cd5887f45b72bf1a0e9057f556b76",
+  "director.json": "1b270c32095caa9fbc42f8dc89cbe104f9835d353991164804a4765cc0eba981",
+  "evaluated_config.toml": "d6f1e5c931a35cfa454a7db312dba648e1376b44f6325352e73c0d23f5d09a9e",
+  "launch.log": "beb63af41022ba3a3c512a9f236110a87db85fe8652e6f61e28234c6f8cedc53",
+  "manifest.json": "76dab2cffd31b7e430c445682fc1a509c8d5bbfd026ecf6c649efcc0e2b19678",
+  "per-task.json": "87dd8db2bebb9da98427cbe8e71c818cc5aedf48c7daad9a4c07642b439849e9",
+  "rescore.json": "f3a1ad419967e2ec8273f963cd33d576bc583b84ebf2509ad5ab42c39343b0b3",
+  "rescore.log": "77adb050734c7a4bfcd00fd28afde5d91ca4f33a31675ebff598cd58dcd47bdf",
+  "rescore.py": "ad2bf07189cba4fe01d943fea1dc7a2ced4cee725f5af4af983f3d6f98db7f12",
+  "route-audit.json": "43cc2539cfef7c0d04953f0b6f506f7cb2ff9b0b79f523f5b3dde1c7d5215955",
+  "run-path.txt": "d1d3d784d073c8b1d15a07b5529d4783f708af178f4a625f80bcad1b2e0e8c1e",
+  "run_eval.py": "6d5cee7c025545cef0d47fe7c65e572c84039e4de14c3f451d1fe41b200540f2",
+  "source_integrity.json": "2f957f3dd5eddc82d1c89647bb37c3d832d47972207e673032892e6ba59b6c3d",
+  "summary.json": "4059d70a493ee3d02cb750adb596ca7a89741bbfec60bf708eb7e79eff9ffdd1"
+}

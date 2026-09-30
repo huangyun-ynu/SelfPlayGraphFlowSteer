@@ -1,0 +1,29 @@
+{
+  "base_url": "http://127.0.0.1:18605/v1",
+  "model": {
+    "id": "Qwen3.5-9B",
+    "object": "model",
+    "created": 1790762686,
+    "owned_by": "vllm",
+    "root": "/mnt/ssd/test/codex-students/student02/models/Qwen3.5-9B",
+    "parent": null,
+    "max_model_len": 32768,
+    "permission": [
+      {
+        "id": "modelperm-8531a4da105d3197",
+        "object": "model_permission",
+        "created": 1790762686,
+        "allow_create_engine": false,
+        "allow_sampling": true,
+        "allow_logprobs": true,
+        "allow_search_indices": false,
+        "allow_view": true,
+        "allow_fine_tuning": false,
+        "organization": "*",
+        "group": null,
+        "is_blocking": false
+      }
+    ]
+  },
+  "owned_by_this_run": false
+}

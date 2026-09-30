@@ -1,0 +1,23 @@
+{
+  "question_concurrency": 15,
+  "configured_member_concurrency": {
+    "gpt_student": 15,
+    "gpt": 5
+  },
+  "used_members": [
+    "gpt",
+    "gpt_student"
+  ],
+  "eco_attempts": 0,
+  "successful_requests_by_member": {
+    "gpt": 228,
+    "gpt_student": 753
+  },
+  "pool_failure_kinds": {
+    "queue_timeout": 262
+  },
+  "provider_reported_models": {
+    "gpt-5.5-2": 753,
+    "gpt-5.5": 228
+  }
+}

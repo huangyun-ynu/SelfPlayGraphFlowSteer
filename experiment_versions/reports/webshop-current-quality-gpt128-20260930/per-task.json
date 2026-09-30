@@ -1,0 +1,3022 @@
+[
+  {
+    "task_id": "webshop/goal-00004",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": true,
+    "token_cost": 23298,
+    "unmet_checks": [
+      {
+        "group": "style",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B01MRBWRL6",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00010",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": true,
+    "token_cost": 30971,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0978Q1KK9",
+    "selected_options": {
+      "flavor name": "spicy beef backpack bundle"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00012",
+    "score": 0.0,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 24381,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08B5XZ7LR",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00015",
+    "score": 0.8,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 11,
+    "prompt_changed": true,
+    "token_cost": 92275,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B019CSXGBA",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.25
+  },
+  {
+    "task_id": "webshop/goal-00024",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 64987,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "high speed",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0855PG5LJ",
+    "selected_options": {
+      "color": "red"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00029",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23729,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0999DWR51",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00030",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 22665,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08FRLYZFD",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.1
+  },
+  {
+    "task_id": "webshop/goal-00031",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 15,
+    "prompt_changed": true,
+    "token_cost": 139710,
+    "unmet_checks": [
+      {
+        "group": "flavor",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07M8CQYXH",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.05
+  },
+  {
+    "task_id": "webshop/goal-00040",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 14,
+    "prompt_changed": true,
+    "token_cost": 107598,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "navy"
+        ]
+      },
+      {
+        "group": "style",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08M5RLBWJ",
+    "selected_options": {
+      "color": "navy"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00043",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": true,
+    "token_cost": 42224,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0834V2NFD",
+    "selected_options": {
+      "color": "z7-black",
+      "size": "5.5"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00045",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 36624,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B073JD8VLR",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00051",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 11,
+    "prompt_changed": false,
+    "token_cost": 111626,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "action_phase_complete",
+      "webshop_purchase_staged"
+    ],
+    "asin": "B075FZMXGS",
+    "selected_options": {
+      "color": "salmon brown",
+      "size": "18 x 18-inch"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00053",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 33644,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09CF4X81Y",
+    "selected_options": {
+      "scent": "green"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00054",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 81155,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "hair salon",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "action_phase_complete",
+      "webshop_purchase_staged"
+    ],
+    "asin": "B098JV5W66",
+    "selected_options": {
+      "pattern name": "16.9oz | 500ml-amber-self-labeling"
+    },
+    "official_reward_same_purchase": 0.05
+  },
+  {
+    "task_id": "webshop/goal-00055",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 30951,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09QQ7754D",
+    "selected_options": {
+      "color": "black"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00060",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 13,
+    "prompt_changed": false,
+    "token_cost": 117986,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09RFM8Q7G",
+    "selected_options": {
+      "color": "yellow-b",
+      "size": "7-14 year"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00061",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 54314,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B092VGFJY3",
+    "selected_options": {
+      "pattern name": "purple"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00063",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 11,
+    "prompt_changed": false,
+    "token_cost": 97721,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "frontier olive"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09PPMHNMS",
+    "selected_options": {
+      "color": "frontier olive",
+      "size": "20 plus"
+    },
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00064",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 22874,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09PLBXXYQ",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00065",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 70787,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07M6LWR7C",
+    "selected_options": {
+      "flavor name": "sweet kick mustard",
+      "size": "3 pack"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00069",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23664,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B099FC5VFM",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00071",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 39278,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B089Y9XZGK",
+    "selected_options": {
+      "color": "no 21"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00075",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 9,
+    "prompt_changed": false,
+    "token_cost": 77892,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B00265MIR0",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00082",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 30645,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "black brown"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B072FS59C8",
+    "selected_options": {
+      "color": "black brown"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00085",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 40130,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B085QMTTSC",
+    "selected_options": {
+      "flavor name": "caramel",
+      "size": "4.41 ounce"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00090",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 11,
+    "prompt_changed": false,
+    "token_cost": 85170,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "violet | black"
+        ]
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "king"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged",
+      "webshop_research_budget_handoff"
+    ],
+    "asin": "B00MRH9N6Q",
+    "selected_options": {
+      "color": "violet | black",
+      "size": "king"
+    },
+    "official_reward_same_purchase": 0.05
+  },
+  {
+    "task_id": "webshop/goal-00094",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": true,
+    "token_cost": 30908,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09QC98JLF",
+    "selected_options": {
+      "size": "x-large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00097",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 48629,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09PRGMGTC",
+    "selected_options": {
+      "size": "large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00105",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 13,
+    "prompt_changed": true,
+    "token_cost": 127325,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07Y1WWWGF",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00107",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 13,
+    "prompt_changed": false,
+    "token_cost": 106787,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "11-12 wide women | 9-10 wide men"
+        ]
+      },
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "light blue"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09D3FNFC3",
+    "selected_options": {
+      "color": "light blue",
+      "size": "11-12 wide women | 9-10 wide men"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00109",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 31171,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09NXLCVR1",
+    "selected_options": {
+      "color": "nickel"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00118",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": true,
+    "token_cost": 23202,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09DKG5WH9",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00121",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 11,
+    "prompt_changed": false,
+    "token_cost": 97766,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "purple"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08615VXKH",
+    "selected_options": {
+      "color": "purple",
+      "size": "2' x 5' oval"
+    },
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00122",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 24315,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09L4L3JCD",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.3333333333333333
+  },
+  {
+    "task_id": "webshop/goal-00126",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 45838,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B01MXL8AVD",
+    "selected_options": {
+      "flavor name": "jack daniels pecan"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00129",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 22842,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09T3K16KY",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00132",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23849,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08SHKMP5B",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00134",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 9,
+    "prompt_changed": false,
+    "token_cost": 87425,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08SSG514G",
+    "selected_options": {
+      "size": "512gb",
+      "style": "s7 tablet"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00135",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 92406,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B003NX8C6K",
+    "selected_options": {
+      "color": "red camellia",
+      "size": "x-large plus"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00139",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 55396,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08B1MCFKL",
+    "selected_options": {
+      "color": "dark denim | red orange",
+      "size": "10"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00143",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 46381,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "9x6ft"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B088GX4LPM",
+    "selected_options": {
+      "size": "9x6ft"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00152",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": true,
+    "token_cost": 34803,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09SBQN3Y4",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00155",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 57988,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B086ZGK88G",
+    "selected_options": {
+      "color": "balayage#6 | 27 | 60",
+      "size": "20 inch"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00157",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 65722,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "black- high waisted straight jeans"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09JMV9DHX",
+    "selected_options": {
+      "color": "black- high waisted straight jeans",
+      "size": "large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00163",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 9,
+    "prompt_changed": true,
+    "token_cost": 75407,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B098DKM811",
+    "selected_options": {
+      "color": "z01-red"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00167",
+    "score": 0.4,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 60889,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "12 ft"
+        ]
+      },
+      {
+        "group": "style",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      },
+      {
+        "group": "product packaging",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B01BY04EMY",
+    "selected_options": {
+      "configuration": "hdmi male-male",
+      "pattern name": "10 pack",
+      "size": "12 ft"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00170",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 46321,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B096T52BZ2",
+    "selected_options": {
+      "style": "island vanilla spray pefume + hair & body spray"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00185",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 10,
+    "prompt_changed": true,
+    "token_cost": 84098,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "green"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09Q37HHJY",
+    "selected_options": {
+      "color": "green",
+      "size": "x-large"
+    },
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00186",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 41073,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08R9PJHK1",
+    "selected_options": {
+      "color": "black",
+      "size": "xx-large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00188",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 30533,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08LD7DZLK",
+    "selected_options": {
+      "color": "set of 2 plug in"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00193",
+    "score": 0.8,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": true,
+    "token_cost": 30789,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08P789P6F",
+    "selected_options": {
+      "color": "black&black"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00194",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 34203,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09MMW35LF",
+    "selected_options": {
+      "size": "large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00197",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": true,
+    "token_cost": 66415,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B082N82QWM",
+    "selected_options": {
+      "color": "baby blue",
+      "fit type": "men",
+      "size": "medium"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00201",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 42975,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08THLBF8R",
+    "selected_options": {
+      "color": "new: silver  | white",
+      "size": "50\" x 96\"l"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00202",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 54762,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08GJ6XXSH",
+    "selected_options": {
+      "flavor name": "authentic michelada mix",
+      "size": "33.8 fl oz (pack of 1)"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00203",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 183880,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09JZ84S8D",
+    "selected_options": {
+      "color": "white",
+      "size": "66\"w x 66\"h"
+    },
+    "official_reward_same_purchase": 0.6
+  },
+  {
+    "task_id": "webshop/goal-00206",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": true,
+    "token_cost": 42737,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09FLCK3PT",
+    "selected_options": {
+      "color": "medium brown",
+      "size": "8 inch"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00213",
+    "score": 0.3333333333333333,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 38611,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "high power",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "30cm 24w"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09MNDT4VC",
+    "selected_options": {
+      "color": "black",
+      "size": "30cm 24w"
+    },
+    "official_reward_same_purchase": 0.25
+  },
+  {
+    "task_id": "webshop/goal-00214",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 35170,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "water resistant",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0785HW94R",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.03333333333333333
+  },
+  {
+    "task_id": "webshop/goal-00216",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 29846,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B074338PG3",
+    "selected_options": {
+      "size": "pack of 9"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00219",
+    "score": 0.4,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 40063,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "vanity light",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "brushed nickel | frosted"
+        ]
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B00367XZ88",
+    "selected_options": {
+      "color": "brushed nickel | frosted"
+    },
+    "official_reward_same_purchase": 0.4
+  },
+  {
+    "task_id": "webshop/goal-00221",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 15,
+    "prompt_changed": false,
+    "token_cost": 151490,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "black woman queen"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08N5W3R6S",
+    "selected_options": {
+      "color": "black woman queen",
+      "size": "16 x 24 in"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00225",
+    "score": 0.4,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 15,
+    "prompt_changed": false,
+    "token_cost": 137688,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "kosher certified",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "flavor",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "dark chocolate almond"
+        ]
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "4 ounce (pack of 4)"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged",
+      "webshop_semantic_no_progress_fuse"
+    ],
+    "asin": "B01MRYBGJQ",
+    "selected_options": {
+      "flavor": "dark chocolate almond",
+      "size": "4 ounce (pack of 4)"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00232",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 84957,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "10 count"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B01N37AK8V",
+    "selected_options": {
+      "size": "10 count"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00234",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 64576,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B00N49FECS",
+    "selected_options": {
+      "color": "sandblast light",
+      "size": "40w x 34l"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00235",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 38138,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09K3QFPVP",
+    "selected_options": {
+      "color": "faux fur white"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00241",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 56718,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09D77KB16",
+    "selected_options": {
+      "color": "r901"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00244",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 31002,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B083QWF56K",
+    "selected_options": {
+      "size": "7x5ft"
+    },
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00248",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": true,
+    "token_cost": 80730,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0007SMLUM",
+    "selected_options": {
+      "flavor": "triple blend flakes",
+      "size": "1 pound (pack of 1)"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00255",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 33460,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "glass screen",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0946XLW3X",
+    "selected_options": {
+      "size": "38 mm"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00256",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": true,
+    "token_cost": 39521,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "coffe"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09STQG4WR",
+    "selected_options": {
+      "color": "coffe"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00264",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 68551,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08WYY37SB",
+    "selected_options": {
+      "flavor name": "fried fish",
+      "size": "1.76 ounce (pack of 3)"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00268",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 13,
+    "prompt_changed": false,
+    "token_cost": 137210,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "quad core",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09LD3LKCN",
+    "selected_options": {
+      "color": "amd ryzen 7 3700u",
+      "size": "64gb ram 1tb ssd"
+    },
+    "official_reward_same_purchase": 0.25
+  },
+  {
+    "task_id": "webshop/goal-00269",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23769,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09QHXS4C4",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00271",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 16,
+    "prompt_changed": false,
+    "token_cost": 136201,
+    "unmet_checks": [
+      {
+        "group": "quantity",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07NLXCH2L",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00273",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": true,
+    "token_cost": 32351,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07MLH8SHQ",
+    "selected_options": {
+      "flavor": "brick oven pizza"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00282",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 30776,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08G8CY858",
+    "selected_options": {
+      "color": "grey"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00284",
+    "score": 0.0,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 16,
+    "prompt_changed": true,
+    "token_cost": 138467,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "dual sifter",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B00IV6ZM58",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.03333333333333333
+  },
+  {
+    "task_id": "webshop/goal-00291",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 47787,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07HF3J7DQ",
+    "selected_options": {
+      "size": "110-inch  |  16:9"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00293",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 22388,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "high power",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09B7T8XYS",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.25
+  },
+  {
+    "task_id": "webshop/goal-00299",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": true,
+    "token_cost": 31700,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B096SRSPR3",
+    "selected_options": {
+      "size": "3 pack"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00311",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 42917,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09NYBZX2T",
+    "selected_options": {
+      "color": "mt7308",
+      "size": "4x-large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00318",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 45314,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "natural ingredients",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08CKG5FXQ",
+    "selected_options": {
+      "color": "g-817-cr"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00319",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 41980,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "x-2 pink"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08R9PJHK1",
+    "selected_options": {
+      "color": "x-2 pink",
+      "size": "large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00328",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 54228,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0192WA9FW",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00330",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23792,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07J4RH99Y",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00340",
+    "score": 0.4,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 14,
+    "prompt_changed": false,
+    "token_cost": 115900,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "required_option_not_selected"
+      },
+      {
+        "group": "style",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      },
+      {
+        "group": "pattern",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B074HMDH4C",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.4
+  },
+  {
+    "task_id": "webshop/goal-00341",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 48216,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "easy apply",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09PKGTSJ4",
+    "selected_options": {
+      "color": "black"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00342",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 11,
+    "prompt_changed": false,
+    "token_cost": 85809,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "action_phase_complete",
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08VW68D1Z",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00345",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": true,
+    "token_cost": 24069,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09G2X4GDX",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00351",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": true,
+    "token_cost": 57117,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09PV4RVLC",
+    "selected_options": {
+      "color": "03-black"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00352",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 10,
+    "prompt_changed": true,
+    "token_cost": 79931,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "h"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09PBCQ5PW",
+    "selected_options": {
+      "color": "h"
+    },
+    "official_reward_same_purchase": 0.3333333333333333
+  },
+  {
+    "task_id": "webshop/goal-00354",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 30825,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08PZ8WNNW",
+    "selected_options": {
+      "color": "silver"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00358",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 10,
+    "prompt_changed": false,
+    "token_cost": 71964,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "vinyl acetate",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B097SJKB6X",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.3333333333333333
+  },
+  {
+    "task_id": "webshop/goal-00362",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 31712,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09M3NHX2J",
+    "selected_options": {
+      "color": "transparent"
+    },
+    "official_reward_same_purchase": 0.3333333333333333
+  },
+  {
+    "task_id": "webshop/goal-00365",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": true,
+    "token_cost": 125917,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07MWSX8Z7",
+    "selected_options": {
+      "color": "rockdale",
+      "fit type": "relaxed",
+      "size": "35w x 36l"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00367",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 63474,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08CZ3CSZ9",
+    "selected_options": {
+      "color": "purple",
+      "fit type": "men",
+      "size": "xx-large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00369",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 37599,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09NZJSMQS",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00370",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23195,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B01MYDEODT",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00371",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 64500,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09R1MXB7D",
+    "selected_options": {
+      "size": "xx-large"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00380",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 42138,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "fairy girl with wing elves flying butterflies decorative square"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0967D7RZN",
+    "selected_options": {
+      "color": "fairy girl with wing elves flying butterflies decorative square"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00386",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 22962,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08CZL4R54",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00387",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": true,
+    "token_cost": 60010,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B078SJV72L",
+    "selected_options": {
+      "color": "r9 b75+intel i3 3220",
+      "size": "8g ram 128g ssd 1tb hdd"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00397",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 61935,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "quality ingredients",
+        "status": "no_catalog_evidence"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B00Y1FIQ0G",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00400",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 31924,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09G9GNDFP",
+    "selected_options": {
+      "color": "grey"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00407",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 40416,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B084KTNJ7R",
+    "selected_options": {
+      "size": "90 sachets"
+    },
+    "official_reward_same_purchase": 0.06666666666666667
+  },
+  {
+    "task_id": "webshop/goal-00411",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 52882,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09R4V5J3R",
+    "selected_options": {
+      "color": "blue",
+      "size": "medium"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00417",
+    "score": 0.75,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 8,
+    "prompt_changed": false,
+    "token_cost": 67676,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "light gray | white"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B081TKPRSS",
+    "selected_options": {
+      "color": "light gray | white"
+    },
+    "official_reward_same_purchase": 0.375
+  },
+  {
+    "task_id": "webshop/goal-00419",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 59240,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08CDRZH7B",
+    "selected_options": {
+      "color": "jet black-n",
+      "size": "6 inch-120% density"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00420",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 59936,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09J1NLWM1",
+    "selected_options": {
+      "color": "sea cliff blue plaid",
+      "size": "x-large tall"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00424",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 32151,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09BQMH7P7",
+    "selected_options": {
+      "color": "101"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00427",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 45463,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B086PX2KWN",
+    "selected_options": {
+      "color": "blue"
+    },
+    "official_reward_same_purchase": 0.1
+  },
+  {
+    "task_id": "webshop/goal-00428",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 64042,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B0962P6LCS",
+    "selected_options": {
+      "color": "tan 1905019-5",
+      "size": "9 wide"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00433",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 53453,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09HBMNYW7",
+    "selected_options": {
+      "color": "pullover hoodie - ash",
+      "size": "3x-large"
+    },
+    "official_reward_same_purchase": 0.0
+  },
+  {
+    "task_id": "webshop/goal-00434",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 30363,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09QLWSSMV",
+    "selected_options": {
+      "color": "grey"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00436",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 55534,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B084FWQF1F",
+    "selected_options": {
+      "color": "thyme | white",
+      "size": "5x-large"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00438",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": false,
+    "token_cost": 44222,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B01NBHBR7S",
+    "selected_options": {
+      "color": "dark cognac brown",
+      "size": "18 inch"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00440",
+    "score": 0.6666666666666666,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 32932,
+    "unmet_checks": [
+      {
+        "group": "color",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "black | teal | official red"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09C63KH2N",
+    "selected_options": {
+      "color": "black | teal | official red"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00446",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 34367,
+    "unmet_checks": [
+      {
+        "kind": "attribute",
+        "matched": false,
+        "phrase": "high speed",
+        "status": "no_catalog_evidence"
+      },
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "selected_conflict",
+        "values": [
+          "150 feet (45 meter)"
+        ]
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07HXT7JBD",
+    "selected_options": {
+      "size": "150 feet (45 meter)"
+    },
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00447",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 5,
+    "prompt_changed": true,
+    "token_cost": 42068,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07N97QCX8",
+    "selected_options": {
+      "flavor name": "vodka",
+      "size": "1.56 pound (pack of 2)"
+    },
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00453",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": true,
+    "token_cost": 49179,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09SYBDNR7",
+    "selected_options": {
+      "color": "pink"
+    },
+    "official_reward_same_purchase": 0.1
+  },
+  {
+    "task_id": "webshop/goal-00457",
+    "score": 0.5,
+    "passed": false,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 7,
+    "prompt_changed": false,
+    "token_cost": 56240,
+    "unmet_checks": [
+      {
+        "group": "size",
+        "kind": "option",
+        "matched": false,
+        "status": "fixed_value_unconfirmed"
+      }
+    ],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B07PJYN7TS",
+    "selected_options": {
+      "color": "gold"
+    },
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00471",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": true,
+    "token_cost": 22690,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B010EC1TCG",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00477",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 4,
+    "prompt_changed": false,
+    "token_cost": 31522,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B091YLQGW3",
+    "selected_options": {
+      "size": "50x40 inch"
+    },
+    "official_reward_same_purchase": 0.5
+  },
+  {
+    "task_id": "webshop/goal-00478",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23022,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08QR8FGSY",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.6666666666666666
+  },
+  {
+    "task_id": "webshop/goal-00481",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 6,
+    "prompt_changed": false,
+    "token_cost": 46511,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B08MTG1BR3",
+    "selected_options": {},
+    "official_reward_same_purchase": 0.75
+  },
+  {
+    "task_id": "webshop/goal-00487",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 3,
+    "prompt_changed": false,
+    "token_cost": 23566,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B007WNVYW6",
+    "selected_options": {},
+    "official_reward_same_purchase": 1.0
+  },
+  {
+    "task_id": "webshop/goal-00494",
+    "score": 1.0,
+    "passed": true,
+    "purchased": true,
+    "submission_status": "submitted",
+    "outcome_status": "scored",
+    "actions_used": 10,
+    "prompt_changed": false,
+    "token_cost": 93471,
+    "unmet_checks": [],
+    "stop_reasons": [
+      "webshop_purchase_staged"
+    ],
+    "asin": "B09P154R75",
+    "selected_options": {
+      "color": "a34",
+      "size": "5x3ft | 1.5x1m"
+    },
+    "official_reward_same_purchase": 1.0
+  }
+]
