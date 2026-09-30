@@ -1,0 +1,102 @@
+{
+  "run": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer/state/formal-eval/webshop-current-quality-128-20260930-095403Z",
+  "source_commit": "3ae1f3d7f0af0593a1af375bbd2949e0229e68f3",
+  "scorer_version": "webshop-quality-20260930-v1",
+  "tasks": 128,
+  "full": 81,
+  "accuracy": 0.6328125,
+  "purchased": 126,
+  "not_purchased": 2,
+  "purchased_not_full": 45,
+  "submitted": 128,
+  "unsubmitted": 0,
+  "mean_reward": 0.8296875000000001,
+  "unknown_score": 0,
+  "execution_errors": 0,
+  "worker_requests": 1293,
+  "worker_request_statuses": {
+    "backend_request_success": 1293
+  },
+  "worker_tokens": 10124378,
+  "not_purchased_ids": [
+    "webshop/goal-00105",
+    "webshop/goal-00433"
+  ],
+  "purchased_not_full_ids": [
+    "webshop/goal-00004",
+    "webshop/goal-00012",
+    "webshop/goal-00015",
+    "webshop/goal-00031",
+    "webshop/goal-00040",
+    "webshop/goal-00060",
+    "webshop/goal-00063",
+    "webshop/goal-00065",
+    "webshop/goal-00075",
+    "webshop/goal-00082",
+    "webshop/goal-00090",
+    "webshop/goal-00107",
+    "webshop/goal-00118",
+    "webshop/goal-00121",
+    "webshop/goal-00134",
+    "webshop/goal-00143",
+    "webshop/goal-00157",
+    "webshop/goal-00167",
+    "webshop/goal-00185",
+    "webshop/goal-00193",
+    "webshop/goal-00203",
+    "webshop/goal-00213",
+    "webshop/goal-00214",
+    "webshop/goal-00219",
+    "webshop/goal-00221",
+    "webshop/goal-00225",
+    "webshop/goal-00232",
+    "webshop/goal-00268",
+    "webshop/goal-00271",
+    "webshop/goal-00284",
+    "webshop/goal-00293",
+    "webshop/goal-00318",
+    "webshop/goal-00340",
+    "webshop/goal-00341",
+    "webshop/goal-00352",
+    "webshop/goal-00354",
+    "webshop/goal-00358",
+    "webshop/goal-00362",
+    "webshop/goal-00380",
+    "webshop/goal-00407",
+    "webshop/goal-00417",
+    "webshop/goal-00440",
+    "webshop/goal-00457",
+    "webshop/goal-00481",
+    "webshop/goal-00487"
+  ],
+  "unmet_check_counts": {
+    "option": 42,
+    "attribute": 17,
+    "price": 1
+  },
+  "prompt_changed_tasks": 28,
+  "full_by_prompt_group": {
+    "changed": 18,
+    "unchanged": 63
+  },
+  "purchased_official_label_full_same_purchase": 61,
+  "official_label_mean_reward_same_purchase": 0.7268229166666664,
+  "rescore": {
+    "purchases": 126,
+    "quality_scores_match": true,
+    "original_label_scores_match": true,
+    "note": "Original-label rewards for these same purchases are not a fresh original-task evaluation."
+  },
+  "source_integrity": {
+    "frozen_source_unchanged": true,
+    "current_source_matches_snapshot": true,
+    "frozen_goals_unchanged": true,
+    "formal_config_unchanged": true
+  },
+  "cleanup": {
+    "benchmark_stopped": true,
+    "sidecar_stopped": true,
+    "sidecar_port": 56445,
+    "reused_director_retained": true
+  }
+}
