@@ -19,6 +19,7 @@ from selfplay_graph_flowsteer.application import (
 from selfplay_graph_flowsteer.benchmark_reporting import benchmark_summary
 from selfplay_graph_flowsteer.cli import _apply_fresh_route_report
 from selfplay_graph_flowsteer.contracts import AgentNode
+from selfplay_graph_flowsteer.config import CanvasConfig
 from selfplay_graph_flowsteer.curriculum import ADSBoundaryScheduler, FixedTaskPool, TSDSRetriever
 from selfplay_graph_flowsteer.dataset_actions import default_dataset_action_registry
 from selfplay_graph_flowsteer.llm import MockBackend
@@ -32,6 +33,7 @@ from selfplay_graph_flowsteer.runtime import (
 from selfplay_graph_flowsteer.selfplay import FixedPoolQwenProposer, SelfPlaySeed
 
 from .helpers import RecordingExecutor
+from .test_director_relation_audit_context import TokenBackend
 
 
 @pytest.fixture(autouse=True)
@@ -156,7 +158,7 @@ def test_promoted_action_visibility_is_dataset_specific():
 
 @pytest.mark.parametrize("overrides", [{}, {"nq_open": False}])
 @pytest.mark.parametrize("dataset", ["hotpotqa", "nq_open", "aime"])
-def test_director_thinking_defaults_and_control_overrides_in_actual_calls(dataset, overrides):
+def test_director_thinking_defaults_and_control_overrides_in_actual_calls(dataset, overrides, tmp_path):
     backend = MockBackend([
         '{"action":"add_agent","agent_id":"solver"}',
         '{"action":"set_prompt","target":"solver","role":"Analyst",'
@@ -167,9 +169,11 @@ def test_director_thinking_defaults_and_control_overrides_in_actual_calls(datase
     ])
     solver = AdaptiveWorkflowSolver(
         director_backend=backend, runtime=MultiAgentRuntime(RecordingExecutor()),
+        canvas_config=CanvasConfig(submission_journal_dir=str(tmp_path)),
         director_enable_thinking=True, director_thinking_by_dataset=overrides,
     )
     solver.solve(TaskSpec("sample", "Find the answer.", metadata={"dataset": dataset}), run_id="test")
+    solver.runtime.close_worker_usage_ledger()
     assert backend.calls
     assert all(call["enable_thinking"] is overrides.get(dataset, True) for call in backend.calls)
 
@@ -186,7 +190,7 @@ def test_formal_nq_rejects_online_task_before_any_model_call():
 
 
 @pytest.mark.parametrize("dataset", ["hotpotqa", "nq_open"])
-def test_flowsteer_partial_credit_keeps_independent_exact_match_audit(dataset):
+def test_flowsteer_partial_credit_keeps_independent_exact_match_audit(dataset, tmp_path):
     director = MockBackend([
         '{"action":"add_agent","agent_id":"solver"}',
         '{"action":"set_prompt","target":"solver","role":"Answerer",'
@@ -197,12 +201,14 @@ def test_flowsteer_partial_credit_keeps_independent_exact_match_audit(dataset):
     worker = MockBackend(['{"answer":"Media Puzzle and Damien Oliver","summary":"Public evidence."}'] * 4)
     solver = AdaptiveWorkflowSolver(
         director_backend=director, runtime=MultiAgentRuntime(ModelAgentExecutor(worker)),
+        canvas_config=CanvasConfig(submission_journal_dir=str(tmp_path)),
         verifier=FlowSteerQAVerifier(),
         answer_finalizer=AnswerFinalizer(AnswerSubmissionConfig(enabled=True)),
     )
     task = TaskSpec("partial-answer", "Which horse won the cup?", reference="Media Puzzle",
                     metadata={"dataset": dataset})
     result = solver.solve(task, run_id="partial-answer")
+    solver.runtime.close_worker_usage_ledger()
     assert result.trace.verification.passed is True
     assert result.trace.verification.score == pytest.approx(0.7)
     metrics = task.metadata["qa_official_metrics"]
@@ -243,7 +249,8 @@ def test_formal_configs_keep_director_model_choice_and_qwen_thinking(name, monke
         alfworld=replace(config.alfworld, enabled=False),
         swe=replace(config.swe, enabled=False),
     ).validate()
-    assert config.director_prompt_variant == "v2.2"
+    # B0 already uses v3; keep this assertion aligned with its frozen config.
+    assert config.director_prompt_variant == "v3"
     assert all(value is True for value in config.director_thinking_by_dataset.values())
     assert config.proposer_model.enable_thinking is True
     assert config.solver_model.enable_thinking is True
@@ -343,6 +350,7 @@ def test_application_wires_thinking_and_corpus_evidence_and_explicit_override(tm
 @pytest.mark.parametrize("dataset", ["hotpotqa", "nq_open"])
 @pytest.mark.parametrize("chosen", ["grok", "deepseek"])
 def test_formal_application_executes_director_qa_choice_with_thinking(dataset, chosen, tmp_path, monkeypatch):
+    monkeypatch.setenv("SPGFS_DIRECTOR_CONTEXT_MODE", "append_only")
     config = load_adaptive_config("configs/formal_training.toml", validate=False)
     monkeypatch.setenv("SPGFS_ALLOWED_PHYSICAL_GPUS", ",".join(map(str, config.allocated_gpu_ids)))
     config = replace(
@@ -351,7 +359,7 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
         route_health_path=tmp_path / "health.json", trace_path=tmp_path / "traces.jsonl",
         **{name: replace(getattr(config, name), enabled=False) for name in ("swe", "alfworld", "webshop")},
     )
-    director = MockBackend([
+    director = TokenBackend([
         '{"action":"add_agent","agent_id":"worker"}',
         json.dumps({"action": "set_prompt", "target": "worker", "role": "Answerer",
                     "objective": "Answer the question.", "scope": "Use the public evidence.",
@@ -378,7 +386,9 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
         backend.config = _runtime_gateway_config(config.runtime_pool()[route], {"worker": 0.0}, route_name=route)
     monkeypatch.setattr(app_module, "_create_runtime_backend",
                         lambda runtime, *, route_name: backends[route_name])
-    app = create_adaptive_application(config, director_backend=director, distiller_backend=MockBackend([]))
+    app = create_adaptive_application(config, director_backend=director,
+                                     director_tokenizer=director.tokenizer,
+                                     distiller_backend=MockBackend([]))
     question = "Who wrote the book?"
     metadata = {"dataset": dataset}
     prompt = question
@@ -397,5 +407,27 @@ def test_formal_application_executes_director_qa_choice_with_thinking(dataset, c
         used = {route for route, backend in backends.items() if backend.calls}
         assert used and used <= set(config.runtime_endpoint_pools.get(chosen, (chosen,)))
         assert app.solver.runtime_routes == config.worker_runtime_routes
+        if dataset == "hotpotqa":
+            run = result.solver_result.director_run
+            assert run.observation_audits
+            assert run.turns[1].prompt_token_ids[:len(
+                run.turns[0].prompt_token_ids + run.turns[0].completion_token_ids
+            )] == run.turns[0].prompt_token_ids + run.turns[0].completion_token_ids
+            manifest = result.to_dict()["model_roles"]["execution_semantics"]
+            assert manifest["qa_implementation_contract"]["public_task_version"] == "qa_public_task_v1"
+            assert manifest["qa_implementation_contract"]["director_observation"]["by_dataset"] == {
+                "hotpotqa": "compact_factual_v1"
+            }
+            from selfplay_graph_flowsteer.selfplay_runtime import adaptive_result_to_rollout
+
+            rollout = adaptive_result_to_rollout(result, director.tokenizer,
+                                                rollout_index=0, seed=0, max_tokens=35000)
+            assert len(rollout.trajectory.policy_calls) == len(run.turns)
+            for call, turn in zip(rollout.trajectory.policy_calls, run.turns, strict=True):
+                assert call.token_ids == turn.prompt_token_ids + turn.completion_token_ids
+                assert call.action_mask[:len(turn.prompt_token_ids)] == (0,) * len(turn.prompt_token_ids)
+                assert call.action_mask[len(turn.prompt_token_ids):] == (
+                    int(turn.trainable),
+                ) * len(turn.completion_token_ids)
     finally:
         app.close()

@@ -14,7 +14,7 @@ from .answer_submission import AnswerFinalizer, AnswerSubmission, qa_token_f1
 from .canvas import GraphCanvas
 from .config import CanvasConfig, canonical_dataset_name
 from .dataset_actions import DatasetActionRegistry
-from .dataset_adapters import solver_task_text
+from .dataset_adapters import public_qa_task_context, solver_task_text
 from .deadline import RolloutDeadline
 from .director import DirectorRun, GraphDirector
 from .graph import FlowSteerStructureEvaluation
@@ -347,6 +347,8 @@ class AdaptiveWorkflowSolver:
         director_prompt_variant: str = "v2.1",
         director_enable_thinking: bool | None = None,
         director_thinking_by_dataset: dict[str, bool] | None = None,
+        director_observation_schema: str = "legacy_full_v3",
+        director_observation_schema_by_dataset: dict[str, str] | None = None,
         required_nq_frozen_top_k: int = 0,
         nq_evidence_mode: str | None = None,
         nq_policy: Any | None = None,
@@ -374,6 +376,13 @@ class AdaptiveWorkflowSolver:
             canonical_dataset_name(dataset): enabled
             for dataset, enabled in (director_thinking_by_dataset or {}).items()
         }
+        from .director_observation import validate_observation_config
+        self.director_observation_schema = director_observation_schema
+        self.director_observation_schema_by_dataset = {
+            canonical_dataset_name(key): value
+            for key, value in (director_observation_schema_by_dataset or {}).items()
+        }
+        validate_observation_config(director_observation_schema, self.director_observation_schema_by_dataset)
         self.required_nq_frozen_top_k = required_nq_frozen_top_k
         self.nq_evidence_mode = nq_evidence_mode
         self.nq_policy = nq_policy
@@ -388,6 +397,10 @@ class AdaptiveWorkflowSolver:
         *,
         raw_summary: str = "",
     ) -> AnswerSubmission:
+        from .healthbench_artifact import preservation_enabled
+
+        if preservation_enabled(task.metadata):
+            return AnswerFinalizer().finalize(task, raw_answer)
         if self.answer_finalizer is None and is_aime_dataset(task.metadata.get("dataset", "")):
             return AnswerFinalizer().finalize(task, raw_answer)
         if self.answer_finalizer is None:
@@ -576,6 +589,7 @@ class AdaptiveWorkflowSolver:
         canvas = GraphCanvas(
             task=worker_task,
             worker_task=worker_task,
+            public_qa_task=public_qa_task_context(task),
             # HealthBench evaluates the next reply in a public conversation;
             # task.prompt may contain only a context-dependent follow-up.
             director_task=(
@@ -616,6 +630,7 @@ class AdaptiveWorkflowSolver:
                 question_attempt_id=run_id,
                 threshold=int(usage_policy.get("start_threshold", selected_token_budget)),
                 max_unsettled_attempts=int(usage_policy.get("max_unsettled_attempts", 2)),
+                dataset=dataset_key,
             )
             canvas.total_tokens = self.runtime.worker_usage_ledger.status()["confirmed_used"]
         canvas.prepare_text_submission = lambda active: self._prepare_text_submission(task, active)
@@ -631,6 +646,9 @@ class AdaptiveWorkflowSolver:
                 ),
                 tokenizer=self.director_tokenizer,
                 call_namespace=run_id,
+                observation_schema=self.director_observation_schema_by_dataset.get(
+                    dataset_key, self.director_observation_schema
+                ),
             ).run()
         except Exception:
             for lifecycle in (
@@ -1014,7 +1032,8 @@ class AdaptiveWorkflowSolver:
                 terminal_failure=terminal_failure if receipt is None else None,
                 reason=scoring_error or (
                     "execution_token_budget_overrun"
-                    if receipt is None and canvas.total_tokens > canvas.config.max_total_tokens
+                    if receipt is None and canvas.runtime.worker_usage_ledger is None
+                    and canvas.total_tokens > canvas.config.max_total_tokens
                     else binding_error if receipt is None else ""
                 ),
             )

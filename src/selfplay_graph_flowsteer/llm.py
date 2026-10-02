@@ -27,10 +27,15 @@ from .director_connection_guard import ACTIVE, director_guard
 from .director_timeline import TIMELINE_CONTEXT_MODES, director_context_mode
 from .model_network import model_proxy
 from .model_network import model_urlopen as urlopen
-from .qwen_compat import qwen_request_extra, response_content, response_policy_parts
+from .qwen_compat import (
+    qwen_request_extra,
+    recover_qwen_policy_parts,
+    response_content,
+    response_policy_parts,
+)
 from .student_action_protocol import PROTOCOL as STUDENT_ACTION_PROTOCOL, response_text_parts
-from .webshop_budget import request_admission, request_budget_quote
-from .worker_usage_ledger import UsageDispatchStopped, active_worker_usage
+from .webshop_context import audit_request as audit_webshop_request, is_memory_request as is_webshop_memory_request
+from .worker_usage_ledger import UsageDispatchStopped, active_worker_usage, worker_dispatch_slot
 
 _ENDPOINT_FAILOVER_ACTIVE = ContextVar("endpoint_failover_active", default=False)
 _ENDPOINT_REQUEST_END = ContextVar("endpoint_request_end", default=None)
@@ -40,6 +45,12 @@ _REQUEST_DATASET = ContextVar("request_dataset", default="")
 
 def current_request_dataset() -> str:
     return _REQUEST_DATASET.get()
+
+
+def _webshop_native_tools(actions: Sequence[ActionSpec]) -> bool:
+    return current_request_dataset() == "webshop" or any(
+        action.name in {"webshop_search", "webshop_click"} for action in actions
+    )
 
 
 @contextmanager
@@ -77,114 +88,24 @@ def director_recovery_budget(enabled: bool):
         _DIRECTOR_RECOVERY.reset(token)
 
 
-@dataclass
-class RequestTokenCredit:
-    limit: int
-    token_in: int = 0
-    token_out: int = 0
-    pre_reserved_closure_tokens: int | None = None
-    cap_output: bool = False
 
 
-class RequestTokenCreditExceeded(RuntimeError):
-    def __init__(
-        self, required: int, credit: RequestTokenCredit, budget: dict[str, Any] | None = None
-    ):
-        super().__init__("insufficient per-request Worker token credit")
-        self.required = required
-        self.credit = credit
-        self.budget = dict(budget or {})
-        self.request_events = list(_current_request_events())
 
 
-class WorkerUsageDispatchStopped(RequestTokenCreditExceeded):
-    """The reported-usage policy stopped a new physical Worker request."""
+class WorkerUsageDispatchStopped(RuntimeError):
+    """The actual-usage account refused another physical Worker request."""
 
-    def __init__(self, stopped: UsageDispatchStopped):
+    def __init__(self, stopped):
         self.reason = stopped.reason
-        super().__init__(0, RequestTokenCredit(0), {
-            **stopped.status, "usage_stop_reason": stopped.reason,
-            "semantics": "reported_usage_threshold_v1", "admitted": False,
-        })
+        self.budget = {**stopped.status, 'usage_stop_reason': stopped.reason, 'semantics': 'reported_usage_threshold_v1', 'admitted': False}
+        self.request_events = list(_current_request_events())
+        super().__init__(stopped.reason)
 
 
-_TOKEN_CREDIT: ContextVar[RequestTokenCredit | None] = ContextVar(
-    "worker_token_credit", default=None
-)
 
 
-@contextmanager
-def request_token_credit(
-    limit: int | None, *, pre_reserved_closure_tokens: int | None = None, cap_output: bool = False
-):
-    credit = (
-        RequestTokenCredit(
-            max(0, limit),
-            pre_reserved_closure_tokens=pre_reserved_closure_tokens,
-            cap_output=cap_output,
-        )
-        if limit is not None
-        else None
-    )
-    token = _TOKEN_CREDIT.set(credit)
-    try:
-        yield credit
-    finally:
-        _TOKEN_CREDIT.reset(token)
 
 
-def _request_credit_admission(
-    request: dict[str, Any], credit: RequestTokenCredit
-) -> dict[str, Any]:
-    """QA may shrink completion allowance, never input/history or the hard limit.
-
-    Existing WebShop credit semantics remain unchanged. Responses input is
-    projected only for accounting; the provider receives its original request.
-    """
-    key = (
-        "max_output_tokens"
-        if "input" in request
-        else "max_completion_tokens"
-        if "max_completion_tokens" in request
-        else "max_tokens"
-    )
-    configured = int(request.get(key, 2048))
-    accounting = (
-        {
-            "messages": request["input"],
-            "max_tokens": configured,
-            **({"tools": request["tools"]} if "tools" in request else {}),
-        }
-        if "input" in request
-        else request
-    )
-    quote = request_budget_quote(accounting)
-    if credit.cap_output:
-        available = credit.limit - credit.token_in - credit.token_out - quote["input_bound"]
-        admitted_cap = min(configured, max(0, available))
-        if admitted_cap < min(configured, 128) or admitted_cap <= 0:
-            budget = request_admission(
-                quote, credit=credit.limit, spent=credit.token_in + credit.token_out
-            )
-            budget.update(admitted=False, stop_reason="insufficient_input_and_output_credit")
-            raise RequestTokenCreditExceeded(quote["required_tokens"], credit, budget)
-        request[key] = admitted_cap
-        quote = {
-            **quote,
-            "output_bound": admitted_cap,
-            "required_tokens": quote["input_bound"] + admitted_cap,
-            "configured_output_bound": configured,
-            "output_cap_reduced": admitted_cap < configured,
-        }
-    budget = request_admission(
-        quote,
-        credit=credit.limit,
-        spent=credit.token_in + credit.token_out,
-        pre_reserved_closure_tokens=credit.pre_reserved_closure_tokens,
-    )
-    if not budget["admitted"]:
-        raise RequestTokenCreditExceeded(budget["required_tokens"], credit, budget)
-    return budget
 
 
 @contextmanager
@@ -371,18 +292,35 @@ def _capture_request_events(target: list[dict[str, Any]], *, role: str = ""):
         _REQUEST_EVENT_TARGET.role = previous_role
 
 
+_WORKER_EXECUTION_EVENTS: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+    "worker_execution_request_events", default=None
+)
+
+
+@contextmanager
+def capture_worker_request_events(target: list[dict[str, Any]]):
+    """Retain physical sends across nested backend scopes and interrupted executions."""
+    token = _WORKER_EXECUTION_EVENTS.set(target)
+    try:
+        yield
+    finally:
+        _WORKER_EXECUTION_EVENTS.reset(token)
+
+
 def _emit_request_event(event: dict[str, Any]) -> None:
     import uuid
 
     target = getattr(_REQUEST_EVENT_TARGET, "value", None)
+    record = {
+        **event,
+        "event_id": uuid.uuid4().hex,
+        "request_role": getattr(_REQUEST_EVENT_TARGET, "role", ""),
+    }
     if isinstance(target, list):
-        target.append(
-            {
-                **event,
-                "event_id": uuid.uuid4().hex,
-                "request_role": getattr(_REQUEST_EVENT_TARGET, "role", ""),
-            }
-        )
+        target.append(record)
+    execution_events = _WORKER_EXECUTION_EVENTS.get()
+    if execution_events is not None and event.get("worker_usage_attempt_id"):
+        execution_events.append(record)
 
 
 def _attach_provider_usage(events, usage, *, surface, model, effort=None):
@@ -806,19 +744,19 @@ def _openai_completion_attempt(
     attempt: int,
     request_budget_cap_s: float,
 ):
-    credit = _TOKEN_CREDIT.get()
-    budget = None
-    if credit is not None:
-        # Conservative UTF-8 byte estimate plus chat/schema framing. This checks
-        # EACH provider request, including a length repair, before it is billed.
-        budget = _request_credit_admission(request, credit)
+    context_audit = (audit_webshop_request(request, route=config.route_name)
+                     if is_webshop_memory_request(request, dataset=_REQUEST_DATASET.get(),
+                         role=getattr(_REQUEST_EVENT_TARGET, "role", "")) else None)
+    if active_worker_usage() is not None:
+        # Reject local serialization failures before persisting a dispatch intent.
+        json.dumps(request, ensure_ascii=False, allow_nan=False)
     # Separate OpenAI requests are intentionally kept separate.  Concurrent
     # callers become a continuous server-side batch in vLLM/SGLang while this
     # endpoint-level gate protects fixed remote runtimes from overload.
-    with _request_slot(
+    with worker_dispatch_slot(deadline, timeout_s=request_budget_cap_s) as remaining_request_s, _request_slot(
         config,
         deadline,
-        request_budget_cap_s=request_budget_cap_s,
+        request_budget_cap_s=remaining_request_s,
         attempt=attempt,
     ) as slot:
         usage_scope = active_worker_usage()
@@ -872,14 +810,13 @@ def _openai_completion_attempt(
                 total_elapsed_s=time.monotonic() - slot.request_started_monotonic,
                 request_budget_s=slot.request_budget_s,
             )
-            _emit_request_event(
-                _request_failure_event(
-                    classification,
-                    priority=slot.priority,
-                    attempt=attempt,
-                    will_retry=False,
-                )
+            failure_event = _request_failure_event(
+                classification, priority=slot.priority, attempt=attempt, will_retry=False,
             )
+            if ledger_attempt is not None:
+                failure_event.update(worker_usage_attempt_id=ledger_attempt,
+                                     worker_usage_status=ledger.status())
+            _emit_request_event(failure_event)
             if classification.backend_failure:
                 raise BackendRequestError(
                     classification, request_events=_current_request_events()
@@ -891,6 +828,19 @@ def _openai_completion_attempt(
             attempt=attempt,
         )
         # Persist known usage immediately, even if a later length-repair request fails.
+        if (usage_scope is not None and current_request_dataset() == "nq_open"
+                and getattr(config, "request_profile", None) == "qwen"):
+            event["request_protocol"] = "qwen_nq_native_v1"
+            event["native_tools"] = [tool["function"]["name"] for tool in request.get("tools", [])]
+            event["tool_response_ids"] = [message["tool_call_id"] for message in request["messages"]
+                                          if message.get("role") == "tool"]
+            event["assistant_tool_call_ids"] = [call["id"] for message in request["messages"]
+                                                for call in message.get("tool_calls", [])]
+            event["native_response_call_ids"] = [
+                str(call.id) for choice in response.choices
+                for call in (getattr(choice.message, "tool_calls", None) or [])
+            ]
+            event["requested_max_tokens"] = request["max_tokens"]
         response_usage = getattr(response, "usage", None)
         event["completion_usage"] = {
             "token_in": (getattr(response_usage, "prompt_tokens", None) if ledger_attempt
@@ -898,14 +848,11 @@ def _openai_completion_attempt(
             "token_out": (getattr(response_usage, "completion_tokens", None) if ledger_attempt
                           else int(getattr(response_usage, "completion_tokens", 0) or 0)),
         }
+        if context_audit is not None:
+            event["webshop_context_audit"] = context_audit
         if ledger_attempt is not None:
             event["worker_usage_attempt_id"] = ledger_attempt
             event["worker_usage_status"] = ledger.status()
-        if budget is not None:
-            event["request_token_budget"] = budget
-        if credit is not None:
-            credit.token_in += event["completion_usage"]["token_in"]
-            credit.token_out += event["completion_usage"]["token_out"]
         _emit_request_event(event)
         return response
 
@@ -959,12 +906,15 @@ def _openai_response_attempt(
     attempt: int,
     request_budget_cap_s: float,
 ):
-    credit = _TOKEN_CREDIT.get()
-    budget = _request_credit_admission(request, credit) if credit is not None else None
-    with _request_slot(
+    context_audit = (audit_webshop_request(request, route=config.route_name)
+                     if is_webshop_memory_request(request, dataset=_REQUEST_DATASET.get(),
+                         role=getattr(_REQUEST_EVENT_TARGET, "role", "")) else None)
+    if active_worker_usage() is not None:
+        json.dumps(request, ensure_ascii=False, allow_nan=False)
+    with worker_dispatch_slot(deadline, timeout_s=request_budget_cap_s) as remaining_request_s, _request_slot(
         config,
         deadline,
-        request_budget_cap_s=request_budget_cap_s,
+        request_budget_cap_s=remaining_request_s,
         attempt=attempt,
     ) as slot:
         usage_scope = active_worker_usage()
@@ -1006,14 +956,13 @@ def _openai_response_attempt(
                 total_elapsed_s=time.monotonic() - slot.request_started_monotonic,
                 request_budget_s=slot.request_budget_s,
             )
-            _emit_request_event(
-                _request_failure_event(
-                    classification,
-                    priority=slot.priority,
-                    attempt=attempt,
-                    will_retry=False,
-                )
+            failure_event = _request_failure_event(
+                classification, priority=slot.priority, attempt=attempt, will_retry=False,
             )
+            if ledger_attempt is not None:
+                failure_event.update(worker_usage_attempt_id=ledger_attempt,
+                                     worker_usage_status=ledger.status())
+            _emit_request_event(failure_event)
             if classification.backend_failure:
                 raise BackendRequestError(
                     classification, request_events=_current_request_events()
@@ -1024,18 +973,16 @@ def _openai_response_attempt(
             upstream_elapsed_s=time.monotonic() - upstream_started,
             attempt=attempt,
         )
+        if context_audit is not None:
+            event["webshop_context_audit"] = context_audit
         if ledger_attempt is not None:
             event["worker_usage_attempt_id"] = ledger_attempt
             event["worker_usage_status"] = ledger.status()
-        if credit is not None:
             usage = getattr(response, "usage", None)
             event["completion_usage"] = {
-                "token_in": int(getattr(usage, "input_tokens", 0) or 0),
-                "token_out": int(getattr(usage, "output_tokens", 0) or 0),
+                "token_in": getattr(usage, "input_tokens", None),
+                "token_out": getattr(usage, "output_tokens", None),
             }
-            event["request_token_budget"] = budget
-            credit.token_in += event["completion_usage"]["token_in"]
-            credit.token_out += event["completion_usage"]["token_out"]
         _emit_request_event(event)
         return response
 
@@ -1336,12 +1283,33 @@ class OpenAICompatibleBackend:
         thinking_enabled = (
             role_config.enable_thinking if enable_thinking is None else bool(enable_thinking)
         )
-        request_messages = _openai_messages(messages)
-        if role_config.system_prompt:
+        nq_native = (
+            role == "worker" and self.config.request_profile == "qwen"
+            and current_request_dataset() == "nq_open"
+        )
+        qwen_text_actions = bool(
+            actions and self.config.request_profile == "qwen"
+            and not _webshop_native_tools(actions) and not nq_native
+        )
+        if qwen_text_actions:
+            converted = _text_action_messages(messages, actions)
+            # Qwen's chat template permits one leading system message.
+            system_parts = [str(message.get("content") or "") for message in converted
+                            if message.get("role") in {"system", "developer"}]
             request_messages = [
-                {"role": "system", "content": role_config.system_prompt},
-                *request_messages,
+                {"role": "system", "content": "\n\n".join(system_parts)},
+                *[message for message in converted if message.get("role") not in {"system", "developer"}],
             ]
+        else:
+            request_messages = _openai_messages(messages)
+        if role_config.system_prompt:
+            if qwen_text_actions:
+                request_messages[0]["content"] = role_config.system_prompt + "\n\n" + request_messages[0]["content"]
+            else:
+                request_messages = [
+                    {"role": "system", "content": role_config.system_prompt},
+                    *request_messages,
+                ]
         requested_temperature = role_config.temperature if temperature is None else temperature
         sent_temperature = (
             max(0.01, min(1.0, float(requested_temperature)))
@@ -1378,7 +1346,7 @@ class OpenAICompatibleBackend:
         ] = requested_max_tokens
         if role_config.reasoning_effort is not None:
             request["reasoning_effort"] = role_config.reasoning_effort
-        if actions:
+        if actions and not qwen_text_actions:
             tools = [_openai_tool(action) for action in actions]
             if self.config.route_name == "minimax":
                 for tool in tools:
@@ -1409,6 +1377,58 @@ class OpenAICompatibleBackend:
             request["extra_body"] = {
                 "thinking": {"type": "enabled" if thinking_enabled else "disabled"}
             }
+        nq_context = None
+        if nq_native:
+            # Measure the exact serving template, including native tool schemas.
+            # This limits model context only, never the question's usage account.
+            body = {"model": role_config.model, "messages": request_messages,
+                    "add_generation_prompt": True,
+                    "chat_template_kwargs": request["extra_body"]["chat_template_kwargs"]}
+            if request.get("tools"):
+                body["tools"] = request["tools"]
+            endpoint = self.config.base_url.rstrip("/").removesuffix("/v1") + "/tokenize"
+            counted_request = Request(endpoint, data=json.dumps(body).encode(), headers={
+                "Authorization": "Bearer " + self.config.api_key, "Content-Type": "application/json",
+            })
+            timeout = self.config.timeout_s
+            if deadline is not None:
+                timeout = min(timeout, deadline.request_budget_s("nq_context_check"))
+            with urlopen(counted_request, timeout=timeout) as counted:
+                capacity = json.load(counted)
+            count, limit = capacity["count"], capacity["max_model_len"]
+            if type(count) is not int or type(limit) is not int or count < 0 or limit <= count + 64:
+                raise ValueError("NQ Qwen request exceeds exact model context capacity")
+            request["max_tokens"] = min(requested_max_tokens, limit - count - 64)
+            nq_context = {"source": "serving_tokenizer", "input_tokens": count,
+                          "context_tokens": limit, "safety_margin": 64,
+                          "requested_output_limit": requested_max_tokens,
+                          "sent_output_limit": request["max_tokens"], "input_truncated": False}
+        healthbench_context = None
+        usage_scope = active_worker_usage()
+        if (_FINALIZATION_REQUEST.get() and usage_scope is not None
+                and usage_scope[0].dataset == "healthbench_professional"):
+            healthbench_context = {"source": "provider_enforced", "input_truncated": False}
+            if self.config.request_profile == "qwen":
+                from .healthbench_artifact import check_exact_capacity
+
+                # Count the exact native template on the serving endpoint. This
+                # is a tokenizer query, not a generation or a token estimate.
+                body = {"model": role_config.model, "messages": request_messages,
+                        "add_generation_prompt": True,
+                        "chat_template_kwargs": request["extra_body"]["chat_template_kwargs"]}
+                if request.get("tools"):
+                    body["tools"] = request["tools"]
+                endpoint = self.config.base_url.rstrip("/").removesuffix("/v1") + "/tokenize"
+                counted_request = Request(endpoint, data=json.dumps(body).encode(), headers={
+                    "Authorization": "Bearer " + self.config.api_key, "Content-Type": "application/json",
+                })
+                timeout = self.config.timeout_s
+                if self.rollout_deadline is not None:
+                    timeout = min(timeout, self.rollout_deadline.request_budget_s("healthbench_context_check"))
+                with urlopen(counted_request, timeout=timeout) as counted:
+                    healthbench_context = check_exact_capacity(
+                        json.load(counted), output_limit=requested_max_tokens, request=body,
+                    )
         dynamic_budget = None
         if (
             role == "graph-director"
@@ -1515,6 +1535,24 @@ class OpenAICompatibleBackend:
             choice.message,
             thinking_prefilled=self.config.request_profile == "qwen" and thinking_enabled,
         )
+        qwen_thinking_boundary_restored = False
+        if (
+            role == "graph-director"
+            and self.config.request_profile == "qwen"
+            and thinking_enabled
+            and not raw_action_text.strip()
+            and not _openai_action_calls(choice.message)
+        ):
+            recovered_parts = recover_qwen_policy_parts(
+                choice.message,
+                completion_token_ids=getattr(choice, "token_ids", None) or (),
+                content_logprobs=(
+                    getattr(getattr(choice, "logprobs", None), "content", None) or ()
+                ),
+            )
+            if recovered_parts is not None:
+                raw_reasoning_text, raw_action_text = recovered_parts
+                qwen_thinking_boundary_restored = True
         split_director_action_retry = False
         if (
             role == "graph-director"
@@ -1561,20 +1599,44 @@ class OpenAICompatibleBackend:
             )
             if retry_action.strip() or _openai_action_calls(retry_choice.message):
                 split_director_action_retry = True
+                qwen_thinking_boundary_restored = False
                 completion, choice = action_retry, retry_choice
                 raw_reasoning_text = raw_reasoning_text + retry_reasoning
                 raw_action_text = retry_action
-        text = response_content(
-            choice.message,
-            enable_thinking=thinking_enabled and not split_director_action_retry,
-            reasoning_fallback=self.config.request_profile != "qwen",
+        text = (
+            raw_action_text.strip()
+            if qwen_thinking_boundary_restored
+            else response_content(
+                choice.message,
+                enable_thinking=thinking_enabled and not split_director_action_retry,
+                reasoning_fallback=self.config.request_profile != "qwen",
+            )
         )
         native_calls = _openai_action_calls(choice.message)
+        usage_scope = active_worker_usage()
+        reported_healthbench = (
+            usage_scope is not None and usage_scope[0].dataset == "healthbench_professional"
+        )
+        if reported_healthbench:
+            # The HealthBench parser owns outer JSON/reasoning wrappers. Keep
+            # provider content byte-for-byte, including trailing whitespace and
+            # literal <think> tags INSIDE JSON strings; never use reasoning as
+            # a replacement answer when the content channel is empty.
+            text = str(getattr(choice.message, "content", "") or "")
+            raw_action_text = text
+            raw_reasoning_text = str(getattr(choice.message, "reasoning_content", "")
+                                     or getattr(choice.message, "reasoning", "") or "")
         if (
             choice.finish_reason == "length"
             and not native_calls
             and role not in {"graph-director", "proposer"}
             and not _FINALIZATION_REQUEST.get()
+            # HealthBench needs a complete reply. Its runtime owns format/length
+            # recovery with the route's output limit, rather than a 512-token summary.
+            and not reported_healthbench
+            # NQ native recovery belongs to Runtime; never replace a native
+            # dialogue with the generic gateway's compact text-Action retry.
+            and not nq_native
         ):
             retry_assistant_message: dict[str, Any] = {
                 "role": "assistant",
@@ -1622,7 +1684,7 @@ class OpenAICompatibleBackend:
                     **qwen_request_extra(enable_thinking=False),
                     **({"top_k": role_config.top_k} if role_config.top_k is not None else {}),
                 }
-            if actions:
+            if actions and not qwen_text_actions:
                 tools = [_openai_tool(action) for action in actions]
                 if self.config.route_name == "minimax":
                     for tool in tools:
@@ -1709,7 +1771,16 @@ class OpenAICompatibleBackend:
                 "backend_request_events": request_events,
                 "generation_attempts": generation_attempts,
                 "split_director_action_retry": split_director_action_retry,
+                "qwen_thinking_boundary_restored": qwen_thinking_boundary_restored,
+                **({"native_tool_protocol": "qwen_nq_native_v1", "nq_context_budget": nq_context}
+                   if nq_native else {}),
+                "qwen_thinking_boundary_source": (
+                    "provider_token_logprob_bytes"
+                    if qwen_thinking_boundary_restored
+                    else "provider_message"
+                ),
                 "runtime_managed_finalization": _FINALIZATION_REQUEST.get(),
+                **({"healthbench_context_capacity": healthbench_context} if healthbench_context else {}),
                 "sampling_seed": self.config.sampling_seed,
             },
             raw_reasoning_text=raw_reasoning_text,
@@ -1914,7 +1985,10 @@ class OpenAICompatibleBackend:
         deadline: RolloutDeadline | None,
         max_tokens: int | None = None,
     ) -> LLMResponse:
-        text_actions = self.config.request_profile == "responses_text"
+        text_actions = (
+            self.config.request_profile == "responses_text"
+            and not _webshop_native_tools(actions)
+        )
         request_messages = _text_action_messages(messages, actions) if text_actions else _responses_messages(messages)
         if role_config.system_prompt:
             request_messages = [
@@ -1943,14 +2017,14 @@ class OpenAICompatibleBackend:
             # Match simple-evals ResponsesSampler for reasoning graders: no
             # temperature or max_output_tokens are sent with reasoning effort.
             request["reasoning"] = {"effort": role_config.reasoning_effort}
-            if not is_judge or _TOKEN_CREDIT.get() is not None:
+            if not is_judge or False:
                 # Worker credit scopes require a bounded completion, including
                 # explicit finalization overrides; unscoped judges stay intact.
                 request["max_output_tokens"] = role_config.max_tokens
         else:
             request["temperature"] = role_config.temperature
             request["max_output_tokens"] = role_config.max_tokens
-        if (not is_judge or _TOKEN_CREDIT.get() is not None) and max_tokens is not None:
+        if (not is_judge or False) and max_tokens is not None:
             request["max_output_tokens"] = max_tokens
         request_events: list[dict[str, Any]] = []
         with _capture_request_events(request_events, role=role):
@@ -2001,6 +2075,12 @@ class OpenAICompatibleBackend:
             model=provider_model,
             effort=role_config.reasoning_effort,
         )
+        usage_scope = active_worker_usage()
+        reported_healthbench = (
+            usage_scope is not None and usage_scope[0].dataset == "healthbench_professional"
+        )
+        response_status = str(getattr(response, "status", "") or "")
+        incomplete_reason = getattr(getattr(response, "incomplete_details", None), "reason", None)
         result = LLMResponse(
             text=text,
             model=provider_model or role_config.model,
@@ -2016,7 +2096,12 @@ class OpenAICompatibleBackend:
             metadata={
                 "role": role,
                 "api_surface": "responses",
-                "status": str(getattr(response, "status", "") or ""),
+                "status": response_status,
+                # Preserve the original incomplete response for full HealthBench
+                # recovery, including responses that happen to contain valid JSON.
+                **({"finish_reason": "length"} if reported_healthbench
+                   and response_status == "incomplete"
+                   and incomplete_reason == "max_output_tokens" else {}),
                 "reasoning_effort": role_config.reasoning_effort,
                 "requested_model": role_config.model,
                 "provider_model": provider_model,
@@ -2419,10 +2504,10 @@ class GeminiNativeBackend:
                 method="POST",
             )
             try:
-                with _request_slot(
+                with worker_dispatch_slot(deadline, timeout_s=sequence_remaining_s) as remaining_request_s, _request_slot(
                     self.config,
                     deadline,
-                    request_budget_cap_s=sequence_remaining_s,
+                    request_budget_cap_s=remaining_request_s,
                     attempt=attempt + 1,
                 ) as slot:
                     usage_scope = active_worker_usage()

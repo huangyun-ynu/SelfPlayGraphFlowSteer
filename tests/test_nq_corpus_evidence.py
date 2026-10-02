@@ -9,10 +9,11 @@ import pytest
 from selfplay_graph_flowsteer.agent_tools import SearchServiceTool
 from selfplay_graph_flowsteer.contracts import AgentNode
 from selfplay_graph_flowsteer.graph import MultiAgentGraph
-from selfplay_graph_flowsteer.llm import MockBackend
+from selfplay_graph_flowsteer.llm import LLMResponse, MockBackend
 from selfplay_graph_flowsteer.nq_evidence import NQEvidenceContext
 from selfplay_graph_flowsteer.public_evidence import public_document
 from selfplay_graph_flowsteer.runtime import ModelAgentExecutor, MultiAgentRuntime, RoutedModelAgentExecutor
+from selfplay_graph_flowsteer.student_action_protocol import PROTOCOL
 
 
 def context(**overrides):
@@ -76,7 +77,7 @@ def test_disconnected_agent_can_repeat_query_to_obtain_own_evidence():
     assert [item["status"] for item in ledger.audit()["calls"]] == ["ok", "ok"]
 
 
-def test_duplicate_query_spends_budget_when_prior_evidence_is_visible():
+def test_duplicate_query_reuses_authorized_evidence_without_new_search_credit():
     ledger = context()
     add_evidence(ledger, agent="a")
     validated = ledger.validate("a", supported(), require_submission=False)
@@ -85,12 +86,14 @@ def test_duplicate_query_spends_budget_when_prior_evidence_is_visible():
     call = ledger.reserve_search("b", "  ＣＵＲＩＥ  ")
     feedback = ledger.skip_duplicate_search(call)
     assert feedback is not None
-    assert feedback["status"] == "duplicate_query"
+    assert feedback["status"] == "cached_query"
     assert feedback["duplicate_of_call_id"] == "nq_search_0001"
-    assert feedback["remaining_search_calls"] == 2
+    assert feedback["remaining_search_calls"] == 3
+    assert feedback["result"][0][0]["document"]["evidence_id"] == "ev_0001"
     assert "reformulate" in feedback["guidance"]
-    assert ledger.audit()["search_calls_used"] == 2
-    assert ledger.audit()["calls"][1]["status"] == "duplicate_query"
+    assert ledger.audit()["search_calls_used"] == 1
+    assert ledger.audit()["search_attempts"] == 2
+    assert ledger.audit()["calls"][1]["status"] == "cached_query"
     assert ledger.validate("b", supported())["valid"]
 
 
@@ -113,13 +116,15 @@ def test_partial_upstream_visibility_does_not_suppress_repeat_search():
     assert ledger.skip_duplicate_search(second) is None
 
 
-def test_empty_successful_query_can_be_retried():
+def test_empty_successful_query_is_cached_and_requires_reformulation():
     ledger = context()
     ledger.begin_agent("a", [])
     first = ledger.reserve_search("a", "Curie")
     ledger.record_search(first, {"result": [[]]})
     second = ledger.reserve_search("a", "curie")
-    assert ledger.skip_duplicate_search(second) is None
+    cached = ledger.skip_duplicate_search(second)
+    assert cached["result"] == [[]]
+    assert cached["remaining_search_calls"] == 3
 
 
 def test_failed_query_can_be_retried_without_duplicate_guard():
@@ -290,15 +295,33 @@ def test_executor_attaches_evidence_ids_and_accepts_supported_answer():
     assert "ev_0001" in backend.calls[1]["messages"][-1]["content"]
 
 
+def test_student_executor_accepts_nq_fields_without_spending_protocol_repairs():
+    search = json.dumps({"action_calls": [{"name": "search", "arguments": {"query": "Curie"}}]})
+    responses = [LLMResponse(text=text, model="student-fixture", token_in=7, token_out=3,
+                             metadata={"text_action_protocol": PROTOCOL})
+                 for text in [search, supported()]]
+    backend, tool, ledger = MockBackend(responses), SearchTool(), context()
+    executor = ModelAgentExecutor(backend, tools={"search": tool}, nq_evidence_context=ledger)
+
+    artifact = run(executor)
+
+    assert artifact.runtime_tool_evidence["nq_corpus"]["valid"]
+    assert artifact.runtime_tool_evidence["nq_corpus"]["status"] == "supported"
+    assert len(backend.calls) == 2
+    assert ledger.audit()["submission_repairs_used"] == 0
+    assert executor.budget_ledger.text_protocol_repairs == {}
+    assert len(tool.calls) == 1
+
+
 def test_executor_returns_reformulation_guidance_without_second_search_call():
     repeat = json.dumps({"action_call": {"name": "search", "arguments": {"query": " CURIE "}}})
     backend, tool, ledger = MockBackend([SEARCH, repeat, supported()]), SearchTool(), context()
     artifact = run(ModelAgentExecutor(backend, tools={"search": tool}, nq_evidence_context=ledger))
     assert artifact.runtime_tool_evidence["nq_corpus"]["valid"]
     assert len(tool.calls) == 1
-    assert ledger.audit()["search_calls_used"] == 2
+    assert ledger.audit()["search_calls_used"] == 1
     observation = backend.calls[2]["messages"][-1]["content"]
-    assert "duplicate_query" in observation
+    assert "cached_query" in observation
     assert "reformulate" in observation
 
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .graph import GraphValidationError, MultiAgentGraph
+from .qa_public_task import public_qa_task_from_record
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ def load_fixed_jsonl(path: str | Path) -> list[FixedDatasetExample]:
             ).strip()
             if not task:
                 raise ValueError(f"missing task at JSONL line {line_index}")
+            public_qa_task = public_qa_task_from_record(payload)
             examples.append(
                 FixedDatasetExample(
                     example_id=str(payload.get("id", line_index)),
@@ -58,6 +60,7 @@ def load_fixed_jsonl(path: str | Path) -> list[FixedDatasetExample]:
                             )
                             if key in payload
                         },
+                        **({"public_qa_task": public_qa_task.to_dict()} if public_qa_task else {}),
                     },
                 )
             )

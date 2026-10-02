@@ -21,6 +21,23 @@ from .llm import (WorkerUsageDispatchStopped, _logical_request_budget_s,
 from .config import canonical_dataset_name
 
 
+def _merge_request_events(*groups):
+    """Preserve physical attempts across failover without counting an event twice."""
+    result = []
+    seen = set()
+    for group in groups:
+        for event in group:
+            if not isinstance(event, dict):
+                continue
+            identity = event.get("event_id")
+            if identity and identity in seen:
+                continue
+            if identity:
+                seen.add(identity)
+            result.append(dict(event))
+    return result
+
+
 class EndpointPoolBackend:
     def __init__(
         self,
@@ -119,6 +136,7 @@ class EndpointPoolBackend:
         request_id = uuid.uuid4().hex
         attempts = []
         failures = []
+        failed_request_events = []
         last_error = None
         for pool_round in range(self.pool_retry_attempts + 1):
             round_members = (
@@ -178,11 +196,16 @@ class EndpointPoolBackend:
                         attempt_end, queue_wait_cap_s=self.member_queue_wait_s
                     ):
                         response = backend.generate(replay, **kwargs)
-                except WorkerUsageDispatchStopped:
+                except WorkerUsageDispatchStopped as exc:
                     # A question-wide stop is not a member outage and must not
                     # rotate through the pool or open a route circuit.
+                    exc.request_events = _merge_request_events(
+                        failed_request_events, getattr(exc, "request_events", ())
+                    )
                     raise
                 except Exception as exc:
+                    current_events = _merge_request_events(getattr(exc, "request_events", ()))
+                    failed_request_events = _merge_request_events(failed_request_events, current_events)
                     failure = classify_backend_failure(exc, stage="endpoint_pool", route=key)
                     if failure.backend_failure and hasattr(deadline, "record_failed_request"):
                         deadline.record_failed_request(attempt_started, time.monotonic())
@@ -191,6 +214,8 @@ class EndpointPoolBackend:
                         elapsed_s=time.monotonic() - attempt_started,
                         failure=failure.to_dict(),
                     )
+                    if current_events:
+                        event["backend_request_events"] = current_events
                     attempts.append(event)
                     failures.append(failure)
                     self._audit(event)
@@ -201,6 +226,8 @@ class EndpointPoolBackend:
                     if not failure.backend_failure or not (
                         failure.retryable or failure.disable_route
                     ):
+                        if failed_request_events:
+                            exc.request_events = list(failed_request_events)
                         raise
                     continue
                 event.update(status="success", elapsed_s=time.monotonic() - attempt_started)
@@ -215,6 +242,10 @@ class EndpointPoolBackend:
                     endpoint_pool_failovers=len(attempts) - 1,
                     endpoint_pool_retries=pool_round,
                 )
+                if failed_request_events:
+                    response.metadata["backend_request_events"] = _merge_request_events(
+                        failed_request_events, response.metadata.get("backend_request_events", ())
+                    )
                 return response
             if pool_round >= self.pool_retry_attempts or last_error is None:
                 break
@@ -258,7 +289,9 @@ class EndpointPoolBackend:
             "endpoint_pool_members_total": len(self.members),
             "request_budget_exhausted": budget_exhausted,
         }
-        error = BackendRequestError(classification, request_events=[terminal_event])
+        error = BackendRequestError(
+            classification, request_events=[*failed_request_events, terminal_event]
+        )
         error.endpoint_pool_attempts = list(attempts)
         raise error from last_error
 

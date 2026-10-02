@@ -8,6 +8,7 @@ import re
 import threading
 import time
 import uuid
+from .webshop_purchase_review import REVIEW_SCHEMA
 from contextlib import nullcontext
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -213,6 +214,7 @@ class _PendingPurchase:
     session_id: str
     target_id: str
     staged_at: float
+    state_binding: str = ""
 
 
 @dataclass
@@ -235,6 +237,8 @@ class WebShopSessionLifecycle:
     env_feedback_enabled: bool = False
     compatibility_profile: str = "current"
     freeze_unknown_mutations: bool = False
+    purchase_review_enabled: bool = False
+    candidate_comparison_enabled: bool = False
     _task: TaskSpec | None = None
     _owner_agent: str | None = None
     _active_agent: str | None = None
@@ -280,8 +284,15 @@ class WebShopSessionLifecycle:
                 status = health()
                 if status.get("status") != "ok":
                     raise RuntimeError("WebShop service health check failed")
-            quality = task.metadata.get("webshop_quality", {})
+            quality = task.metadata.get("webshop_scoring", task.metadata.get("webshop_quality", {}))
             service_version = status.get("scorer_version", "official")
+            inventory = task.metadata.get("webshop_inventory")
+            if inventory is not None or status.get("inventory") is not None:
+                if (not isinstance(inventory, dict) or service_version != "official"
+                        or {k: inventory.get(k) for k in ("version", "inventory_sha256")}
+                        != status.get("inventory")
+                        or inventory.get("prompt_sha256") != hashlib.sha256(task.prompt.encode()).hexdigest()):
+                    raise RuntimeError("WebShop task and service use different inventory bindings")
             if quality or service_version != "official":
                 if not isinstance(quality, dict) or quality.get("version") != service_version:
                     raise RuntimeError("WebShop task and service use different scoring versions")
@@ -383,6 +394,13 @@ class WebShopSessionLifecycle:
                 return None
             return self._transaction_journals.get(str(agent_id))
 
+    def session_binding(self, agent_id: str) -> str | None:
+        with self._lock:
+            if self._owner_agent != str(agent_id):
+                return None
+            pending = self._pending_sessions.get(str(agent_id))
+            return self._active_session or (pending.session_id if pending else None)
+
     def begin_execution(self, *, agent_id: str, seed: int, revision: bool) -> dict[str, Any]:
         with self._lock:
             if self._task is None:
@@ -397,7 +415,16 @@ class WebShopSessionLifecycle:
                     f"WebShop episode is owned by {owner}; {agent_id} is stateless"
                 )
             pending = self._pending_sessions.get(agent_id)
-            if pending is not None:
+            if pending is not None and self.purchase_review_enabled:
+                self._pending_sessions.pop(agent_id)
+                self._active_session = pending.session_id
+                self._active_agent = agent_id
+                self._active_pending_target = None
+                self._results[agent_id].update(commit_pending=False, commit_ready=False,
+                    purchase_review_pending=False, purchase_review_resumed=True,
+                    purchase_executed=False, termination_reason="active")
+                self._results[agent_id].pop("purchase_review", None)
+            elif pending is not None:
                 raise RuntimeError(
                     "WebShop purchase is already staged; Canvas must select the owner "
                     "as output instead of revising the episode"
@@ -426,8 +453,9 @@ class WebShopSessionLifecycle:
             session_id = str(payload.get("session_id", "")).strip()
             if not session_id:
                 raise RuntimeError("WebShop session creation returned no session_id")
-            quality = self._task.metadata.get("webshop_quality", {})
-            if quality and payload.get("instruction_sha256") != quality.get("prompt_sha256"):
+            quality = self._task.metadata.get("webshop_scoring", self._task.metadata.get("webshop_quality", {}))
+            instruction_binding = self._task.metadata.get("webshop_inventory") or quality
+            if instruction_binding and payload.get("instruction_sha256") != instruction_binding.get("prompt_sha256"):
                 self.client.close_session(session_id)
                 raise RuntimeError("WebShop task and environment instructions differ")
             self._active_agent = agent_id
@@ -458,6 +486,7 @@ class WebShopSessionLifecycle:
                     session_id=self._active_session,
                     target_id=self._active_pending_target,
                     staged_at=time.monotonic(),
+                    state_binding=_purchase_state_binding(self._results[agent_id]),
                 )
                 previous = self._pending_sessions.pop(agent_id, None)
                 if previous is not None:
@@ -540,7 +569,7 @@ class WebShopSessionLifecycle:
                     )
                     self._results[agent_id] = rejected
                     return dict(rejected)
-            if is_purchase and agent_id != self._committer_agent:
+            if is_purchase and (agent_id != self._committer_agent or self.purchase_review_enabled):
                 if not self.stage_purchases:
                     raise PermissionError(
                         "purchase requires the Canvas-selected output Agent; report the "
@@ -567,6 +596,8 @@ class WebShopSessionLifecycle:
                         "termination_reason": "purchase_staged",
                     }
                 )
+                if self.purchase_review_enabled:
+                    staged["purchase_review_pending"] = True
                 if transport_repair_kind:
                     staged["target_id_transport_repair"] = {
                         "applied": True,
@@ -672,11 +703,14 @@ class WebShopSessionLifecycle:
             pending = self._pending_sessions.get(agent_id)
             if pending is None:
                 raise ValueError(f"WebShop Agent {agent_id} has no staged purchase")
+            if self.purchase_review_enabled and pending.state_binding != _purchase_state_binding(self._results[agent_id]):
+                raise ValueError("staged purchase public state changed; review a fresh proposal")
             self._committer_agent = agent_id
             commit_id = hashlib.sha256(
                 (
                     f"{self._environment_fingerprint}\0{agent_id}\0"
                     f"{pending.session_id}\0{pending.target_id}"
+                    + (f"\0{pending.state_binding}" if self.purchase_review_enabled else "")
                 ).encode()
             ).hexdigest()
             commit = getattr(self.client, "commit", None)
@@ -701,6 +735,10 @@ class WebShopSessionLifecycle:
             result["commit_pending"] = False
             result["commit_ready"] = False
             result["purchase_executed"] = True
+            if self.purchase_review_enabled:
+                result["purchase_review_pending"] = False
+                result["purchase_review"] = copy.deepcopy(self._results[agent_id].get("purchase_review", {}))
+                result["purchase_review"].update(phase="committed", director_decision="accepted_for_commit")
             result["purchase_committed"] = bool(result.get("purchased", False))
             result["terminal"] = bool(result.get("purchased", False) or result.get("done", False))
             if bool(result.get("purchased", False)):
@@ -723,6 +761,19 @@ class WebShopSessionLifecycle:
             if not agent_id:
                 return _empty_result("missing_output_agent")
             return dict(self._results.get(agent_id, _empty_result("agent_never_executed")))
+
+    def set_purchase_review_packet(self, agent_id: str, packet: dict[str, Any]) -> None:
+        with self._lock:
+            if not self._results.get(agent_id, {}).get("purchase_review_pending"):
+                raise ValueError("purchase review requires a staged proposal")
+            self._results[agent_id]["purchase_review"] = copy.deepcopy(packet)
+
+    def validate_purchase_proposal(self, agent_id: str) -> None:
+        with self._lock:
+            self._cleanup_expired_pending()
+            pending = self._pending_sessions.get(agent_id)
+            if pending is None or pending.state_binding != _purchase_state_binding(self._results[agent_id]):
+                raise ValueError("staged purchase public state changed or expired")
 
     def _committed_result(self) -> dict[str, Any]:
         committed_by = self._purchase_committed_by
@@ -1108,6 +1159,11 @@ def _canonical_public_option_value(value: object) -> str:
     return re.sub(r"\s+", " ", normalized)
 
 
+def _purchase_state_binding(state: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps({key: state.get(key) for key in (
+        "session_id", "product", "selected_options", "state_version", "valid_subactions")}, sort_keys=True).encode()).hexdigest()
+
+
 def _validate_purchase_evidence(
     value: object,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
@@ -1146,6 +1202,7 @@ def _validate_purchase_evidence(
     return {
         "verified_requirements": normalized_verified,
         "unresolved_constraints": normalized_unresolved,
+        **({"review": copy.deepcopy(value["review"])} if isinstance(value.get("review"), dict) else {}),
     }, None
 
 
@@ -1234,6 +1291,8 @@ class WebShopClickTool:
                             "items": {"type": "string", "minLength": 1, "maxLength": 240},
                             "maxItems": 12,
                         },
+                        **({"review": REVIEW_SCHEMA}
+                           if self.lifecycle.purchase_review_enabled else {}),
                     },
                     "required": ["verified_requirements", "unresolved_constraints"],
                     "additionalProperties": False,

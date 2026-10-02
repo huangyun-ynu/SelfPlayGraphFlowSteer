@@ -15,9 +15,11 @@ def _digest(value) -> str:
 
 def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict | None = None) -> dict:
     from . import runtime
+    from .aime_formal import VERSION as AIME_VERSION, engine_contract
     from .actions import DIRECTOR_ACTION_PROTOCOL_VERSION
     from .director import director_prompt_components
     from .output_contract import OUTPUT_CONTRACT_VERSION, WORKER_OUTPUT_ROLE_VERSION
+    from .hotpot_answer_contract import HOTPOT_ANSWER_CONTRACT_VERSION
     from .pats_semantics import SEMANTIC_REVISION, contract_hash
     from .submission_contract import SUBMISSION_CONTRACT_VERSION
 
@@ -27,6 +29,30 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
     variants_by_dataset = {
         canonical_dataset_name(dataset): "v3" if protocol == "unified_task_result_v1" else prompt_variant
         for dataset, protocol in scoped_protocols.items()
+    }
+    canvas_config = (admission_config or {}).get("canvas", {})
+    dataset_thresholds = {
+        canonical_dataset_name(dataset): threshold
+        for dataset, threshold in canvas_config.get("max_total_tokens_by_dataset", {}).items()
+    }
+    usage_contracts = {
+        canonical_dataset_name(dataset): {
+            "budget_policy": policy["policy"],
+            "budget_accounting_scope": policy.get("accounting_scope", "question_attempt"),
+            "budget_threshold": policy.get("start_threshold", dataset_thresholds.get(
+                canonical_dataset_name(dataset), canvas_config.get("max_total_tokens"))),
+            "counted_roles": ["worker"],
+            "counted_usage": ["input_tokens", "output_tokens"],
+            "max_inflight_requests": policy.get("max_inflight_requests", 1),
+            "max_unsettled_attempts": policy.get("max_unsettled_attempts", 2),
+            "unknown_usage_policy": policy.get("unknown_usage_policy", "continue_bounded"),
+            "predicted_admission": False,
+            "per_execution_allocations": False,
+            "closure_reserves": False,
+            "legal_final_request_overshoot": True,
+            "actual_timeouts_changed": False,
+        }
+        for dataset, policy in canvas_config.get("worker_token_budget_by_dataset", {}).items()
     }
     scoped_prompt_hashes = {}
     for dataset, variant in variants_by_dataset.items():
@@ -57,6 +83,8 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
                 instruction=instruction,
                 react_trace=[],
                 previous_attempt_issue="invalid_json",
+                preserve_healthbench_response=(dataset == "healthbench_professional"
+                    and usage_contracts.get(dataset, {}).get("budget_policy") == "reported_usage_threshold_v1"),
                 visible_context={
                     "public_task_context": "PUBLIC TASK",
                     "assigned_task": "DELEGATION",
@@ -85,9 +113,19 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "actions",
             "output_contract",
             "hotpot_answer_contract",
+            "qa_public_task",
+            "qa_result_contract",
+            "qa_schema_repair",
+            "qa_worker_feedback",
+            "director_observation",
+            "director_timeline",
+            "dataset_adapters",
+            "learning",
             "runtime",
             "llm",
             "artifact_protocol",
+            "healthbench_artifact",
+            "contracts",
             "endpoint_pool",
             "director",
             "canvas",
@@ -109,6 +147,7 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "alfworld",
             "swebench",
             "worker_usage_ledger",
+            "budget_policy",
             "student_action_protocol",
             "swe_public_tests",
             "swe_public_recipes",
@@ -128,6 +167,7 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             "nq_evidence",
             "nq_corpus_tasks",
             "aime_submission",
+            "aime_formal",
             "outcome_metrics",
             "rollouts",
             "training",
@@ -145,6 +185,21 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
         "output_contract_version": OUTPUT_CONTRACT_VERSION,
         "submission_contract_version": "unified_submission_v1" if prompt_variant == "v3" else SUBMISSION_CONTRACT_VERSION,
         "submission_admission_config": json.loads(json.dumps(admission_config or {})),
+        "worker_usage_accounting_contract": usage_contracts,
+        "healthbench_artifact_repair_version": (
+            "healthbench_artifact_repair_v1"
+            if usage_contracts.get("healthbench_professional", {}).get("budget_policy")
+            == "reported_usage_threshold_v1" else None
+        ),
+        "qa_implementation_contract": {
+            "version": "qa-b1-formal-20261002",
+            "public_task_version": runtime.QA_PUBLIC_TASK_VERSION,
+            "result_contract_version": runtime.QA_RESULT_CONTRACT_VERSION,
+            "hotpot_answer_contract_version": HOTPOT_ANSWER_CONTRACT_VERSION,
+            "director_observation": json.loads(json.dumps(
+                (admission_config or {}).get("director_observation", {})
+            )),
+        },
         "worker_output_role_version": WORKER_OUTPUT_ROLE_VERSION,
         "director_prompt_variant": prompt_variant,
         "director_prompt_variant_by_dataset": variants_by_dataset,
@@ -162,6 +217,10 @@ def execution_semantics(prompt_variant: str = "v2.1", *, admission_config: dict 
             for key, hint in sorted(hints.items())
         },
         "worker_and_recovery_sha256": rendered,
+        "aime_implementation_contract": (
+            engine_contract()
+            if (admission_config or {}).get("aime_implementation") == AIME_VERSION else None
+        ),
         "contract_source_sha256": source_hashes,
         "director_seed_sha256": hashlib.sha256(
             (root / "director_seed_v2.json").read_bytes()

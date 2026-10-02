@@ -54,4 +54,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
 [tool.setuptools.package-data]
-selfplay_graph_flowsteer = ["director_seed_v2.json"]
+formal_aime = ["director_seed_v2.json"]
+selfplay_graph_flowsteer = ["director_seed_v2.json", "_vendor/webshop_v2/*.json",
+                          "_vendor/webshop_v2/*.md", "_vendor/webshop_v2/*.txt"]

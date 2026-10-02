@@ -124,7 +124,8 @@ def receipt_error(receipt: Any, *, run: Any, events: Any, run_id: str, dataset: 
                 and receipt.worker_tokens_used > receipt.worker_token_limit)):
         return "submission_snapshot_invalid"
     if receipt.worker_budget_policy == "reported_usage_threshold_v1":
-        if (receipt.dataset not in {"swe_bench", "alfworld"} or not receipt.worker_usage_ledger_digest
+        from .budget_policy import REPORTED_USAGE_DATASETS
+        if (receipt.dataset not in REPORTED_USAGE_DATASETS or not receipt.worker_usage_ledger_digest
                 or not receipt.worker_dispatch_valid or receipt.worker_tokens_used < 0):
             return "submission_worker_usage_invalid"
     elif receipt.worker_budget_policy != "strict_limit_v1":

@@ -25,7 +25,8 @@ from .webshop_navigation import annotate_navigation
 def implementation_sha256() -> str:
     """Identify the service implementation, independently of its scorer/data."""
     digest = hashlib.sha256()
-    for name in ("webshop_sidecar.py", "webshop_navigation.py", "webshop_worker_bridge.py"):
+    for name in ("webshop_sidecar.py", "webshop_navigation.py", "webshop_worker_bridge.py",
+                 "webshop_author_v2.py"):
         digest.update(name.encode())
         digest.update(Path(__file__).with_name(name).read_bytes())
     return digest.hexdigest()
@@ -59,6 +60,7 @@ class OfficialWorker:
     timeout_s: float
     java_home: Path | None = None
     observation_mode: str = "text"
+    scorer: str = "auto"
     _process: subprocess.Popen[bytes] = field(init=False, repr=False)
     _response_fd: int = field(init=False, repr=False)
     _request_id: int = field(default=0, init=False)
@@ -80,6 +82,7 @@ class OfficialWorker:
             str(Path(__file__).with_name("webshop_worker_bridge.py")),
             "--worker-script", str(self.worker_script),
             "--observation-mode", self.observation_mode,
+            "--scorer", self.scorer,
         ]
         self._process = subprocess.Popen(  # noqa: S603
             [*command, "--response-fd", str(write_fd)],
@@ -537,6 +540,10 @@ class SidecarState:
 
     def __post_init__(self) -> None:
         self.initializer_gate = threading.Semaphore(self.args.max_initializers)
+        self.inventory = None
+        if getattr(self.args, "inventory_manifest", None) is not None:
+            from .webshop_synthetic import validate_deployment
+            self.inventory = validate_deployment(self.args)
         self.implementation_sha256 = implementation_sha256()
         self.products = ProductStore(self.args.store)
         goals_bytes = self.args.goals.read_bytes()
@@ -550,7 +557,14 @@ class SidecarState:
                 if contract.get("version") != VERSION:
                     raise ValueError("unsupported WebShop quality goal inventory")
                 self.scorer_version = VERSION
-        self.products.public_purchase_price=self.scorer_version != 'official'
+        self.products.public_purchase_price = self.scorer_version != "official"
+        if getattr(self.args, "scorer", "auto") == "official_v2":
+            if self.scorer_version != "official":
+                raise ValueError("official V2 requires an original goal inventory")
+            from .webshop_author_v2 import SCORER_SHA256, VERSION, verify_sources
+            verify_sources()
+            self.scorer_version = VERSION
+            self.scorer_sha256 = SCORER_SHA256
         digest = hashlib.sha256()
         digest.update(self.scorer_sha256.encode())
         for path in (self.args.goals, self.args.store, self.args.index):
@@ -581,6 +595,7 @@ class SidecarState:
                 timeout_s=self.args.worker_timeout,
                 java_home=self.args.java_home,
                 observation_mode=self.args.observation_mode,
+                scorer=getattr(self.args, "scorer", "auto"),
             )
             session_id = uuid.uuid4().hex
             session = WebShopSession(session_id, worker, self.products, goal_id)
@@ -645,6 +660,7 @@ class WebShopRequestHandler(BaseHTTPRequestHandler):
                 "goals_sha256": state.goals_sha256,
                 "scorer_version": state.scorer_version,
                 "scorer_sha256": state.scorer_sha256,
+                **({"inventory": state.inventory} if state.inventory is not None else {}),
                 "index_path": str(state.args.index.resolve()),
                 "idempotency_protocol": _IDEMPOTENCY_PROTOCOL,
                 "raw_action_protocol": "webshop-raw-actions-v1",
@@ -766,6 +782,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--worker-timeout", type=float, default=180.0)
     parser.add_argument("--observation-mode", choices=("text", "text_rich"), default="text")
+    parser.add_argument("--scorer", choices=("auto", "official_v2"), default="auto")
+    parser.add_argument("--inventory-manifest", type=Path,
+                        help="Verify and advertise a pinned synthetic small-catalogue release")
     parser.add_argument("--max-sessions", type=int, default=48)
     parser.add_argument("--max-initializers", type=int, default=4)
     parser.add_argument("--idempotency-cache-size", type=int, default=8192)

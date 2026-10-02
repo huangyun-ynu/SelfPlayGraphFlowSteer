@@ -1,7 +1,13 @@
 # Formal Training 配置与凭据说明
 
-> 2026-09-29 最新协议：七个数据集全部使用 Director V3 / `unified_task_result_v1`，
-> 通过 `finish(target)` 提交，不再使用 `set_output`。训练输出切换到
+> 2026-10-02 QA 更新：Hotpot 工作流已晋升冻结 B1，正式 HotpotQA 启用 `compact_factual_v1`，保持 32,768 窗口、240,000 实际 Worker usage 和正式动态路由。默认训练输出为 `state/formal-training-qa-b1-20261002/experiment`；原题绑定、反事实重放与训练 token 已验收。其他正式升级保留。见 [B1 来源、外部改动与回归报告](QA_B1_FORMAL_PROMOTION_20261002.zh-CN.md)。
+
+> 2026-10-02 预算更新：现行 IID 与 OOD 包默认使用整题共享实际 usage 账本，旧预测准入、分账和 token 预留已删除。WebShop 保留实际用量硬上限，其旧预测代码也已删除。当前正式 AIME 版本为 `aime-no-code-comments-shared-usage-default-20261002`。见 [源码存档与验证记录](PREDICTION_REMOVAL_DEFAULT_SHARED_USAGE_20261002.zh-CN.md)。
+
+> 2026-10-02：AIME 正式实现完整切换为 `aime-no-code-comments-full-20261002`，包含此次真实回归的求解、工具、候选保全、收尾与恢复全部实现。当时正式入口默认输出为 `state/formal-training-aime-full-20261002/experiment`；原工作区已完整存档。模型路由与 PATS/SkillBank 保留，AIME 使用题目级实际用量账本。见 [完整替换记录](AIME_FULL_FORMAL_PROMOTION_20261002.zh-CN.md)。
+
+> 2026-09-29 协议更新：七个数据集全部使用 Director V3 / `unified_task_result_v1`，
+> 通过 `finish(target)` 提交，不再使用 `set_output`。当时训练输出切换到
 > `state/formal-training-all-v3-20260929/experiment`。数据、路由及 token 上限保留，
 > 下列旧评测成绩不代表此次 V3 重测。见 [统一 V3 记录](ALL_DATASETS_V3_FORMAL_PROMOTION_20260929.zh-CN.md)。
 
@@ -48,8 +54,8 @@ DeepSeek、MiniMax、R2D2/E5/FAISS 检索、WebShop sidecar、ALFWorld，以及�
 正式训练的**轨迹并发为 24**：入口 `--workers 24` 与课程配置 `rollout_workers=24` 一致。
 DeepSeek 路由的请求并发上限也为 24；它与轨迹并发分别控制模型请求和 rollout 调度。
 
-单条题目轨迹的 Worker 累计 token 上限：AIME、NQ、HotpotQA、HealthBench Professional
-均为 **240,000**；ALFWorld、WebShop、SWE-bench 均为 **350,000**。额度累计所有
+单条题目轨迹的 Worker 实际 usage 发送阈值：AIME、NQ、HotpotQA、HealthBench Professional
+均为 **240,000**；ALFWorld、SWE-bench 均为 **350,000**。最后一个已获准请求允许跨过阈值，保留完整结果；达到阈值后停止新请求。WebShop 保留 **350,000** 实际累计用量硬上限。额度累计所有
 Worker 的输入与输出，包括修订和重跑，不包含 Director tokens，也不是单次请求的输出上限。
 该设置同步至当前训练/评测配置及源码默认值；已完成实验的配置快照保留原值。
 

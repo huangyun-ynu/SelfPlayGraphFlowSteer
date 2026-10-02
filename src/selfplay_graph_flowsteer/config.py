@@ -112,29 +112,11 @@ class CanvasConfig:
     relay_max_chars: int = 4000
     feedback_max_chars: int = 6000
     artifact_summary_max_chars: int = 320
+    math_summary_head_chars: int = 256
+    math_summary_tail_chars: int = 1024
+    math_answer_feedback_chars: int = 2000
     structural_repair_enabled: bool = True
-    graph_growth_token_reserve: int = 8192
-    remaining_time_admission_enabled: bool = True
-    worker_latency_quantile: float = 0.95
-    worker_latency_window: int = 64
-    worker_latency_min_samples: int = 3
-    worker_latency_cold_start_s: float = 30.0
-    finalization_time_reserve_s: float = 20.0
-    finalization_time_reserve_by_dataset: dict[str, float] = field(
-        default_factory=lambda: {
-            "healthbench_professional": 180.0,
-            "swe_bench": 120.0,
-        }
-    )
-    # Includes WebShop serialized-request estimates and closure token reservations.
-    # False retains post-execution actual-usage checks and environment action limits.
-    remaining_token_admission_enabled: bool = True
     native_webshop_output_materialization: bool = False
-    worker_token_quantile: float = 0.95
-    worker_token_window: int = 64
-    worker_token_min_samples: int = 3
-    worker_token_cold_start: int = 4096
-    finalization_token_reserve: int = 2048
     repair_recent_action_limit: int = 5
     semantic_no_progress_limit: int = 2
     output_selection_budget: int = 1
@@ -143,53 +125,65 @@ class CanvasConfig:
     bidirectional_revision_confidence_threshold: float = 0.8
 
     def __post_init__(self) -> None:
-        if self.submission_protocol not in {"legacy", "unified_task_result_v1"}:
-            raise ValueError("unsupported submission_protocol")
-        protocols = {canonical_dataset_name(key): value
-                     for key, value in self.submission_protocol_by_dataset.items()}
+        self.max_total_tokens_by_dataset = {
+            **DEFAULT_DATASET_MAX_TOTAL_TOKENS,
+            **{canonical_dataset_name(key): value for key, value in self.max_total_tokens_by_dataset.items()},
+        }
+        if self.submission_protocol not in {'legacy', 'unified_task_result_v1'}:
+            raise ValueError('unsupported submission_protocol')
+        protocols = {canonical_dataset_name(key): value for key, value in self.submission_protocol_by_dataset.items()}
         for dataset, protocol in protocols.items():
             if dataset not in DEFAULT_DATASET_MAX_TOTAL_TOKENS:
-                raise ValueError("dataset submission protocol override requires a supported dataset")
-            if protocol not in {"legacy", "unified_task_result_v1"}:
-                raise ValueError("unsupported dataset submission_protocol")
-        if self.alfworld_terminal_candidate_policy not in {"off", "finish_only_v1"}:
-            raise ValueError("unknown ALFWorld terminal candidate policy")
+                raise ValueError('dataset submission protocol override requires a supported dataset')
+            if protocol not in {'legacy', 'unified_task_result_v1'}:
+                raise ValueError('unsupported dataset submission_protocol')
+        if self.alfworld_terminal_candidate_policy not in {'off', 'finish_only_v1'}:
+            raise ValueError('unknown ALFWorld terminal candidate policy')
         if self.max_recovery_executions < 0:
-            raise ValueError("max_recovery_executions must be non-negative")
-        if self.action_budget_policy not in {"phase_split_v1", "shared_total_v1"}:
-            raise ValueError("unknown canvas.action_budget_policy")
-        if self.webshop_action_budget_policy not in {None, "phase_split_v1", "shared_total_v1"}:
-            raise ValueError("unknown canvas.webshop_action_budget_policy")
+            raise ValueError('max_recovery_executions must be non-negative')
+        if self.action_budget_policy not in {'phase_split_v1', 'shared_total_v1'}:
+            raise ValueError('unknown canvas.action_budget_policy')
+        if self.webshop_action_budget_policy not in {None, 'phase_split_v1', 'shared_total_v1'}:
+            raise ValueError('unknown canvas.webshop_action_budget_policy')
+        from .budget_policy import REPORTED_USAGE_DATASETS
+        normalized_policies = {}
         for dataset, policy in self.worker_token_budget_by_dataset.items():
-            if canonical_dataset_name(dataset) not in {"swe_bench", "alfworld"} or not isinstance(policy, dict):
-                raise ValueError("reported Worker usage policy is supported for SWE and ALFWorld only")
-            if (canonical_dataset_name(dataset) == "alfworld"
-                    and protocols.get("alfworld", self.submission_protocol) != "unified_task_result_v1"):
-                raise ValueError("ALFWorld reported usage requires unified_task_result_v1")
-            if policy.get("policy") != "reported_usage_threshold_v1":
-                raise ValueError("unknown SWE Worker usage policy")
-            if policy.get("accounting_scope", "question_attempt") != "question_attempt":
-                raise ValueError("SWE reported usage requires a question-attempt account")
-            if type(policy.get("max_unsettled_attempts", 2)) is not int or policy.get("max_unsettled_attempts", 2) <= 0:
-                raise ValueError("max_unsettled_attempts must be positive")
-            if type(policy.get("max_inflight_requests", 1)) is not int or policy.get("max_inflight_requests", 1) != 1:
-                raise ValueError("SWE reported usage requires one local in-flight request per question")
-            if policy.get("unknown_usage_policy", "continue_bounded") != "continue_bounded":
-                raise ValueError("unsupported unknown usage policy")
-            if "start_threshold" in policy and (
-                type(policy["start_threshold"]) is not int or policy["start_threshold"] <= 0
-            ):
-                raise ValueError("start_threshold must be a positive integer")
+            name = canonical_dataset_name(dataset)
+            if name not in REPORTED_USAGE_DATASETS or not isinstance(policy, dict):
+                raise ValueError('unsupported dataset for reported Worker usage policy')
+            if name in normalized_policies:
+                raise ValueError('duplicate dataset Worker usage policy')
+            normalized_policies[name] = dict(policy)
+            if policy.get('policy') != 'reported_usage_threshold_v1':
+                raise ValueError('unknown Worker usage policy')
+            if policy.get('accounting_scope', 'question_attempt') != 'question_attempt':
+                raise ValueError('reported usage requires a question-attempt account')
+            if type(policy.get('max_unsettled_attempts', 2)) is not int or policy.get('max_unsettled_attempts', 2) <= 0:
+                raise ValueError('max_unsettled_attempts must be positive')
+            if type(policy.get('max_inflight_requests', 1)) is not int or policy.get('max_inflight_requests', 1) != 1:
+                raise ValueError('reported usage requires one local in-flight request per question')
+            if policy.get('unknown_usage_policy', 'continue_bounded') != 'continue_bounded':
+                raise ValueError('unsupported unknown usage policy')
+            if 'start_threshold' in policy and (type(policy['start_threshold']) is not int or policy['start_threshold'] <= 0):
+                raise ValueError('start_threshold must be a positive integer')
+            if policy.get('start_threshold', self.token_budget_for_dataset(name)[1]) != self.token_budget_for_dataset(name)[1]:
+                raise ValueError('start_threshold must match max_total_tokens_by_dataset')
+        from .budget_policy import default_usage_policy
+        for name in REPORTED_USAGE_DATASETS:
+            normalized_policies[name] = {
+                **default_usage_policy(self.token_budget_for_dataset(name)[1]),
+                **normalized_policies.get(name, {}),
+            }
+        self.worker_token_budget_by_dataset = normalized_policies
         limits = [*self.max_director_edits_by_dataset.values()]
         if self.max_director_edits is not None:
             limits.append(self.max_director_edits)
-        if any(type(value) is not int or value < 0 for value in limits):
-            raise ValueError("Director edit limits must be non-negative integers")
-        if self.director_budget_policy not in {"rounds_v1", "edits_v1"}:
-            raise ValueError("unknown Director budget policy")
-        if self.director_budget_policy == "edits_v1" and (
-                self.submission_protocol != "unified_task_result_v1" or self.max_director_edits is None):
-            raise ValueError("edits_v1 requires unified submission and a finite default edit limit")
+        if any((type(value) is not int or value < 0 for value in limits)):
+            raise ValueError('Director edit limits must be non-negative integers')
+        if self.director_budget_policy not in {'rounds_v1', 'edits_v1'}:
+            raise ValueError('unknown Director budget policy')
+        if self.director_budget_policy == 'edits_v1' and (self.submission_protocol != 'unified_task_result_v1' or self.max_director_edits is None):
+            raise ValueError('edits_v1 requires unified submission and a finite default edit limit')
 
     def for_dataset(self, dataset: object) -> CanvasConfig:
         overrides = {canonical_dataset_name(key): value

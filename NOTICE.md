@@ -1,5 +1,19 @@
 # Implementation provenance
 
+MBPP+ OOD public execution adapts FlowSteer `src/code_execution.py`, commit
+`1c9f2abf55cb9b8ea2ca2e3359cdb91acb9964e9`. The exact upstream file hash,
+local diff and compatibility changes are recorded under
+`src/mbppplus_ood/_vendor/`; no upstream license file was found in this snapshot.
+The OOD graph, budgets and submission protocol use a frozen snapshot of this
+project's SWE framework, recorded in `ood/mbppplus/variant.manifest.json`.
+Final private-test scoring calls EvalPlus 0.3.1 under its existing installation.
+
+WebShop author V2 reward and its normalizer are vendored unchanged from Princeton's
+`princeton-nlp/WebShop` v2 commit `efc76f6474edd7f888b1b170f4f8ec5c7ab3e4da`.
+Their academic/research license is retained at
+`src/selfplay_graph_flowsteer/_vendor/webshop_v2/LICENSE.md`; per-file hashes and
+upstream paths are in its adjacent `provenance.json`.
+
 This project builds on the following designs and implementation patterns:
 
 - **FlowSteer:** progressive canvas editing, one Director action per turn, factual graph feedback, action-masked token probability training and task-group reward normalization.

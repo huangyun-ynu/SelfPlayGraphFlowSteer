@@ -1,6 +1,6 @@
 # SWE baseline: swe-65of128-20260928 (65/128 = 50.78125%); dataset-scoped v3.
 # ALFWorld baseline: V3 102/128 plus 20260929 ALF/SWE state fixes; see promotion record.
-# Hotpot baseline: hotpot-8672-20260928 (111/128 strict EM); evidence-first v1, v2.2.
+# Formal Hotpot workflow: frozen QA B1 + compact_factual_v1; see QA_B1_FORMAL_PROMOTION_20261002.zh-CN.md.
 # Canonical deployment configuration for the seven-dataset formal PATS run.
 # Credentials are loaded from the repository .env and are never stored here.
 [models.proposer]
@@ -57,11 +57,10 @@ gpt_judge = ["gpt_judge", "gpt_judge_eco"]
 [canvas]
 # V3 WebShop sessions share the existing 16-call task budget.
 webshop_action_budget_policy = "shared_total_v1"
-submission_journal_dir = "state/formal-training-all-v3-20260929/submissions"
+submission_journal_dir = "state/formal-training-qa-b1-20261002/submissions"
 alfworld_terminal_candidate_policy = "finish_only_v1"
-# Predictive admission protection is disabled; hard token and wall-clock limits remain.
-remaining_time_admission_enabled = false
-remaining_token_admission_enabled = false
+# Predictive admission is disabled; NQ, HotpotQA and HealthBench use reported Worker usage.
+# Actual request, tool and rollout timeouts remain in force.
 max_agents = 4
 max_rounds = 24
 relay_max_chars = 1000
@@ -75,6 +74,14 @@ alfworld = 350000
 healthbench_professional = 240000
 swe_bench = 350000
 
+[canvas.worker_token_budget_by_dataset.aime]
+policy = "reported_usage_threshold_v1"
+start_threshold = 240000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
 [canvas.worker_token_budget_by_dataset.swe_bench]
 policy = "reported_usage_threshold_v1"
 start_threshold = 350000
@@ -86,6 +93,30 @@ max_unsettled_attempts = 2
 [canvas.worker_token_budget_by_dataset.alfworld]
 policy = "reported_usage_threshold_v1"
 start_threshold = 350000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
+[canvas.worker_token_budget_by_dataset.nq_open]
+policy = "reported_usage_threshold_v1"
+start_threshold = 240000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
+[canvas.worker_token_budget_by_dataset.hotpotqa]
+policy = "reported_usage_threshold_v1"
+start_threshold = 240000
+accounting_scope = "question_attempt"
+max_inflight_requests = 1
+unknown_usage_policy = "continue_bounded"
+max_unsettled_attempts = 2
+
+[canvas.worker_token_budget_by_dataset.healthbench_professional]
+policy = "reported_usage_threshold_v1"
+start_threshold = 240000
 accounting_scope = "question_attempt"
 max_inflight_requests = 1
 unknown_usage_policy = "continue_bounded"
@@ -130,6 +161,7 @@ enabled = true
 
 # Pure-local Python execution support for AIME Workers.
 [aime_actions]
+implementation = "aime-no-code-comments-shared-usage-default-20261002"
 enabled = true
 timeout_s = 5.0
 max_output_chars = 8000
@@ -163,9 +195,15 @@ allow_web_fallback = false
 
 [director]
 prompt_variant = "v3"
+observation_schema = "legacy_full_v3"
+
+[director.observation_schema_by_dataset]
+hotpotqa = "compact_factual_v1"
 
 # The formal launcher owns the pinned official WebShop sidecar on port 18020.
 [webshop]
+purchase_review_enabled = true
+candidate_comparison_enabled = true
 # Formal WebShop: evaluated engineering fixes d662f39; original official scoring.
 purchase_budget_policy = "completion_reserve_v2"
 scheduling_policy = "bounded_research_v1"

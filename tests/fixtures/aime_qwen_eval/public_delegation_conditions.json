@@ -1,0 +1,124 @@
+{
+  "source": "Historical accepted public conditions only, no gold/reference fields",
+  "cases": [
+    {
+      "task_id": "aime-2026/2026/7",
+      "public_task": "Find the number of functions $\\pi$ mapping the set $A =\\{1,2,3,4,5,6\\}$ onto $A$ such that for every $a \\in A,$\n\\[\n\\pi(\\pi(\\pi(\\pi(\\pi(\\pi(a)))))) = a.\n\\]",
+      "fields": {
+        "objective": "Find the number of functions pi mapping A={1,2,3,4,5,6} onto A such that pi^6(a)=a for all a in A"
+      }
+    },
+    {
+      "task_id": "math-hard/test/precalculus/0128",
+      "public_task": "There are real numbers $a$ and $b$ such that for every positive number $x$, we have the identity\n\\[\n  \\tan^{-1} \\left( \\frac{1}{x} - \\frac{x}{8} \\right) + \\tan^{-1}(ax) + \\tan^{-1}(bx) \n    = \\frac{\\pi}{2} \\, .\n\\](Throughout this equation, $\\tan^{-1}$ means the inverse tangent function, sometimes written $\\arctan$.)  What is the value of $a^2 + b^2$?",
+      "fields": {
+        "objective": "Solve for the value of a^2 + b^2 given the identity tan^{-1}(1/x - x/8) + tan^{-1}(ax) + tan^{-1}(bx) = pi/2 for all positive x"
+      }
+    },
+    {
+      "task_id": "math-hard/test/precalculus/0087",
+      "public_task": "Let\n\\[\\mathbf{a} = \\begin{pmatrix} 5 \\\\ -3 \\\\ -4 \\end{pmatrix} \\quad \\text{and} \\quad \\mathbf{b} = \\begin{pmatrix} -11 \\\\ 1 \\\\ 28 \\end{pmatrix}.\\]There exist vectors $\\mathbf{p}$ and $\\mathbf{d}$ such that the line containing $\\mathbf{a}$ and $\\mathbf{b}$ can be expressed in the form\n\\[\\mathbf{v} = \\mathbf{p} + \\mathbf{d} t.\\]Furthermore, for a certain choice of $\\mathbf{d}$, it is the case that for all points $\\mathbf{v}$ lying on the same side of $\\mathbf{a}$ that $\\mathbf{b}$ lies on, the distance between $\\mathbf{v}$ and $\\mathbf{a}$ is $t$.\n Find $\\mathbf{d}$.",
+      "fields": {
+        "objective": "Find the direction vector d for the line passing through points a=(5, -3, -4) and b=(-11, 1, 28) such that the parameter t represents the distance from a"
+      }
+    },
+    {
+      "task_id": "math-hard/test/geometry/0020",
+      "public_task": "In the diagram below, we have $\\sin \\angle RPQ = \\frac{7}{25}$.  What is $\\cos \\angle RPS$?\n\n[asy]\n\npair R,P,Q,SS;\n\nSS = (-2,0);\n\nP = (0,0);\n\nQ = (2,0);\n\nR = rotate(aSin(7/25))*(1.5,0);\n\ndot(\"$S$\",SS,S);\n\ndot(\"$Q$\",Q,S);\n\ndot(\"$R$\",R,N);\n\ndot(\"$P$\",P,S);\n\ndraw(Q--SS);\n\ndraw(P--R);\n\n[/asy]",
+      "fields": {
+        "scope": "Analyze the geometric configuration where points S, P, Q are collinear in that order, P is the origin, and R is a point such that sin angle RPQ = 7/25. Use the diagram to identify angle RPS as the supplement of angle RPQ."
+      }
+    },
+    {
+      "task_id": "math-hard/test/algebra/0047",
+      "public_task": "Billy shoots an arrow from 10 feet above the ground. The height of this arrow can be expressed by the equation $h=10-23t-10t^2$, where $t$ is time in seconds since the arrow was shot. If the center of a target is raised 5 feet off the ground, in how many seconds must the arrow reach the target in order for Billy to hit the bulls eye?",
+      "fields": {
+        "objective": "Solve for t when h=5 in the equation h=10-23t-10t^2"
+      }
+    },
+    {
+      "task_id": "math-hard/test/number_theory/0117",
+      "public_task": "How many positive  cubes  divide $3!\\cdot 5!\\cdot 7!\\,$?",
+      "fields": {
+        "objective": "Determine the number of positive perfect cubes that divide the integer N = 3! * 5! * 7!"
+      }
+    },
+    {
+      "task_id": "math-hard/test/algebra/0071",
+      "public_task": "The red parabola shown is the graph of the equation $x = ay^2 + by + c$.\n Find $a+b+c$.\n\n[asy]\nsize(150);\nreal ticklen=3;\nreal tickspace=2;\n\nreal ticklength=0.1cm;\nreal axisarrowsize=0.14cm;\npen axispen=black+1.3bp;\nreal vectorarrowsize=0.2cm;\nreal tickdown=-0.5;\nreal tickdownlength=-0.15inch;\nreal tickdownbase=0.3;\nreal wholetickdown=tickdown;\nvoid rr_cartesian_axes(real xleft, real xright, real ybottom, real ytop, real xstep=1, real ystep=1, bool\n\nuseticks=false, bool complexplane=false, bool usegrid=true) {\n\nimport graph;\n\nreal i;\n\nif(complexplane) {\n\nlabel(\"$\\textnormal{Re}$\",(xright,0),SE);\n\nlabel(\"$\\textnormal{Im}$\",(0,ytop),NW);\n\n} else {\n\nlabel(\"$x$\",(xright+0.4,-0.5));\n\nlabel(\"$y$\",(-0.5,ytop+0.2));\n\n}\n\nylimits(ybottom,ytop);\n\nxlimits( xleft, xright);\n\nreal[] TicksArrx,TicksArry;\n\nfor(i=xleft+xstep; i<xright; i+=xstep) {\n\nif(abs(i) >0.1) {\n\nTicksArrx.push(i);\n\n}\n\n}\n\nfor(i=ybottom+ystep; i<ytop; i+=ystep) {\n\nif(abs(i) >0.1) {\n\nTicksArry.push(i);\n\n}\n\n}\n\nif(usegrid) {\n\nxaxis(BottomTop(extend=false), Ticks(\"%\", TicksArrx ,pTick=gray\n\n(0.22),extend=true),p=invisible);//,above=true);\n\nyaxis(LeftRight(extend=false),Ticks(\"%\", TicksArry ,pTick=gray(0.22),extend=true),\n\np=invisible);//,Arrows);\n\n}\n\nif(useticks) {\n\nxequals(0, ymin=ybottom, ymax=ytop, p=axispen, Ticks(\"%\",TicksArry ,\n\npTick=black+0.8bp,Size=ticklength), above=true, Arrows(size=axisarrowsize));\n\nyequals(0, xmin=xleft, xmax=xright, p=axispen, Ticks(\"%\",TicksArrx ,\n\npTick=black+0.8bp,Size=ticklength), above=true, Arrows(size=axisarrowsize));\n\n} else {\n\nxequals(0, ymin=ybottom, ymax=ytop, p=axispen, above=true, Arrows(size=axisarrowsize));\n\nyequals(0, xmin=xleft, xmax=xright, p=axispen, above=true, Arrows(size=axisarrowsize));\n\n}\n};\nreal lowerx, upperx, lowery, uppery;\nreal f(real x) {return (x-1)*(x-1)-3;}\nlowery = -2;\nuppery = 4;\nrr_cartesian_axes(-5,f(lowery),lowery,uppery);\ndraw(reflect((0,0),(1,1))*(graph(f,lowery,uppery,operator ..)), red);\n[/asy]",
+      "fields": {
+        "objective": "Determine the value of a+b+c for the parabola equation x = ay^2 + by + c using the provided graph"
+      }
+    },
+    {
+      "task_id": "math-hard/test/geometry/0026",
+      "public_task": "In the diagram shown here (which is not drawn to scale), suppose that $\\triangle ABC \\sim \\triangle PAQ$ and $\\triangle ABQ \\sim \\triangle QCP$.  If $m\\angle BAC = 70^\\circ$, then compute $m\\angle PQC$. [asy]\nsize(150); defaultpen(linewidth(0.8));\npair B = (0,0), C = (6,0), A = (2,4), Q = (1,0), P = (A + C)/2;\ndraw(A--B--C--A--Q--P);\nlabel(\"$B$\",B,S); label(\"$A$\",A,N); label(\"$C$\",C,S); label(\"$P$\",P,E); label(\"$Q$\",Q,S);\n[/asy]",
+      "fields": {
+        "objective": "Solve the geometry problem: Given triangle ABC similar to triangle PAQ and triangle ABQ similar to triangle QCP, with angle BAC = 70 degrees, compute angle PQC."
+      }
+    },
+    {
+      "task_id": "math-hard/test/precalculus/0002",
+      "public_task": "Let line $L$ be the intersection of the planes $x + y + z - 6 = 0$ and $2x + 3y + 4z + 5 = 0.$  Find the equation of the plane containing line $L$ and the point $(1,1,1).$  Enter your answer in the form\n\\[Ax + By + Cz + D = 0,\\]where $A,$ $B,$ $C,$ $D$ are integers such that $A > 0$ and $\\gcd(|A|,|B|,|C|,|D|) = 1.$",
+      "fields": {
+        "expected_output": "Step-by-step derivation leading to the final plane equation Ax + By + Cz + D = 0"
+      }
+    },
+    {
+      "task_id": "math-hard/test/geometry/0017",
+      "public_task": "In acute triangle $ABC$, $\\angle A = 68^\\circ$.  Let $O$ be the circumcenter of triangle $ABC$.  Find $\\angle OBC$, in degrees.\n\n[asy]\nunitsize(1 cm);\n\npair A, B, C, O;\n\nA = (1,2);\nB = (0,0);\nC = (3,0);\nO = circumcenter(A,B,C);\n\ndraw(A--B--C--cycle);\ndraw(circumcircle(A,B,C));\ndraw(B--O);\n\nlabel(\"$A$\", A, N);\nlabel(\"$B$\", B, SW);\nlabel(\"$C$\", C, SE);\ndot(\"$O$\", O, NE);\n[/asy]",
+      "fields": {
+        "objective": "Analyze the geometric configuration of acute triangle ABC with circumcenter O and angle A = 68 degrees."
+      }
+    },
+    {
+      "task_id": "math-hard/test/intermediate_algebra/0232",
+      "public_task": "Find the number of quadratic equations of the form $x^2 + ax + b = 0,$ such that whenever $c$ is a root of the equation, $c^2 - 2$ is also a root of the equation.",
+      "fields": {
+        "objective": "Find the number of quadratic equations of the form x^2 + ax + b = 0 such that whenever c is a root, c^2 - 2 is also a root."
+      }
+    },
+    {
+      "task_id": "math-hard/test/precalculus/0000",
+      "public_task": "Line segment $\\overline{AB}$ is extended past $A$ to $P$ such that $AP:PB = 1:4.$  Then\n\\[\\overrightarrow{P} = t \\overrightarrow{A} + u \\overrightarrow{B}\\]for some constants $t$ and $u.$  Enter the ordered pair $(t,u).$\n\n[asy]\nunitsize(1 cm);\n\npair A, B, P;\n\nA = (0,0);\nB = (5,1);\nP = interp(A,B,-1/3);\n\ndraw(B--P);\n\ndot(\"$A$\", A, S);\ndot(\"$B$\", B, S);\ndot(\"$P$\", P, S);\n[/asy]",
+      "fields": {
+        "scope": "Given line segment AB extended past A to P such that AP:PB = 1:4, find constants t and u where vector P = t*A + u*B."
+      }
+    },
+    {
+      "task_id": "math-hard/test/intermediate_algebra/0087",
+      "public_task": "If\n\\[f(n + 1) = (-1)^{n + 1} n - 2f(n)\\]for $n \\ge 1,$ and $f(1) = f(1986),$ compute\n\\[f(1) + f(2) + f(3) + \\dots + f(1985).\\]",
+      "fields": {
+        "objective": "Study the recurrence f(n+1) = (-1)^(n+1)*n - 2f(n) with f(1)=f(1986) to find the sum of f(k) from k=1 to 1985"
+      }
+    },
+    {
+      "task_id": "math-hard/test/algebra/0012",
+      "public_task": "If $f(x) = x^3 - 6x^2 + 3x - 4$, $g(x) = x^3 + 5x^2 + 9x - 2$, then find the constant term of $f(g(x))$.",
+      "fields": {
+        "objective": "Find the constant term of the composite function f(g(x)) given f(x) = x^3 - 6x^2 + 3x - 4 and g(x) = x^3 + 5x^2 + 9x - 2"
+      }
+    },
+    {
+      "task_id": "math-hard/test/prealgebra/0149",
+      "public_task": "The trisectors of angles $B$ and $C$ of scalene triangle $ABC$ meet at points $P$ and $Q$ as shown. Angle $A$ measures 39 degrees and angle $QBP$ measures 14 degrees.\nWhat is the measure of angle $BPC$? [asy]\nimport olympiad; import geometry; size(150); defaultpen(linewidth(0.8));\ndraw((0,0)--(3,0)--(4,5)--(0,0)--(2,1.5)--(3,0)--(1.7,0.5)--(0,0));\nlabel(\"$P$\", (1.7,0.5), S); label(\"$Q$\", (2,1.5), N); label(\"$B$\", (0,0),W); label(\"$A$\", (4,5), N); label(\"$C$\", (3,0), E);\n[/asy]",
+      "fields": {
+        "scope": "Given triangle ABC with angle A = 39 degrees. Angle bisectors of B and C meet at P. Angle trisectors of B and C meet at Q. Angle QBP = 14 degrees. Determine angle BPC using geometric properties."
+      }
+    },
+    {
+      "task_id": "math-hard/test/intermediate_algebra/0189",
+      "public_task": "Find the number of ordered triples $(x,y,z)$ of real numbers such that\n\\begin{align*}\nx + 2y + 4z &= 12, \\\\\nxy + 2xz + 4yz &= 22, \\\\\nxyz &= 6.\n\\end{align*}",
+      "fields": {
+        "objective": "Find the number of ordered triples (x,y,z) of real numbers satisfying the system: x + 2y + 4z = 12, xy + 2xz + 4yz = 22, xyz = 6"
+      }
+    },
+    {
+      "task_id": "math-hard/test/intermediate_algebra/0181",
+      "public_task": "Find all real numbers $x$ such that \\[\nx^2 + \\left\\lfloor \\frac x2 \\right\\rfloor + \\left\\lfloor \\frac x3\n\\right\\rfloor = 10.\n\\]Enter all the solutions, separated by commas.",
+      "fields": {
+        "objective": "Find all real numbers x satisfying the equation x^2 + floor(x/2) + floor(x/3) = 10"
+      }
+    }
+  ]
+}

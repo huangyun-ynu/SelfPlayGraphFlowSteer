@@ -152,10 +152,10 @@ def test_dataset_specific_canvas_token_budget_is_selected_per_task(tmp_path) -> 
     assert config.canvas.max_total_tokens == 32768
 
 
-def test_dataset_token_budgets_validate_against_canvas_reserves(tmp_path) -> None:
+def test_dataset_token_budgets_validate_against_shared_usage_threshold(tmp_path) -> None:
     config = load_adaptive_config(write_config(tmp_path))
 
-    with pytest.raises(ValueError, match="every configured max_total_tokens budget"):
+    with pytest.raises(ValueError, match="start_threshold must match"):
         replace(
             config,
             canvas=replace(
@@ -708,11 +708,12 @@ frozen = true
         load_adaptive_config(config_path)
 
 
-def test_gpt_6_astra_remote_runtime_allows_twenty_concurrent_requests() -> None:
+@pytest.mark.parametrize("model", ["gpt-6-astra", "lab-gpt-5.5-2"])
+def test_twenty_capacity_remote_runtime_enforces_limit(model) -> None:
     runtime = FixedRuntimeConfig(
         base_url="https://example.test/v1",
         api_key="test-key",
-        served_model="gpt-6-astra",
+        served_model=model,
         model_path=None,
         request_profile="generic",
         network_path="direct",

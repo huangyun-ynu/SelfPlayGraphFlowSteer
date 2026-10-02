@@ -27,7 +27,8 @@ def summarize_worker_protocol(*, answer: str, raw_response: str, diagnostics: li
         elif last.get("accepted") is True:
             status = (
                 "recovered"
-                if any(item.get("accepted") is False for item in records[:-1])
+                if last.get("local_normalization") is True
+                or any(item.get("accepted") is False for item in records[:-1])
                 else "valid"
             )
         elif not records and raw_response and check_artifact(raw_response)[0] is not None:
@@ -90,6 +91,11 @@ def check_artifact(text: str) -> tuple[dict | None, dict]:
                 excerpt=candidate[max(0, exc.pos - 120) : exc.pos + 120],
             )
         return None, issue
+    return check_artifact_payload(payload)
+
+
+def check_artifact_payload(payload: object, *, normalize_tool_summary: bool = True) -> tuple[dict | None, dict]:
+    """Validate decoded fields without rewriting text inside JSON strings."""
     if not isinstance(payload, dict):
         return None, {"reason": "missing_final_json"}
     if "answer" not in payload:
@@ -111,10 +117,10 @@ def check_artifact(text: str) -> tuple[dict | None, dict]:
     # representation before validation rather than forcing a second remote
     # generation request during finalization.
     tool_summary = payload.get("tool_summary")
-    if isinstance(tool_summary, str):
+    if normalize_tool_summary and isinstance(tool_summary, str):
         payload = dict(payload)
         payload["tool_summary"] = [tool_summary]
-    elif isinstance(tool_summary, dict):
+    elif normalize_tool_summary and isinstance(tool_summary, dict):
         # Some models serialize the no-tool state as metadata rather than the
         # documented string array.  Preserve a real action summary when one
         # exists; otherwise the canonical representation is an empty list.

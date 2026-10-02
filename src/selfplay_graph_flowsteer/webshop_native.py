@@ -60,6 +60,8 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
                 env_feedback_enabled=self.env_feedback_enabled,
                 compatibility_profile=self.compatibility_profile,
                 freeze_unknown_mutations=self.freeze_unknown_mutations,
+                purchase_review_enabled=self.purchase_review_enabled,
+                candidate_comparison_enabled=self.candidate_comparison_enabled,
                 stage_purchases=True,
                 pending_ttl_s=self.pending_ttl_s,
                 max_pending_sessions=self.max_pending_sessions,
@@ -80,6 +82,9 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
                 commit_pending=False, commit_ready=False, purchase_executed=False,
                 termination_reason="active", environment_completed=False,
             )
+            if self.purchase_review_enabled:
+                child._results[agent_id].update(purchase_review_pending=False, purchase_review_resumed=True)
+                child._results[agent_id].pop("purchase_review", None)
         state = child.begin_execution(agent_id=agent_id, seed=seed, revision=revision)
         if self.require_native_actions and not isinstance(state.get("raw_available_actions"), list):
             child.end_execution()
@@ -166,6 +171,12 @@ class NativeWebShopLifecycle(WebShopSessionLifecycle):
         child = self._episodes.pop(agent_id, None)
         if child:
             child.close_all()
+
+    def set_purchase_review_packet(self, agent_id: str, packet: dict) -> None:
+        self._episodes[agent_id].set_purchase_review_packet(agent_id, packet)
+
+    def validate_purchase_proposal(self, agent_id: str) -> None:
+        self._episodes[agent_id].validate_purchase_proposal(agent_id)
 
     def session_binding(self, agent_id: str) -> str | None:
         """Read-only real resource identity; never copies another node's session."""

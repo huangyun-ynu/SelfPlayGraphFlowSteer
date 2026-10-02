@@ -1,0 +1,1804 @@
+{
+  "task": "i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars",
+  "initial": {
+    "instruction_sha256": "c69f666b9f5a22f7b87ade1c306735c427967188ac6e0d3e896fb48ebc2e5e59",
+    "done": false,
+    "page_text": "WebShop [SEP] Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Search",
+    "page_type": "search",
+    "purchased": false,
+    "reward": 0.0,
+    "state_version": 1,
+    "steps": 0,
+    "termination_reason": "active",
+    "valid_subactions": [
+      {
+        "kind": "navigate",
+        "label": "search",
+        "target_id": "click:1:search"
+      }
+    ],
+    "observation_truncated": false,
+    "commit_pending": false,
+    "commit_ready": false,
+    "commit_authorized": false,
+    "purchase_committed": false,
+    "environment_owner": "agent_1",
+    "session_reused": false,
+    "execution_revision": false,
+    "decision_phase": "query_formation",
+    "action_decision_support": [
+      {
+        "target_id": "click:1:search",
+        "kind": "navigate",
+        "agent_selectable": true
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "agent_id": "agent_1",
+      "react_trace": [
+        {
+          "round_index": 0,
+          "phase": "initial",
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "white synthetic hair extensions under 40"
+            }
+          },
+          "observation": {
+            "name": "webshop_search",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] Page 1 (Total results: 50) [SEP] Next > [SEP] B09NSS7Y15 [SEP] 10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies [SEP] $13.99 [SEP] B08FT52RLS [SEP] Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#) [SEP] $15.99 [SEP] B08HQW3NTP [SEP] Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#) [SEP] $15.99 [SEP] B07SNPB5K9 [SEP] Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown) [SEP] $21.96 [SEP] B09BBBMQC9 [SEP] New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown) [SEP] $8.99 [SEP] B09BHRQQQN [SEP] Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women [SEP] $9.99 [SEP] B08CZ5BN7K [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] $37.47 [SEP] B07RB1XJYN [SEP] 22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece [SEP] $4.19 [SEP] B07XBDT15T [SEP] iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch [SEP] $12.99 [SEP] B072FS59C8 [SEP] HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip [SEP] $13.99",
+              "page_type": "search_results",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 2,
+              "steps": 1,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:2",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "next >",
+                  "target_id": "next_page:2",
+                  "navigation_effect": "next_results_page"
+                },
+                {
+                  "kind": "open_product",
+                  "label": "10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies",
+                  "target_id": "open_product:1:B09NSS7Y15",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#)",
+                  "target_id": "open_product:2:B08FT52RLS",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#)",
+                  "target_id": "open_product:3:B08HQW3NTP",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown)",
+                  "target_id": "open_product:4:B07SNPB5K9",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown)",
+                  "target_id": "open_product:5:B09BBBMQC9",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women",
+                  "target_id": "open_product:6:B09BHRQQQN",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip",
+                  "target_id": "open_product:7:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece",
+                  "target_id": "open_product:8:B07RB1XJYN",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch",
+                  "target_id": "open_product:9:B07XBDT15T",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip",
+                  "target_id": "open_product:10:B072FS59C8",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                }
+              ],
+              "action_effect": {
+                "kind": "search",
+                "value": "white synthetic hair extensions under 40"
+              },
+              "observation_truncated": false,
+              "search_decision_state": {
+                "result_set_repeated": false,
+                "variant_constraints_resolved_by_search": false,
+                "option_verification_action_kind": "open_product",
+                "search_adds_option_evidence": false,
+                "candidate_selection": "agent_decides; no target is forced",
+                "exclusion_evidence_rule": "Selectable-option mismatch is established only by inspected product-page evidence, never by a search-preview variant.",
+                "selection_evidence_rule": "A matching search-preview variant is also unverified; use public product identity and stable attributes when deciding which candidate to inspect."
+              }
+            }
+          },
+          "remaining_budget": {
+            "phase": 15,
+            "total": 15
+          }
+        },
+        {
+          "round_index": 1,
+          "phase": "initial",
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:7:B08CZ5BN7K",
+              "state_version": 2,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08CZ5BN7K",
+                "options": {
+                  "color": "white"
+                },
+                "requirement_quotes": [
+                  "white hair extensions",
+                  "made with synthetic hair",
+                  "price lower than 40.00 dollars"
+                ],
+                "verified_requirements": [
+                  "Search result title says SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip; search result price is $37.47"
+                ],
+                "unresolved_constraints": [
+                  "Need product page confirmation of synthetic hair, white color option availability/selection, and final purchasability under $40"
+                ],
+                "accept_partial": false,
+                "reason": "Most relevant first-page candidate: synthetic hair extension under $40; inspect product page to verify/select white."
+              }
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] Price: $37.47 [SEP] Rating: N.A. [SEP] Description [SEP] Features [SEP] Reviews [SEP] Buy Now",
+              "page_type": "product",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 3,
+              "steps": 2,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:3",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "< prev",
+                  "target_id": "previous_page:3",
+                  "navigation_effect": "return_to_search_results"
+                },
+                {
+                  "kind": "view_section",
+                  "label": "description",
+                  "target_id": "view_description:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "features",
+                  "target_id": "view_features:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "reviews",
+                  "target_id": "view_reviews:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "purchase",
+                  "label": "Buy Now",
+                  "target_id": "purchase:B08CZ5BN7K"
+                }
+              ],
+              "action_effect": {
+                "kind": "open_product",
+                "value": "b08cz5bn7k"
+              },
+              "product": {
+                "asin": "B08CZ5BN7K",
+                "price": 37.47,
+                "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip"
+              },
+              "purchase_visible": true,
+              "selected_options": {},
+              "unselected_option_groups": [],
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 14,
+            "total": 14
+          }
+        },
+        {
+          "round_index": 2,
+          "phase": "initial",
+          "action": {
+            "call_id": "call_ZgC6c34cbIQKl5840yecdKSj",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "view_description:B08CZ5BN7K",
+              "state_version": 3
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] Specs:Model: M02Product Information: Materials: 100% Japan High Temperature FiberWeight: 14\" :90-100g  16\" :100-110g  18\" :110-120g 22\" :120-130gWidth:about 28cm 11\"Length:14 inch 35cm 16 inch 40cm 18 inch 45cm 22 inch 55cm1.the revolutionary new alternative hair extension that can offer you instant transformation to thicker, longer hair with the aid of a transparent miracle wire which is undetectable hidden under your own hair.2. Unlike the clip in hair extensions, which are attached to your own strands of hair, the new hair extension comfortably attaches itself around your head by a transparent miracle wire which is undetectable hidden under your own hair.3.Quite simple and easy, it takes only minutes to apply and remove: Simply place the flip in wire on your head, pull your own . of the adjustable transparent wire, the flip in can fit any head shape or size perfectly. You will find it rests perfectly on your head and blends naturally with your own hair. With the aid of the adjustable transparent wire, the flip in can fit any head shape or size perfectlyProduct description:- simplest and quickest extensions to apply- high quality hair for an amazing price- No clips,no glue,no damage!- instant fullness & length- large color selection- can straighten, curl(but temperature should between 150-180 degree)FAQ?Can be dyed ?no ,cannot dye ,because this is synthetic materialCan be ironed ?yes ,because the material is heat-friendly fiber ,so can ironed it at150-180 degree or 300-350 FahrenheitHow to restyle ?Unlike your own hair ,synthetic f",
+              "page_type": "product_section",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 4,
+              "steps": 3,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:4",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "< prev",
+                  "target_id": "previous_page:4",
+                  "navigation_effect": "return_to_current_product_page"
+                }
+              ],
+              "action_effect": {
+                "kind": "view_description",
+                "value": "description"
+              },
+              "product": {
+                "asin": "B08CZ5BN7K",
+                "price": 37.47,
+                "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip"
+              },
+              "purchase_visible": false,
+              "selected_options": {},
+              "unselected_option_groups": [],
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 13,
+            "total": 13
+          }
+        },
+        {
+          "round_index": 4,
+          "phase": "initial",
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:4",
+              "state_version": 4
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] Price: $37.47 [SEP] Rating: N.A. [SEP] Description [SEP] Features [SEP] Reviews [SEP] Buy Now",
+              "page_type": "product",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 5,
+              "steps": 4,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:5",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "< prev",
+                  "target_id": "previous_page:5",
+                  "navigation_effect": "return_to_search_results"
+                },
+                {
+                  "kind": "view_section",
+                  "label": "description",
+                  "target_id": "view_description:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "features",
+                  "target_id": "view_features:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "reviews",
+                  "target_id": "view_reviews:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "purchase",
+                  "label": "Buy Now",
+                  "target_id": "purchase:B08CZ5BN7K"
+                }
+              ],
+              "action_effect": {
+                "kind": "previous_page",
+                "value": "< prev"
+              },
+              "product": {
+                "asin": "B08CZ5BN7K",
+                "price": 37.47,
+                "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip"
+              },
+              "purchase_visible": true,
+              "selected_options": {},
+              "unselected_option_groups": [],
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 12,
+            "total": 12
+          }
+        },
+        {
+          "round_index": 5,
+          "phase": "initial",
+          "action": {
+            "call_id": "call_MUcpEfJegGGxrockbcpLlP6I",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "view_features:B08CZ5BN7K",
+              "state_version": 5,
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "B08CZ5BN7K",
+                "verified_requirements": [
+                  "Hair extension product priced at $37.47, under $40",
+                  "Description says material is 100% Japan High Temperature Fiber and FAQ says synthetic material"
+                ],
+                "unresolved_constraints": [
+                  "Color white is not yet verified from visible product page text"
+                ],
+                "accept_partial": true
+              }
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] ",
+              "page_type": "product_section",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 6,
+              "steps": 5,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:6",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "< prev",
+                  "target_id": "previous_page:6",
+                  "navigation_effect": "return_to_current_product_page"
+                }
+              ],
+              "action_effect": {
+                "kind": "view_features",
+                "value": "features"
+              },
+              "product": {
+                "asin": "B08CZ5BN7K",
+                "price": 37.47,
+                "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip"
+              },
+              "purchase_visible": false,
+              "selected_options": {},
+              "unselected_option_groups": [],
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 11,
+            "total": 11
+          }
+        },
+        {
+          "round_index": 6,
+          "phase": "initial",
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:6",
+              "state_version": 6
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] Price: $37.47 [SEP] Rating: N.A. [SEP] Description [SEP] Features [SEP] Reviews [SEP] Buy Now",
+              "page_type": "product",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 7,
+              "steps": 6,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:7",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "< prev",
+                  "target_id": "previous_page:7",
+                  "navigation_effect": "return_to_search_results"
+                },
+                {
+                  "kind": "view_section",
+                  "label": "description",
+                  "target_id": "view_description:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "features",
+                  "target_id": "view_features:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "reviews",
+                  "target_id": "view_reviews:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "purchase",
+                  "label": "Buy Now",
+                  "target_id": "purchase:B08CZ5BN7K"
+                }
+              ],
+              "action_effect": {
+                "kind": "previous_page",
+                "value": "< prev"
+              },
+              "product": {
+                "asin": "B08CZ5BN7K",
+                "price": 37.47,
+                "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip"
+              },
+              "purchase_visible": true,
+              "selected_options": {},
+              "unselected_option_groups": [],
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 10,
+            "total": 10
+          }
+        },
+        {
+          "round_index": 7,
+          "phase": "initial",
+          "action": {
+            "call_id": "call_qYIjMbWZcqZmK4c3ugiMMoV4",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "back_to_search:7",
+              "state_version": 7
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "WebShop [SEP] Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Search",
+              "page_type": "search",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 8,
+              "steps": 7,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "search",
+                  "target_id": "click:1:search"
+                }
+              ],
+              "action_effect": {
+                "kind": "back_to_search",
+                "value": "back to search"
+              },
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 9,
+            "total": 9
+          }
+        },
+        {
+          "round_index": 8,
+          "phase": "initial",
+          "action": {
+            "call_id": "call_7hte1WgEjVTwMDhXX8FfrrPs",
+            "name": "webshop_search",
+            "arguments": {
+              "query": "white synthetic hair extensions under 40",
+              "completion_plan": {
+                "decision": "reserve",
+                "asin": "b08cz5bn7k",
+                "accept_partial": true,
+                "reason": "Existing inspected candidate is synthetic hair extensions priced below $40; white color remains to verify."
+              }
+            }
+          },
+          "observation": {
+            "name": "webshop_search",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] Page 1 (Total results: 50) [SEP] Next > [SEP] B09NSS7Y15 [SEP] 10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies [SEP] $13.99 [SEP] B08FT52RLS [SEP] Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#) [SEP] $15.99 [SEP] B08HQW3NTP [SEP] Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#) [SEP] $15.99 [SEP] B07SNPB5K9 [SEP] Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown) [SEP] $21.96 [SEP] B09BBBMQC9 [SEP] New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown) [SEP] $8.99 [SEP] B09BHRQQQN [SEP] Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women [SEP] $9.99 [SEP] B08CZ5BN7K [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] $37.47 [SEP] B07RB1XJYN [SEP] 22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece [SEP] $4.19 [SEP] B07XBDT15T [SEP] iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch [SEP] $12.99 [SEP] B072FS59C8 [SEP] HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip [SEP] $13.99",
+              "page_type": "search_results",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 9,
+              "steps": 8,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:9",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "next >",
+                  "target_id": "next_page:9",
+                  "navigation_effect": "next_results_page"
+                },
+                {
+                  "kind": "open_product",
+                  "label": "10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies",
+                  "target_id": "open_product:1:B09NSS7Y15",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#)",
+                  "target_id": "open_product:2:B08FT52RLS",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#)",
+                  "target_id": "open_product:3:B08HQW3NTP",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown)",
+                  "target_id": "open_product:4:B07SNPB5K9",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown)",
+                  "target_id": "open_product:5:B09BBBMQC9",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women",
+                  "target_id": "open_product:6:B09BHRQQQN",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip",
+                  "target_id": "open_product:7:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece",
+                  "target_id": "open_product:8:B07RB1XJYN",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch",
+                  "target_id": "open_product:9:B07XBDT15T",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip",
+                  "target_id": "open_product:10:B072FS59C8",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                }
+              ],
+              "action_effect": {
+                "kind": "search",
+                "value": "white synthetic hair extensions under 40"
+              },
+              "observation_truncated": false,
+              "search_decision_state": {
+                "result_set_repeated": true,
+                "variant_constraints_resolved_by_search": false,
+                "option_verification_action_kind": "open_product",
+                "search_adds_option_evidence": false,
+                "candidate_selection": "agent_decides; no target is forced",
+                "exclusion_evidence_rule": "Selectable-option mismatch is established only by inspected product-page evidence, never by a search-preview variant.",
+                "selection_evidence_rule": "A matching search-preview variant is also unverified; use public product identity and stable attributes when deciding which candidate to inspect."
+              }
+            }
+          },
+          "remaining_budget": {
+            "phase": 8,
+            "total": 8
+          }
+        },
+        {
+          "round_index": 9,
+          "phase": "initial",
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "open_product:7:B08CZ5BN7K",
+              "state_version": 9
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] Price: $37.47 [SEP] Rating: N.A. [SEP] Description [SEP] Features [SEP] Reviews [SEP] Buy Now",
+              "page_type": "product",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 10,
+              "steps": 9,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:10",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "< prev",
+                  "target_id": "previous_page:10",
+                  "navigation_effect": "return_to_search_results"
+                },
+                {
+                  "kind": "view_section",
+                  "label": "description",
+                  "target_id": "view_description:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "features",
+                  "target_id": "view_features:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "view_section",
+                  "label": "reviews",
+                  "target_id": "view_reviews:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "purchase",
+                  "label": "Buy Now",
+                  "target_id": "purchase:B08CZ5BN7K"
+                }
+              ],
+              "action_effect": {
+                "kind": "open_product",
+                "value": "b08cz5bn7k"
+              },
+              "product": {
+                "asin": "B08CZ5BN7K",
+                "price": 37.47,
+                "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip"
+              },
+              "purchase_visible": true,
+              "selected_options": {},
+              "unselected_option_groups": [],
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false
+            }
+          },
+          "remaining_budget": {
+            "phase": 7,
+            "total": 7
+          }
+        },
+        {
+          "round_index": 11,
+          "phase": "initial",
+          "action": {
+            "call_id": "text-action-0",
+            "name": "webshop_click",
+            "arguments": {
+              "target_id": "previous_page:10",
+              "state_version": 10
+            }
+          },
+          "observation": {
+            "name": "webshop_click",
+            "status": "ok",
+            "output": {
+              "done": false,
+              "page_text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] Page 1 (Total results: 50) [SEP] Next > [SEP] B09NSS7Y15 [SEP] 10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies [SEP] $13.99 [SEP] B08FT52RLS [SEP] Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#) [SEP] $15.99 [SEP] B08HQW3NTP [SEP] Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#) [SEP] $15.99 [SEP] B07SNPB5K9 [SEP] Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown) [SEP] $21.96 [SEP] B09BBBMQC9 [SEP] New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown) [SEP] $8.99 [SEP] B09BHRQQQN [SEP] Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women [SEP] $9.99 [SEP] B08CZ5BN7K [SEP] SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip [SEP] $37.47 [SEP] B07RB1XJYN [SEP] 22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece [SEP] $4.19 [SEP] B07XBDT15T [SEP] iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch [SEP] $12.99 [SEP] B072FS59C8 [SEP] HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip [SEP] $13.99",
+              "page_type": "search_results",
+              "purchased": false,
+              "reward": 0.0,
+              "state_version": 11,
+              "steps": 10,
+              "termination_reason": "active",
+              "valid_subactions": [
+                {
+                  "kind": "navigate",
+                  "label": "back to search",
+                  "target_id": "back_to_search:11",
+                  "navigation_effect": "return_to_search"
+                },
+                {
+                  "kind": "navigate",
+                  "label": "next >",
+                  "target_id": "next_page:11",
+                  "navigation_effect": "next_results_page"
+                },
+                {
+                  "kind": "open_product",
+                  "label": "10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies",
+                  "target_id": "open_product:1:B09NSS7Y15",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#)",
+                  "target_id": "open_product:2:B08FT52RLS",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#)",
+                  "target_id": "open_product:3:B08HQW3NTP",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown)",
+                  "target_id": "open_product:4:B07SNPB5K9",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown)",
+                  "target_id": "open_product:5:B09BBBMQC9",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women",
+                  "target_id": "open_product:6:B09BHRQQQN",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip",
+                  "target_id": "open_product:7:B08CZ5BN7K",
+                  "memory_fact": {
+                    "observation_status": "observed",
+                    "evidence_in_store": "full",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece",
+                  "target_id": "open_product:8:B07RB1XJYN",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch",
+                  "target_id": "open_product:9:B07XBDT15T",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                },
+                {
+                  "kind": "open_product",
+                  "label": "HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip",
+                  "target_id": "open_product:10:B072FS59C8",
+                  "memory_fact": {
+                    "observation_status": "unobserved",
+                    "evidence_in_store": "missing",
+                    "evidence_in_prompt": "omitted"
+                  }
+                }
+              ],
+              "action_effect": {
+                "kind": "previous_page",
+                "value": "< prev"
+              },
+              "observation_truncated": false,
+              "commit_pending": false,
+              "commit_ready": false,
+              "search_decision_state": {
+                "result_set_repeated": true,
+                "variant_constraints_resolved_by_search": false,
+                "option_verification_action_kind": "open_product",
+                "search_adds_option_evidence": false,
+                "candidate_selection": "agent_decides; no target is forced",
+                "exclusion_evidence_rule": "Selectable-option mismatch is established only by inspected product-page evidence, never by a search-preview variant.",
+                "selection_evidence_rule": "A matching search-preview variant is also unverified; use public product identity and stable attributes when deciding which candidate to inspect."
+              }
+            }
+          },
+          "remaining_budget": {
+            "phase": 6,
+            "total": 6
+          }
+        }
+      ],
+      "raw_response": "{\"answer\":\"No purchase was staged.\",\"summary\":\"The session ended active on search results without clicking Buy Now, so the objective to stage a purchase was not completed.\",\"confidence\":0.95,\"evidence\":[\"Current environment state shows purchased=false, commit_pending=false, commit_ready=false, and page_type=search_results.\",\"Observed SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip at $37.47 with material evidence: 100% Japan High Temperature Fiber / synthetic material, but no white color was verified and no purchase was staged.\"],\"unresolved_issues\":[\"White color requirement remains unverified for the only inspected candidate.\",\"Action phase closed due to webshop_semantic_no_progress_fuse before staging a purchase.\"],\"tool_summary\":[\"Searched for white synthetic hair extensions under $40, inspected one product page and its description/features, then returned to search results.\"]}",
+      "webshop_progress": {
+        "purchase_reservation": {
+          "policy": "completion_reserve_v2",
+          "remaining": 6,
+          "reserved": null,
+          "owner": null,
+          "version": 0,
+          "phase": "explore",
+          "other_nodes_available": 6,
+          "plan_requested": false,
+          "paused_nodes": {},
+          "next_step": "Choose a legal affordable shopping action; an optional plan can protect desired options and Buy. No plan is required to act or purchase.",
+          "plan_required": false,
+          "semantic_notes_are_not_admission_checks": true
+        },
+        "purchase_reservation_events": [
+          {
+            "event": "plan_update_ignored",
+            "owner": "agent_1",
+            "code": "invalid_completion_plan",
+            "remaining": 15,
+            "existing_plan_retained": false
+          },
+          {
+            "event": "plan_update_ignored",
+            "owner": "agent_1",
+            "code": "invalid_completion_plan",
+            "remaining": 12,
+            "existing_plan_retained": false
+          },
+          {
+            "event": "plan_update_ignored",
+            "owner": "agent_1",
+            "code": "invalid_completion_plan",
+            "remaining": 9,
+            "existing_plan_retained": false
+          }
+        ],
+        "trusted": true,
+        "execution_accounting": {
+          "model_request_count": 13,
+          "model_request_count_known": true,
+          "action_attempt_count": 10,
+          "stop_stage": "worker_returned",
+          "last_request_budget": {}
+        },
+        "budget_partition": {
+          "request_admission_enabled": false,
+          "phase": "unpartitioned",
+          "execution_credit": null,
+          "reserved_closure_tokens": null
+        },
+        "state": "typed_policy_failure",
+        "stop_reason": "webshop_semantic_no_progress_fuse",
+        "environment_owner": "agent_1",
+        "environment_access": "mutable_owner",
+        "journal": {
+          "schema_version": 1,
+          "continuity_scope": "webshop_rollout_owner",
+          "restored_for_this_execution": false,
+          "recent_actions_retained": 8
+        },
+        "commit_ready": false,
+        "commit_protocol_status": null,
+        "semantic_no_progress_count": 4,
+        "semantic_no_progress_streak": 4,
+        "completion_path_fuse_deferrals": 0,
+        "strategy_checkpoint_purchase_deferrals": 0,
+        "searches_since_last_product_open": 0,
+        "fuse_threshold": 4,
+        "duplicate_state_action_count": 2,
+        "unique_public_evidence_count": 5,
+        "first_stall_round": 7,
+        "queries_tried": [
+          "white synthetic hair extensions under 40"
+        ],
+        "strategy_variant": "factual_state_only",
+        "products_visited": [
+          "B08CZ5BN7K"
+        ],
+        "product_inspections": [
+          {
+            "asin": "b08cz5bn7k",
+            "sections_viewed": [
+              "description",
+              "features"
+            ],
+            "visit_count": 2
+          }
+        ],
+        "candidate_ledger": [
+          {
+            "asin": "b09nss7y15",
+            "preview_title": "10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b08ft52rls",
+            "preview_title": "Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#)",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b08hqw3ntp",
+            "preview_title": "Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#)",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b07snpb5k9",
+            "preview_title": "Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown)",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b09bbbmqc9",
+            "preview_title": "New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown)",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b09bhrqqqn",
+            "preview_title": "Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b08cz5bn7k",
+            "preview_title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip",
+            "title_excerpt": false,
+            "inspection_status": "inspected"
+          },
+          {
+            "asin": "b07rb1xjyn",
+            "preview_title": "22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b07xbdt15t",
+            "preview_title": "iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          },
+          {
+            "asin": "b072fs59c8",
+            "preview_title": "HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip",
+            "title_excerpt": false,
+            "inspection_status": "not_inspected"
+          }
+        ],
+        "recent_actions": [
+          {
+            "action": {
+              "kind": "view_section",
+              "label": "description",
+              "executable_target_retained": false
+            },
+            "result_page": "product_section",
+            "result_state": "52508b8bb6fe",
+            "repeated_state_action": false,
+            "new_evidence": true,
+            "semantic_no_progress_streak": 0,
+            "progress_class": "new_public_evidence",
+            "action_effect": {
+              "kind": "view_description",
+              "value": "description"
+            },
+            "purchase_visible": false,
+            "unselected_option_groups": []
+          },
+          {
+            "action": {
+              "kind": "navigate",
+              "label": "< prev",
+              "executable_target_retained": false
+            },
+            "result_page": "product",
+            "result_state": "f4392d93cb9f",
+            "repeated_state_action": false,
+            "new_evidence": false,
+            "semantic_no_progress_streak": 0,
+            "progress_class": "public_state_transition",
+            "action_effect": {
+              "kind": "previous_page",
+              "value": "< prev"
+            },
+            "purchase_visible": true,
+            "unselected_option_groups": []
+          },
+          {
+            "action": {
+              "kind": "view_section",
+              "label": "features",
+              "executable_target_retained": false
+            },
+            "result_page": "product_section",
+            "result_state": "8b623c836a34",
+            "repeated_state_action": false,
+            "new_evidence": true,
+            "semantic_no_progress_streak": 0,
+            "progress_class": "new_public_evidence",
+            "action_effect": {
+              "kind": "view_features",
+              "value": "features"
+            },
+            "purchase_visible": false,
+            "unselected_option_groups": []
+          },
+          {
+            "action": {
+              "kind": "navigate",
+              "label": "< prev",
+              "executable_target_retained": false
+            },
+            "result_page": "product",
+            "result_state": "f4392d93cb9f",
+            "repeated_state_action": false,
+            "new_evidence": false,
+            "semantic_no_progress_streak": 0,
+            "progress_class": "public_state_transition",
+            "action_effect": {
+              "kind": "previous_page",
+              "value": "< prev"
+            },
+            "purchase_visible": true,
+            "unselected_option_groups": []
+          },
+          {
+            "action": {
+              "kind": "navigate",
+              "label": "back to search",
+              "executable_target_retained": false
+            },
+            "result_page": "search",
+            "result_state": "4479c7e82ca5",
+            "repeated_state_action": false,
+            "new_evidence": false,
+            "semantic_no_progress_streak": 1,
+            "progress_class": "public_state_transition",
+            "action_effect": {
+              "kind": "back_to_search",
+              "value": "back to search"
+            }
+          },
+          {
+            "action": {
+              "kind": "search",
+              "query": "white synthetic hair extensions under 40",
+              "executable_target_retained": false
+            },
+            "result_page": "search_results",
+            "result_state": "e25f57c15327",
+            "repeated_state_action": true,
+            "new_evidence": false,
+            "semantic_no_progress_streak": 2,
+            "progress_class": "repeated_or_no_public_progress",
+            "action_effect": {
+              "kind": "search",
+              "value": "white synthetic hair extensions under 40"
+            }
+          },
+          {
+            "action": {
+              "kind": "open_product",
+              "label": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip",
+              "asin": "b08cz5bn7k",
+              "executable_target_retained": false
+            },
+            "result_page": "product",
+            "result_state": "f4392d93cb9f",
+            "repeated_state_action": true,
+            "new_evidence": false,
+            "semantic_no_progress_streak": 3,
+            "progress_class": "repeated_or_no_public_progress",
+            "action_effect": {
+              "kind": "open_product",
+              "value": "b08cz5bn7k"
+            },
+            "purchase_visible": true,
+            "unselected_option_groups": []
+          },
+          {
+            "action": {
+              "kind": "navigate",
+              "label": "< prev",
+              "executable_target_retained": false
+            },
+            "result_page": "search_results",
+            "result_state": "e25f57c15327",
+            "repeated_state_action": false,
+            "new_evidence": false,
+            "semantic_no_progress_streak": 4,
+            "progress_class": "public_state_transition",
+            "action_effect": {
+              "kind": "previous_page",
+              "value": "< prev"
+            }
+          }
+        ],
+        "state_guidance_deliveries": [],
+        "purchase_evidence_checkpoint": {},
+        "policy_failure": {
+          "status": "typed_policy_failure",
+          "code": "webshop_semantic_no_progress",
+          "attribution": "model_policy",
+          "fuse_threshold": 4,
+          "semantic_no_progress_count": 4,
+          "semantic_no_progress_streak": 4,
+          "duplicate_state_action_count": 2,
+          "unique_public_evidence_count": 5,
+          "first_stall_round": 7,
+          "official_environment_terminal": false,
+          "runtime_terminal": true
+        },
+        "prompt_projection": {
+          "schema_version": 1,
+          "projection_count": 11,
+          "raw_context_chars_sum": 198095,
+          "prompt_context_chars_sum": 216556,
+          "saved_context_chars_sum": 0,
+          "saved_fraction": 0.0,
+          "page_text_truncated_chars_sum": 0
+        },
+        "memory": {
+          "schema": "factual_memory_v2",
+          "binding": "97d01c3574aa25522d6d9fe5f9e68dffa9c534140373c87a45d15dded4ce8f3a",
+          "store": "59efc63372ca42fc8d709be6e39bb57d",
+          "index": "7745652e4328fdade65eb6f6ca56bea7a9c99fc1718ff85ed4a86d4b0ca4f1b8",
+          "storage": "SPGFS_WEBSHOP_MEMORY_DIR",
+          "products": 10,
+          "observations": 11,
+          "format_version": 3,
+          "projection_revision": "structured_facts_v1"
+        },
+        "memory_projection": {
+          "schema": "factual_memory_v2",
+          "projection_revision": "structured_facts_v1",
+          "current": {
+            "asin": "",
+            "live_choices_source": "action_environment.state",
+            "remaining": {
+              "phase": 6,
+              "total": 6
+            },
+            "no_progress_streak": 4
+          },
+          "candidate_ledger": [
+            {
+              "asin": "b09nss7y15",
+              "title": "10 Pcs Braiding Hair Extensions with Clips Cat Rainbow Mermaid Unicorn Hair Accessories for Girls Straight Ombre Colored Hair Clips Braided Clip on Colored Hair Extensions for Kids Dress Up Supplies",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b08ft52rls",
+              "title": "Long Wavy Drawstring Ponytail Extension for Women Ponytail Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch (8H27#)",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b08hqw3ntp",
+              "title": "Ponytail Extension Long Wavy Magic Paste Ponytail for Women Synthetic Clip on Ponytail Heat Resistant Curly Wavy Synthetic Ponytail Hairpiece Accessories 22 Inch £¨1B#)",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b07snpb5k9",
+              "title": "Dsoar 24inch Ombre Dreadlocks Extensions for Women/Men 10 Strands Synthetic Dreads Handmade Crochet Braiding Hair Jamaica Reggae Locs(Ombre Black and Dark Brown)",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b09bbbmqc9",
+              "title": "New Messy Curly Hairpieces for Women Hair Bun Elastic Scrunchie Chignon Updo Curly Hair Synthetic Wrap Ponytail (10# Ash Brown)",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b09bhrqqqn",
+              "title": "Lykoow 20 Pieces Rainbow Clip in Hair Extensions Colorful 20 Inches Rainbow Heat-Resistant Synthetic Straight Highlight Hairpieces Fashion Cosplay Party Clip in Hair Extensions for Women",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b08cz5bn7k",
+              "title": "SARLA Halo Invisible Wire Synthetic Hair Extension-No Clip",
+              "product_page": "observed",
+              "visit_count": 2,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b07rb1xjyn",
+              "title": "22-24 inches Invisible Wire No Clips in Synthetic Hair Extensions Secret Fish Line Hairpiece",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b07xbdt15t",
+              "title": "iLUU Corn Wave Clip in Hair Extensions Wavy Curly Clip ins Synthetic Natural Fiber Hair Piece #6A Golden Brown 5Clips on Hair Extension for Black White Women,110 Gram, 24 Inch",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            },
+            {
+              "asin": "b072fs59c8",
+              "title": "HAIQUAN Womens Curly Hairpiece Dark Brown Clip in Claw Ponytail Hair Extension Synthetic Hairpiece with Claw Clip",
+              "product_page": "unobserved",
+              "visit_count": 0,
+              "query_ids": [
+                0
+              ]
+            }
+          ],
+          "observed_products": [
+            {
+              "asin": "b08cz5bn7k",
+              "price_at_observation": {
+                "price": 37.47
+              },
+              "state_version": 10,
+              "option_values": {},
+              "evidence_in_prompt": "full",
+              "historical_selected_options": []
+            }
+          ],
+          "evidence": [
+            {
+              "asin": "b08cz5bn7k",
+              "section": "description",
+              "observation_status": "observed",
+              "evidence_in_store": "full",
+              "evidence_in_prompt": "full",
+              "source": "8c369e66779f7574c1e844c1379106a70ff229803f8755ca47be654bd65576f6",
+              "full_chars": 1717,
+              "excerpts": [
+                {
+                  "range": [
+                    0,
+                    1717
+                  ],
+                  "text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] Specs:Model: M02Product Information: Materials: 100% Japan High Temperature FiberWeight: 14\" :90-100g  16\" :100-110g  18\" :110-120g 22\" :120-130gWidth:about 28cm 11\"Length:14 inch 35cm 16 inch 40cm 18 inch 45cm 22 inch 55cm1.the revolutionary new alternative hair extension that can offer you instant transformation to thicker, longer hair with the aid of a transparent miracle wire which is undetectable hidden under your own hair.2. Unlike the clip in hair extensions, which are attached to your own strands of hair, the new hair extension comfortably attaches itself around your head by a transparent miracle wire which is undetectable hidden under your own hair.3.Quite simple and easy, it takes only minutes to apply and remove: Simply place the flip in wire on your head, pull your own . of the adjustable transparent wire, the flip in can fit any head shape or size perfectly. You will find it rests perfectly on your head and blends naturally with your own hair. With the aid of the adjustable transparent wire, the flip in can fit any head shape or size perfectlyProduct description:- simplest and quickest extensions to apply- high quality hair for an amazing price- No clips,no glue,no damage!- instant fullness & length- large color selection- can straighten, curl(but temperature should between 150-180 degree)FAQ?Can be dyed ?no ,cannot dye ,because this is synthetic materialCan be ironed ?yes ,because the material is heat-friendly fiber ,so can ironed it at150-180 degree or 300-350 FahrenheitHow to restyle ?Unlike your own hair ,synthetic f"
+                }
+              ]
+            },
+            {
+              "asin": "b08cz5bn7k",
+              "section": "features",
+              "observation_status": "observed",
+              "evidence_in_store": "full",
+              "evidence_in_prompt": "full",
+              "source": "0300fa4e55d8871b820fc39d376be6370296c04acd35906a18746a9d54aee191",
+              "full_chars": 158,
+              "excerpts": [
+                {
+                  "range": [
+                    0,
+                    158
+                  ],
+                  "text": "Instruction: [SEP] i'm looking for white hair extensions made with synthetic hair, and price lower than 40.00 dollars [SEP] Back to Search [SEP] < Prev [SEP] "
+                }
+              ]
+            }
+          ],
+          "history": {
+            "queries": [
+              {
+                "query_id": 0,
+                "query": "white synthetic hair extensions under 40",
+                "search_count": 2,
+                "recorded_batches": 3,
+                "last_search_step": 8,
+                "last_search_sequence": 8,
+                "last_new_candidate_count": 0,
+                "last_result_set_changed": false
+              }
+            ],
+            "actions": [
+              {
+                "sequence": 1,
+                "kind": "search",
+                "query": "white synthetic hair extensions under 40",
+                "status": "ok",
+                "step": 1,
+                "state_version": 2,
+                "query_id": 0,
+                "new_candidate_count": 10,
+                "result_set_changed": true,
+                "result_order_changed": true
+              },
+              {
+                "sequence": 2,
+                "kind": "open_product",
+                "asin": "b08cz5bn7k",
+                "status": "ok",
+                "step": 2,
+                "state_version": 3,
+                "query_id": 0
+              },
+              {
+                "sequence": 3,
+                "kind": "view_description",
+                "asin": "b08cz5bn7k",
+                "status": "ok",
+                "step": 3,
+                "state_version": 4,
+                "query_id": 0
+              },
+              {
+                "sequence": 4,
+                "kind": "previous_page",
+                "asin": "b08cz5bn7k",
+                "status": "ok",
+                "step": 4,
+                "state_version": 5,
+                "query_id": 0
+              },
+              {
+                "sequence": 5,
+                "kind": "view_features",
+                "asin": "b08cz5bn7k",
+                "status": "ok",
+                "step": 5,
+                "state_version": 6,
+                "query_id": 0
+              },
+              {
+                "sequence": 6,
+                "kind": "previous_page",
+                "asin": "b08cz5bn7k",
+                "status": "ok",
+                "step": 6,
+                "state_version": 7,
+                "query_id": 0
+              },
+              {
+                "sequence": 7,
+                "kind": "back_to_search",
+                "status": "ok",
+                "step": 7,
+                "state_version": 8,
+                "query_id": 0
+              },
+              {
+                "sequence": 8,
+                "kind": "search",
+                "query": "white synthetic hair extensions under 40",
+                "status": "ok",
+                "step": 8,
+                "state_version": 9,
+                "query_id": 0,
+                "new_candidate_count": 0,
+                "result_set_changed": false,
+                "result_order_changed": false
+              },
+              {
+                "sequence": 9,
+                "kind": "open_product",
+                "asin": "b08cz5bn7k",
+                "status": "ok",
+                "step": 9,
+                "state_version": 10,
+                "query_id": 0
+              },
+              {
+                "sequence": 10,
+                "kind": "previous_page",
+                "status": "ok",
+                "step": 10,
+                "state_version": 11,
+                "query_id": 0,
+                "new_candidate_count": 0
+              }
+            ],
+            "result_batches": [
+              {
+                "query_id": 0,
+                "event_sequence": 1,
+                "candidate_order": [
+                  "b09nss7y15",
+                  "b08ft52rls",
+                  "b08hqw3ntp",
+                  "b07snpb5k9",
+                  "b09bbbmqc9",
+                  "b09bhrqqqn",
+                  "b08cz5bn7k",
+                  "b07rb1xjyn",
+                  "b07xbdt15t",
+                  "b072fs59c8"
+                ]
+              },
+              {
+                "query_id": 0,
+                "event_sequence": 8,
+                "candidate_order": [
+                  "b09nss7y15",
+                  "b08ft52rls",
+                  "b08hqw3ntp",
+                  "b07snpb5k9",
+                  "b09bbbmqc9",
+                  "b09bhrqqqn",
+                  "b08cz5bn7k",
+                  "b07rb1xjyn",
+                  "b07xbdt15t",
+                  "b072fs59c8"
+                ]
+              },
+              {
+                "query_id": 0,
+                "event_sequence": 10,
+                "candidate_order": [
+                  "b09nss7y15",
+                  "b08ft52rls",
+                  "b08hqw3ntp",
+                  "b07snpb5k9",
+                  "b09bbbmqc9",
+                  "b09bhrqqqn",
+                  "b08cz5bn7k",
+                  "b07rb1xjyn",
+                  "b07xbdt15t",
+                  "b072fs59c8"
+                ]
+              }
+            ]
+          },
+          "memory": {
+            "coverage": "complete",
+            "candidate_count": 10,
+            "recent_batch_count": 10,
+            "omitted_candidates": 0,
+            "omitted_section_records": 0,
+            "recent_batch_partial": false,
+            "history_partial": false,
+            "delivery": "automatic",
+            "projection_chars": 8169,
+            "history_is_not_current_state": true,
+            "observed_products_scope": "historical_public_snapshots_not_current_choices",
+            "full_evidence_retained_in_run_store": true,
+            "fixed_character_quotas": false
+          }
+        },
+        "worker_memory_policy": "factual_memory_v2",
+        "worker_guidance": {
+          "policy": "merged_checklist_v1",
+          "applied": true
+        },
+        "action_budget": {
+          "policy": "shared_total_v1",
+          "initial_used": 10,
+          "revision_used": 0,
+          "closure_used": 0,
+          "total_used": 10,
+          "total_limit": 16,
+          "total_remaining": 6,
+          "transferred": false,
+          "closure_owner": null,
+          "closure_active": false,
+          "initial_transferred": 0,
+          "revision_transferred": 0,
+          "closure_limit": 0,
+          "closure_unspent": 0,
+          "environment_remaining": null,
+          "transfer_status": "not_requested",
+          "same_session_verified": false
+        },
+        "scheduling": {
+          "policy": "bounded_research_v1",
+          "research_limit": 8,
+          "research_used": 0,
+          "research_remaining": 8,
+          "total_remaining": 6,
+          "reset_on_node_edit": false,
+          "nodes": {
+            "agent_1": {
+              "scope": "task_result",
+              "actions_last_execution": 10,
+              "no_action_executions": 0,
+              "stop_reason": "webshop_semantic_no_progress_fuse"
+            }
+          },
+          "next_step": "Assign the ORIGINAL shopping objective to an existing session owner as task_result, including search/selection/Buy when useful; do not assign a report-only job. RUN_AGENT only for new work. FINISH a ready result. At zero actions, delete unrelated nodes or promote an existing owner for a runtime failure receipt; do not create or rerun shopping sessions."
+        }
+      }
+    }
+  ]
+}

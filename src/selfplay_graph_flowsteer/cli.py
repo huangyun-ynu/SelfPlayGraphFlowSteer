@@ -1049,11 +1049,8 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
     else:
         proposer = create_qwen_task_proposer(config, tokenizer=tokenizer)
 
-    route_latency_tracker = RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
-    route_token_tracker = RouteTokenTracker(
-        window_size=config.canvas.worker_token_window,
-        path=args.output / "route_token_usage.json",
-    )
+    route_latency_tracker = RouteLatencyTracker()
+    route_token_tracker = RouteTokenTracker(path=args.output / 'route_token_usage.json')
 
     def application_factory(seed: int):
         seeded = replace(config, seed=seed)
@@ -1079,6 +1076,7 @@ def selfplay_rollout(args: argparse.Namespace) -> int:
             args.workers,
             args.proposals_per_seed,
             args.task_window,
+            director_observation_policy=_director_observation_policy(config),
             primary_job_order=args.primary_job_order,
             structural_exploration_policy=config.canvas.structural_exploration_policy,
             rollout_wall_time_s=args.rollout_wall_time_s,
@@ -1359,7 +1357,17 @@ def benchmark(args: argparse.Namespace) -> int:
         raise ValueError("--workers must be positive")
     if args.limit_per_dataset is not None and args.limit_per_dataset <= 0:
         raise ValueError("--limit-per-dataset must be positive")
-    route_latency_tracker = RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
+    observation = _director_observation_policy(config)
+    if observation is not None:
+        from .director_timeline import persist_context_policy
+        args.output.mkdir(parents=True, exist_ok=True)
+        if not (args.output / "director_context_policy.json").exists() and any(
+            folder.exists() and any(folder.iterdir())
+            for folder in (args.output / "samples", args.output / "benchmark" / "samples")
+        ):
+            raise ValueError("cannot collect compact observations into an unmarked existing benchmark")
+        persist_context_policy(args.output, resume=False, observation=observation)
+    route_latency_tracker = RouteLatencyTracker()
     director_tokenizer = (
         ByteTokenizer()
         if args.mock
@@ -2567,6 +2575,9 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
         ),
     )
     training_config.validate()
+    if training_cycles > 0 and not args.mock_trainer:
+        from .director_observation import preflight_compact_training
+        preflight_compact_training(config, training_config.solver.max_sequence_length)
     factory = (
         (lambda role, policy, seed: MockPolicyTrainer(role, policy, seed=seed))
         if args.mock_trainer
@@ -2751,16 +2762,8 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 else create_qwen_task_proposer(collection_config, tokenizer=tokenizer)
             )
 
-        route_latency_tracker = RouteLatencyTracker(
-            window_size=collection_config.canvas.worker_latency_window
-        )
-        route_token_tracker = RouteTokenTracker(
-            window_size=collection_config.canvas.worker_token_window,
-            # Keep one rolling ledger across cycles and process restarts.  A
-            # cycle-local file would cold-start every new cycle and discard
-            # precisely the route history needed by admission control.
-            path=args.output / "route_token_usage.json",
-        )
+        route_latency_tracker = RouteLatencyTracker()
+        route_token_tracker = RouteTokenTracker(path=args.output / 'route_token_usage.json')
 
         def application_factory(
             seed: int,
@@ -2826,6 +2829,7 @@ def _selfplay_experiment(args: argparse.Namespace, tracker) -> int:
                 args.proposals_per_seed,
                 task_window,
                 True,
+                director_observation_policy=_director_observation_policy(collection_config),
                 primary_job_order=args.primary_job_order,
                 historical_duration_priority=args.historical_duration_priority,
                 primary_dataset_duration_estimates_s=primary_duration_estimates,
@@ -3771,3 +3775,14 @@ def main(argv: list[str] | None = None) -> int:
         "selfplay-experiment": lambda: selfplay_experiment(args),
     }
     return handlers[args.command]()
+
+
+def _director_observation_policy(config):
+    from .director_observation import LEGACY_OBSERVATION, observation_policy
+    if (config.director_observation_schema == LEGACY_OBSERVATION
+            and not config.director_observation_schema_by_dataset):
+        return None  # Keep legacy collection markers byte-compatible.
+    policy = observation_policy(config.director_observation_schema,
+                                config.director_observation_schema_by_dataset)
+    policy["context_limit"] = int(getattr(config.solver_model, "context_limit", 32768))
+    return policy

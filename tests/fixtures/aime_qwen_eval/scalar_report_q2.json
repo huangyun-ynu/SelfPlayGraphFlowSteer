@@ -1,0 +1,18 @@
+{
+  "source_run": "state/math-aime-protocol-recovery-fix/aime30-run02",
+  "case": "scalar narrative fields, not missing evidence",
+  "responses": [
+    {
+      "source_attempt_id": "55439ba18c1f4c87a56616c483996683",
+      "source_file_sha256": "679ee0d50b056a60320ff2fd2e650778aae2d22bde5d13905500eb68c029437a",
+      "raw_response": "{\n  \"summary\": \"Analyzed palindromes by length n. Even lengths yield no solutions as digit sum 13 is odd. For odd n, sum is 2S + d_mid = 13. Calculated compositions for each valid length: n=3 (5), n=5 (15), n=7 (20), n=9 (15), n=11 (6), n=13 (1). Total sum is 62. Verified with Python enumeration.\",\n  \"evidence\": \"Manual derivation and Python verification both yield 62. Python code iterated n=1 to 13, computed valid compositions for odd n, and summed counts.\",\n  \"unresolved_issues\": \"None\",\n  \"tool_summary\": \"Used python_exec to verify the combinatorial counts for each length.\",\n  \"confidence\": 1.0,\n  \"answer\": 62\n}",
+      "request_had_tools": true
+    },
+    {
+      "source_attempt_id": "6d4cc7a491b24ce69eb6305eb4dd246c",
+      "source_file_sha256": "57b6986bde61697b18e1aaebc1b2edb761117164495f07eef4277e883a75e656",
+      "raw_response": "{\n  \"summary\": \"Analyzed palindromes by length n. Even lengths yield no solutions as digit sum 13 is odd. For odd n, sum is 2S + d_mid = 13. Calculated compositions for each valid length: n=3 (5), n=5 (15), n=7 (20), n=9 (15), n=11 (6), n=13 (1). Total sum is 62. Verified with Python enumeration.\",\n  \"evidence\": [\n    \"Manual derivation and Python verification both yield 62.\",\n    \"Python code iterated n=1 to 13, computed valid compositions for odd n, and summed counts.\"\n  ],\n  \"unresolved_issues\": [],\n  \"tool_summary\": [\n    \"Used python_exec to verify the combinatorial counts for each length.\"\n  ],\n  \"confidence\": 1.0,\n  \"answer\": 62\n}",
+      "request_had_tools": false
+    }
+  ]
+}

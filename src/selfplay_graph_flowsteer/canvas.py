@@ -18,6 +18,7 @@ from .actions import (
 from .aime_submission import is_aime_dataset, parse_aime_answer
 from .artifact_protocol import WORKER_PROTOCOL_STATUS_VERSION, summarize_worker_protocol
 from .config import CanvasConfig
+from .budget_policy import clear_legacy_allocations, use_reported_usage
 from .contracts import ExecutionReport, RelationType
 from .dataset_actions import DatasetActionAdapter
 from .deadline import RolloutDeadline
@@ -35,7 +36,6 @@ from .graph import GraphValidationError, MultiAgentGraph, MutationResult
 from .output_contract import OUTPUT_CONTRACT_VERSION, worker_output_role_changes_input
 from .qa_submission import is_short_qa_dataset
 from .runtime import (
-    SWE_SHARED_TOKEN_BUDGET,
     WORKER_BACKEND_FAILURE_SENTINEL,
     WORKER_PROTOCOL_FAILURE_SENTINEL,
     MultiAgentRuntime,
@@ -52,7 +52,6 @@ from .submission_contract import (
     is_text_submission_dataset,
     snapshot_hash,
 )
-from .webshop_budget import budget_partition, observed_request_bounds
 
 
 def _merge_submission_reports(first, later):
@@ -274,6 +273,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         task: str,
         worker_task: str | None = None,
         director_task: str | None = None,
+        public_qa_task: dict[str, Any] | None = None,
         runtime: MultiAgentRuntime,
         config: CanvasConfig | None = None,
         parser: ActionParser | None = None,
@@ -307,6 +307,9 @@ class GraphCanvas(UnifiedSubmissionMixin):
             else ""
         )
         self.config = (config or CanvasConfig()).for_dataset(dataset or inferred_dataset)
+        if not self.run_id and self.config.worker_usage_policy(dataset or inferred_dataset):
+            import uuid
+            self.run_id = uuid.uuid4().hex
         self.parser = parser or ActionParser(unified=self.unified)
         self._init_unified()
         self.runtime_routes = tuple(runtime_routes)
@@ -320,6 +323,12 @@ class GraphCanvas(UnifiedSubmissionMixin):
             else ""
         )
         self.dataset = str(dataset or inferred_dataset).strip().casefold()
+        from .qa_public_task import PublicQATask, QA_DATASETS, public_qa_task_from_prompt
+        self.public_qa_task = (
+            (PublicQATask.from_dict(public_qa_task) if public_qa_task is not None
+             else public_qa_task_from_prompt(self.director_task)).to_dict()
+            if self.dataset in QA_DATASETS else None
+        )
         self.duplicate_responsibility_policy = (
             str(duplicate_responsibility_policy).strip().casefold()
         )
@@ -477,6 +486,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         authoritative_director: bool = False,
         director_context: DirectorCallContext | None = None,
     ) -> CanvasStep:
+        self._ensure_worker_usage_ledger()
         self._director_call_context = director_context
         self._submission_recovery_reports = []
         self._time_admission_event = {}
@@ -554,6 +564,14 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 ),
             )
         budget_cleanup = False
+        nq_ledger = self.runtime.nq_evidence_context
+        if (action.action_type is ActionType.ADD_AGENT and nq_ledger is not None
+                and not nq_ledger.remaining_search_calls):
+            return self._reject_graph_action(
+                action, code="nq_task_search_budget_exhausted",
+                message="Search credit is exhausted. Connect existing evidence and finalize an existing Agent.",
+                rejection_details=nq_ledger.budget_state(),
+            )
         if self.unified:
             if action.action_type is ActionType.ADD_AGENT and self._webshop_shared_actions_exhausted():
                 return self._reject_graph_action(action, code="webshop_tool_budget_exhausted",
@@ -564,7 +582,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
                     message="A current trusted successful episode is ready. Submit it with FINISH(target).",
                     rejection_details={"targets": protected})
             ledger = self.runtime.worker_usage_ledger
-            if ledger is not None and ledger.stop_reason() and action.action_type is not ActionType.FINISH:
+            if (ledger is not None and ledger.stop_reason() not in {None, "worker_usage_request_inflight"}
+                    and action.action_type is not ActionType.FINISH):
                 budget_cleanup = (action.action_type is ActionType.DELETE_AGENT
                     and str(action.target or action.agent_id) in self._alfworld_budget_cleanup_targets())
                 if not budget_cleanup:
@@ -662,6 +681,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
             )
         if (
             commit_ready_agents
+            and not all(self.runtime.purchase_review_pending(key) for key in commit_ready_agents)
             and action.action_type is not ActionType.SET_OUTPUT
             and not staged_environment_cleanup
         ):
@@ -765,36 +785,6 @@ class GraphCanvas(UnifiedSubmissionMixin):
                     rejection_code="structural_exploration_required",
                     rejection_details=self._rejection_details("structural_exploration_required"),
                 )
-        growth_admission = self._new_agent_time_admission(action)
-        if growth_admission is not None:
-            return self._reject_for_time_admission(action, growth_admission)
-        if (
-            self.config.structural_repair_enabled
-            and self.runtime.worker_usage_ledger is None
-            and action.action_type is ActionType.ADD_AGENT
-            and self.graph.nodes
-            and self.config.max_total_tokens - self.total_tokens
-            < self.config.graph_growth_token_reserve
-        ):
-            self._enter_structural_repair(
-                "token_budget_consolidation",
-                agents=tuple(self.graph.nodes),
-            )
-            self.structural_repair_blocked_actions += 1
-            return self._record(
-                action,
-                accepted=False,
-                feedback=(
-                    "Rejected action: STRUCTURAL_REPAIR_REQUIRED "
-                    "(reason=token_budget_consolidation; remaining Worker tokens "
-                    f"{self.config.max_total_tokens - self.total_tokens} are reserved "
-                    "for selecting an existing output and FINISH)"
-                ),
-                rejection_code="token_budget_consolidation_required",
-            )
-        token_growth_admission = self._new_agent_token_admission(action)
-        if token_growth_admission is not None:
-            return self._reject_for_token_admission(action, token_growth_admission)
         if (
             action.action_type is ActionType.SET_OUTPUT
             and action.target in self.graph.nodes
@@ -987,41 +977,6 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 responsibility_issue=responsibility_issue,
             )
 
-        execution_admission = self._execution_time_admission(
-            action,
-            candidate,
-            mutation,
-        )
-        if execution_admission is not None:
-            return self._reject_for_time_admission(action, execution_admission)
-        token_admission = self._execution_token_admission(
-            action,
-            candidate,
-            mutation,
-            webshop_closure_pass=webshop_closure_pass,
-        )
-        if token_admission is not None:
-            if webshop_closure_pass:
-                # Selecting output is a legal Director decision, but it must not
-                # purchase a new Worker execution on credit. Preserve the existing
-                # trusted unpurchased episode as a zero-score terminal outcome.
-                self.graph = candidate
-                self.state = CanvasState.FAILED
-                self._token_admission_event = dict(token_admission)
-                self.token_budget_admission_rejections += 1
-                return self._record(
-                    action,
-                    accepted=True,
-                    feedback=(
-                        "The selected WebShop owner has no staged purchase and insufficient "
-                        "remaining tokens for a same-session closure execution. No Worker "
-                        "request or environment Action was made; the official episode "
-                        "remains incomplete. Existing evidence is preserved."
-                    ),
-                    rejection_code="webshop_output_closure_incomplete",
-                    final_execution=True,
-                )
-            return self._reject_for_token_admission(action, token_admission)
 
         new_agent = next(iter(set(candidate.nodes) - before), None)
         previous_graph = self.graph
@@ -2117,7 +2072,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
                     rejection_details={"integrity_risks": risks,
                                        "submission_detail": prepared_submission.detail},
                 )
-            if (self.total_tokens > self.config.max_total_tokens
+            if ((self.runtime.worker_usage_ledger is None and self.total_tokens > self.config.max_total_tokens)
                     or self.graph.validate(final=True) or not self.selected_output_is_current()):
                 return self._record(
                     action, accepted=False, execution=report,
@@ -2131,6 +2086,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
                     rejection_code="submission_input_binding_missing",
                     feedback="Rejected finish: selected output lacks its runtime input binding.",
                 )
+            usage_ledger = self.runtime.worker_usage_ledger
+            usage_status = usage_ledger.status() if usage_ledger is not None else None
             self.submission_receipt = _issue_receipt(
                 context=context, dataset=self.dataset,
                 accepted_event_id=f"{self.run_id}:canvas:{len(self.history)}",
@@ -2145,6 +2102,11 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 normalization_version=prepared_submission.method,
                 worker_tokens_used=self.total_tokens,
                 worker_token_limit=self.config.max_total_tokens,
+                worker_budget_policy=usage_status["policy"] if usage_status else "strict_limit_v1",
+                worker_usage_complete=usage_status["usage_complete"] if usage_status else True,
+                worker_usage_ledger_digest=usage_ledger.digest() if usage_ledger else "",
+                worker_dispatch_valid=usage_ledger.dispatches_valid() if usage_ledger else False,
+                worker_unsettled_attempts=usage_status["unsettled_attempt_count"] if usage_status else 0,
             )
         self.state = CanvasState.FINISHED
         if self.rollout_deadline is not None:
@@ -2178,6 +2140,23 @@ class GraphCanvas(UnifiedSubmissionMixin):
             selected, task=self.worker_task, graph=self.graph
         )
 
+    def _ensure_worker_usage_ledger(self):
+        if self.runtime.worker_usage_ledger is not None:
+            return
+        policy = self.config.worker_usage_policy(self.dataset)
+        if policy is None:
+            return
+        from pathlib import Path
+        import uuid
+        from .worker_usage_ledger import WorkerUsageLedger
+        self.run_id = self.run_id or uuid.uuid4().hex
+        self.runtime.worker_usage_ledger = WorkerUsageLedger(
+            Path(self.config.submission_journal_dir) / 'worker_usage'
+            / (hashlib.sha256(self.run_id.encode()).hexdigest() + '.sqlite3'),
+            question_attempt_id=self.run_id, threshold=policy['start_threshold'],
+            max_unsettled_attempts=policy['max_unsettled_attempts'], dataset=self.dataset,
+        )
+
     def _execute_dirty(self, *, force: bool = False) -> ExecutionReport | None:
         # A deleted Agent can remain in the mutation's historical dirty set but
         # must never survive as executable state.
@@ -2191,129 +2170,21 @@ class GraphCanvas(UnifiedSubmissionMixin):
         executable_dirty = self.dirty_agents & configured
         if not executable_dirty and not force:
             return None
-        if (self.dataset == "swe_bench" or self.runtime.worker_usage_ledger is not None) and configured:
-            usage_ledger = self.runtime.worker_usage_ledger
-            remaining = max(0, self.config.max_total_tokens - self.total_tokens)
+        usage_ledger = self.runtime.worker_usage_ledger
+        for agent_id in configured:
+            node = self.graph.nodes[agent_id]
             if usage_ledger is not None:
-                usage_status = usage_ledger.status()
-                self._token_admission_event.update(
-                    budget_schema=usage_status["policy"],
-                    remaining_worker_tokens=max(0, usage_status["threshold"] - usage_status["confirmed_used"]),
-                    budget_scope="per_question", allocation="shared_reported_usage",
-                    request_admission="reported_usage_before_physical_dispatch",
-                    usage_status=usage_status,
-                )
-                for agent_id in configured:
-                    metadata = self.graph.nodes[agent_id].metadata
-                    metadata.pop("_runtime_token_credit", None)
-                    metadata.pop("_runtime_finalization_output_reserve", None)
-                    metadata["_runtime_budget_kind"] = "reported_usage_threshold_v1"
+                use_reported_usage(node)
             else:
-                self._token_admission_event.update(
-                    budget_schema=SWE_SHARED_TOKEN_BUDGET,
-                    remaining_worker_tokens=remaining,
-                    budget_scope="per_question",
-                    allocation="shared_remaining",
-                    reserved_closure_tokens=0,
-                    request_admission="authoritative_after_request_serialization",
-                )
-                for agent_id in configured:
-                    metadata = self.graph.nodes[agent_id].metadata
-                    metadata.update(
-                        _runtime_token_credit=remaining,
-                        _runtime_budget_kind=SWE_SHARED_TOKEN_BUDGET,
-                    )
-                    metadata.pop("_runtime_finalization_output_reserve", None)
-        elif (is_short_qa_dataset(self.dataset)
-                or (self.unified and self.dataset != "webshop")) and executable_dirty:
-            # The estimator is a scheduling hint, not permission to spend past
-            # the budget. Give each scheduled execution/revision a bounded share
-            # and enforce it against serialized requests in the gateway.
-            calls = max(
-                1,
-                int(
-                    self.runtime.estimate_execution_tokens(
-                        self.graph,
-                        executable_dirty,
-                        quantile=self.config.worker_token_quantile,
-                        minimum_samples=self.config.worker_token_min_samples,
-                        cold_start_tokens=self.config.worker_token_cold_start,
-                    )["call_count"]
-                ),
-            )
-            remaining = max(0, self.config.max_total_tokens - self.total_tokens)
-            credit = remaining // calls
-            budget_kind = (
-                "short_qa_request_credit_v1" if is_short_qa_dataset(self.dataset)
-                else "unified_request_credit_v1"
-            )
+                clear_legacy_allocations(node)
+        if usage_ledger is not None:
+            usage_status = usage_ledger.status()
             self._token_admission_event.update(
-                {
-                    "budget_schema": budget_kind,
-                    "remaining_worker_tokens": remaining,
-                    "finalization_output_reserve_minimum": self.config.finalization_token_reserve,
-                    "call_count": calls,
-                    "per_execution_credit": credit,
-                    "request_admission": "authoritative_after_request_serialization",
-                }
+                budget_schema=usage_status['policy'], budget_scope='question_attempt',
+                allocation='shared_reported_usage', usage_status=usage_status,
+                request_admission='reported_usage_before_physical_dispatch',
+                remaining_worker_tokens=max(0, usage_status['threshold']-usage_status['confirmed_used']),
             )
-            for agent_id in configured:
-                self.graph.nodes[agent_id].metadata.update(
-                    {
-                        "_runtime_token_credit": credit,
-                        "_runtime_budget_kind": budget_kind,
-                        "_runtime_finalization_output_reserve": self.config.finalization_token_reserve,
-                    }
-                )
-        if self.dataset == "webshop" and executable_dirty:
-            admission_enabled = self.config.remaining_token_admission_enabled
-            partition = None
-            if admission_enabled:
-                calls = self.runtime.estimate_execution_tokens(
-                    self.graph,
-                    executable_dirty,
-                    quantile=self.config.worker_token_quantile,
-                    minimum_samples=self.config.worker_token_min_samples,
-                    cold_start_tokens=self.config.worker_token_cold_start,
-                )["call_count"]
-                closure = any(
-                    "webshop_output_closure_required" in self.dirty_reasons.get(agent_id, ())
-                    for agent_id in executable_dirty
-                )
-                partition = self._webshop_budget_partition(call_count=int(calls), closure=closure)
-                self._token_admission_event.update(partition)
-            else:
-                self._token_admission_event.update(
-                    request_admission="disabled",
-                    remaining_worker_tokens=max(
-                        0, self.config.max_total_tokens - self.total_tokens
-                    ),
-                )
-            for agent_id in executable_dirty:
-                metadata = self.graph.nodes[agent_id].metadata
-                metadata.update(
-                    {
-                        "_runtime_webshop_request_admission_enabled": admission_enabled,
-                        "_runtime_webshop_output_closure": (
-                            "webshop_output_closure_required"
-                            in self.dirty_reasons.get(agent_id, ())
-                        ),
-                    }
-                )
-                if partition is not None:
-                    metadata.update(
-                        _runtime_token_credit=partition["per_execution_credit"],
-                        _runtime_reserved_closure_tokens=partition["reserved_closure_tokens"],
-                        _runtime_budget_phase=partition["phase"],
-                    )
-                else:
-                    # A restored graph may still carry an earlier execution's credit.
-                    for key in (
-                        "_runtime_token_credit",
-                        "_runtime_reserved_closure_tokens",
-                        "_runtime_budget_phase",
-                    ):
-                        metadata.pop(key, None)
         report = self.runtime.execute(
             task=self.worker_task,
             graph=self.graph,
@@ -2321,10 +2192,6 @@ class GraphCanvas(UnifiedSubmissionMixin):
             invalidation_reasons={
                 agent_id: set(self.dirty_reasons.get(agent_id, ())) for agent_id in executable_dirty
             },
-            token_credit=(max(0, self.config.max_total_tokens - self.total_tokens)
-                          if (self.dataset != "webshop" or self.config.remaining_token_admission_enabled)
-                          and self.runtime.worker_usage_ledger is None
-                          else None),
         )
         self._step_scheduled_agents.update(report.scheduled_agents)
         if self.runtime.worker_usage_ledger is not None:
@@ -2357,212 +2224,11 @@ class GraphCanvas(UnifiedSubmissionMixin):
             )
         return report
 
-    def _new_agent_time_admission(self, action: CanvasAction) -> dict[str, Any] | None:
-        if (
-            action.action_type is not ActionType.ADD_AGENT
-            or not self.graph.nodes
-            or not self._time_admission_active()
-            or not self._has_usable_artifact()
-        ):
-            return None
-        estimate = self.runtime.estimate_new_agent_s(
-            self.runtime_routes,
-            quantile=self.config.worker_latency_quantile,
-            minimum_samples=self.config.worker_latency_min_samples,
-            cold_start_s=self.config.worker_latency_cold_start_s,
-            workload_scope=(
-                self.action_adapter.adapter_id if self.action_adapter is not None else ""
-            ),
-        )
-        return self._insufficient_time_event(action, estimate)
 
-    def _new_agent_token_admission(self, action: CanvasAction) -> dict[str, Any] | None:
-        if (
-            self.dataset == "swe_bench"
-            or action.action_type is not ActionType.ADD_AGENT
-            or not self.graph.nodes
-            or not self.config.remaining_token_admission_enabled
-            or not self._has_usable_artifact()
-        ):
-            return None
-        estimate = self.runtime.estimate_new_agent_tokens(
-            self.runtime_routes,
-            quantile=self.config.worker_token_quantile,
-            minimum_samples=self.config.worker_token_min_samples,
-            cold_start_tokens=self.config.worker_token_cold_start,
-            workload_scope=(
-                self.action_adapter.adapter_id if self.action_adapter is not None else ""
-            ),
-        )
-        # ADD_AGENT itself is zero execution, but it creates a mandatory
-        # SET_PROMPT barrier. Reserve one call to configure the node and one
-        # conservative call to integrate it into the graph before finalization.
-        estimate = {
-            **estimate,
-            "estimated_worker_tokens": int(estimate["estimated_worker_tokens"]) * 2,
-            "call_count": int(estimate["call_count"]) * 2,
-            "estimation_mode": "new_agent_plus_structural_completion",
-        }
-        return self._insufficient_token_event(action, estimate)
 
-    def _execution_time_admission(
-        self,
-        action: CanvasAction,
-        candidate: MultiAgentGraph,
-        mutation: MutationResult,
-    ) -> dict[str, Any] | None:
-        if (
-            not self._time_admission_active()
-            or not self._has_usable_artifact()
-            or action.action_type
-            in {
-                # SET_PROMPT completes an ADD_AGENT that already passed the
-                # admission gate. Rejecting it here would strand the Canvas at
-                # its mandatory prompt barrier.
-                ActionType.SET_PROMPT,
-                ActionType.SET_MODEL,
-                ActionType.ADD_AGENT,
-                ActionType.DELETE_AGENT,
-                ActionType.SET_OUTPUT,
-                ActionType.FINISH,
-            }
-        ):
-            return None
-        estimate = self.runtime.estimate_execution_s(
-            candidate,
-            set(mutation.dirty_agents),
-            quantile=self.config.worker_latency_quantile,
-            minimum_samples=self.config.worker_latency_min_samples,
-            cold_start_s=self.config.worker_latency_cold_start_s,
-        )
-        if int(estimate["call_count"]) <= 0:
-            return None
-        return self._insufficient_time_event(action, estimate)
 
-    def _webshop_budget_partition(self, *, call_count: int, closure: bool) -> dict[str, Any]:
-        return budget_partition(
-            total_limit=self.config.max_total_tokens,
-            spent=self.total_tokens,
-            configured_minimum=self.config.finalization_token_reserve,
-            call_count=call_count,
-            closure=closure,
-            observed_bounds=observed_request_bounds(list(self.runtime.artifacts.values())),
-        )
 
-    def _execution_token_admission(
-        self,
-        action: CanvasAction,
-        candidate: MultiAgentGraph,
-        mutation: MutationResult,
-        *,
-        webshop_closure_pass: bool = False,
-    ) -> dict[str, Any] | None:
-        if (
-            # SWE uses the serialized request gate against the shared balance;
-            # historical execution estimates must not withhold future credit.
-            self.dataset == "swe_bench"
-            or not self.config.remaining_token_admission_enabled
-            or (self.dataset != "webshop" and not self._has_usable_artifact())
-            or action.action_type
-            in {
-                ActionType.ADD_AGENT,
-                ActionType.FINISH,
-            }
-            or (action.action_type is ActionType.SET_OUTPUT and not webshop_closure_pass)
-            or (
-                action.action_type is ActionType.SET_PROMPT
-                and action.target == self.pending_agent_id
-            )
-        ):
-            return None
-        estimate = self.runtime.estimate_execution_tokens(
-            candidate,
-            ({str(action.target)} if webshop_closure_pass else set(mutation.dirty_agents)),
-            quantile=self.config.worker_token_quantile,
-            minimum_samples=self.config.worker_token_min_samples,
-            cold_start_tokens=(
-                max(self.config.worker_token_cold_start, 8_192)
-                if webshop_closure_pass
-                else self.config.worker_token_cold_start
-            ),
-            workload_scope_override=("webshop_closure" if webshop_closure_pass else ""),
-            use_observed_agent_floor=not webshop_closure_pass,
-        )
-        structural_completion: dict[str, object] | None = None
-        if webshop_closure_pass:
-            partition = self._webshop_budget_partition(call_count=1, closure=True)
-            self._token_admission_event.update(partition)
-            # Historical usage and cold floors are advisory estimates, not the
-            # serialized closure request. The gateway owns the sole hard quote.
-            if partition["remaining_worker_tokens"] > 0:
-                return None
-            return {
-                **partition,
-                "blocked": True,
-                "action": action.action_type.value,
-                "estimated_worker_tokens": 0,
-                "finalization_token_reserve": 0,
-                "required_tokens": 1,
-                "closure_execution": {
-                    "model_request_count": 0,
-                    "model_request_count_known": True,
-                    "action_attempt_count": 0,
-                    "stop_stage": "canvas_total_budget_exhausted",
-                },
-            }
-        if (
-            action.action_type is ActionType.SET_LAYER
-            and self.structural_repair_reason == "relation_layer_mismatch"
-            and self.structural_repair_pair is not None
-            and self.structural_repair_relation is not None
-        ):
-            source, target = self.structural_repair_pair
-            relation_graph = candidate.clone()
-            try:
-                relation_mutation = relation_graph.set_relation(
-                    source,
-                    target,
-                    self.structural_repair_relation,
-                )
-            except GraphValidationError:
-                relation_mutation = None
-            if relation_mutation is not None:
-                structural_completion = self.runtime.estimate_execution_tokens(
-                    relation_graph,
-                    set(relation_mutation.dirty_agents),
-                    quantile=self.config.worker_token_quantile,
-                    minimum_samples=self.config.worker_token_min_samples,
-                    cold_start_tokens=self.config.worker_token_cold_start,
-                )
-                estimate = {
-                    **estimate,
-                    "estimated_worker_tokens": int(estimate["estimated_worker_tokens"])
-                    + int(structural_completion["estimated_worker_tokens"]),
-                    "call_count": int(estimate["call_count"])
-                    + int(structural_completion["call_count"]),
-                    "estimation_mode": "current_edit_plus_pending_relation",
-                    "structural_completion": structural_completion,
-                }
-        if int(estimate["call_count"]) <= 0:
-            return None
-        return self._insufficient_token_event(
-            action,
-            estimate,
-            reserve_tokens=(
-                0
-                if webshop_closure_pass
-                else self._webshop_budget_partition(
-                    call_count=int(estimate["call_count"]), closure=False
-                )["reserved_closure_tokens"]
-                if self.action_adapter is not None and self.action_adapter.adapter_id == "webshop"
-                else None
-            ),
-        )
 
-    def _time_admission_active(self) -> bool:
-        return bool(
-            self.config.remaining_time_admission_enabled and self.rollout_deadline is not None
-        )
 
     def _has_usable_artifact(self) -> bool:
         return bool(self._usable_output_agents())
@@ -2619,10 +2285,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
         return artifact.code_artifact_ref is not None
 
     def _webshop_staged_revision_allowed(self, agent_id: str) -> bool:
-        """A trusted staged WebShop transaction is an irreversible protocol latch."""
-
-        del agent_id
-        return False
+        """A reviewed, unexecuted proposal permits normal evidenced revisions."""
+        return self.runtime.purchase_review_pending(agent_id)
 
     def _usable_output_agents(self) -> tuple[str, ...]:
         return tuple(
@@ -2896,109 +2560,9 @@ class GraphCanvas(UnifiedSubmissionMixin):
             self.topology_edits_frozen = True
             self.semantic_no_progress_recovery_count += 1
 
-    def _insufficient_time_event(
-        self,
-        action: CanvasAction,
-        estimate: dict[str, object],
-    ) -> dict[str, Any] | None:
-        assert self.rollout_deadline is not None
-        remaining_s = self.rollout_deadline.hard_remaining_s("canvas_time_admission")
-        worker_s = float(estimate["estimated_worker_s"])
-        reserve_s = max(
-            self.config.finalization_time_reserve_s,
-            self.config.finalization_time_reserve_by_dataset.get(self.dataset, 0.0),
-        )
-        required_s = worker_s + reserve_s
-        if remaining_s >= required_s:
-            return None
-        return {
-            "blocked": True,
-            "action": action.action_type.value,
-            "hard_remaining_s": remaining_s,
-            "estimated_worker_s": worker_s,
-            "finalization_reserve_s": reserve_s,
-            "required_s": required_s,
-            "quantile": self.config.worker_latency_quantile,
-            **estimate,
-        }
 
-    def _insufficient_token_event(
-        self,
-        action: CanvasAction,
-        estimate: dict[str, object],
-        *,
-        reserve_tokens: int | None = None,
-    ) -> dict[str, Any] | None:
-        remaining_tokens = self.config.max_total_tokens - self.total_tokens
-        worker_tokens = int(estimate["estimated_worker_tokens"])
-        reserve_tokens = (
-            self.config.finalization_token_reserve
-            if reserve_tokens is None
-            else max(0, int(reserve_tokens))
-        )
-        required_tokens = worker_tokens + reserve_tokens
-        if remaining_tokens >= required_tokens:
-            return None
-        return {
-            "blocked": True,
-            "action": action.action_type.value,
-            "remaining_worker_tokens": remaining_tokens,
-            "estimated_worker_tokens": worker_tokens,
-            "finalization_token_reserve": reserve_tokens,
-            "required_tokens": required_tokens,
-            "quantile": self.config.worker_token_quantile,
-            **estimate,
-        }
 
-    def _reject_for_time_admission(
-        self,
-        action: CanvasAction,
-        event: dict[str, Any],
-    ) -> CanvasStep:
-        self._time_admission_event = dict(event)
-        self.time_budget_rejections += 1
-        self._enter_structural_repair(
-            "time_budget_consolidation",
-            agents=tuple(self.graph.nodes),
-        )
-        self.structural_repair_blocked_actions += 1
-        return self._record(
-            action,
-            accepted=False,
-            feedback=(
-                "Rejected action: STRUCTURAL_REPAIR_REQUIRED "
-                "(reason=time_budget_consolidation; hard remaining "
-                f"{event['hard_remaining_s']:.1f}s is below estimated Worker time "
-                f"{event['estimated_worker_s']:.1f}s plus finalization reserve "
-                f"{event['finalization_reserve_s']:.1f}s; use an existing output and FINISH)"
-            ),
-            rejection_code="time_budget_consolidation_required",
-        )
 
-    def _reject_for_token_admission(
-        self,
-        action: CanvasAction,
-        event: dict[str, Any],
-    ) -> CanvasStep:
-        self._token_admission_event = dict(event)
-        self.token_budget_admission_rejections += 1
-        self._enter_structural_repair(
-            "token_budget_consolidation",
-            agents=tuple(self.graph.nodes),
-        )
-        self.structural_repair_blocked_actions += 1
-        return self._record(
-            action,
-            accepted=False,
-            feedback=(
-                "Rejected action: STRUCTURAL_REPAIR_REQUIRED "
-                "(reason=token_budget_consolidation; remaining Worker tokens "
-                f"{event['remaining_worker_tokens']} are below estimated dirty execution "
-                f"{event['estimated_worker_tokens']} plus finalization reserve "
-                f"{event['finalization_token_reserve']}; use the existing graph and FINISH)"
-            ),
-            rejection_code="token_budget_admission_required",
-        )
 
     def _begin_relation_decision(self, action: CanvasAction) -> CanvasStep:
         source, target, relation_type = self._canonical_relation_candidate(
@@ -3195,6 +2759,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
         if kind is ActionType.ADD_AGENT:
             mutation = graph.add_agent(action.agent_id)
             agent_id = next(iter(mutation.dirty_agents))
+            if self.public_qa_task is not None:
+                graph.nodes[agent_id].metadata["public_qa_task"] = dict(self.public_qa_task)
             if self.unified:
                 from uuid import uuid4
                 graph.nodes[agent_id].metadata.update(submission_protocol=PROTOCOL, result_scope="subtask", incarnation_id=uuid4().hex, task_dataset=self.dataset)
@@ -3218,6 +2784,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
             if action.runtime_route is not None:
                 raise GraphValidationError("use SET_MODEL to select a Worker model")
             metadata_updates = compilation.metadata() if compilation is not None else {}
+            if self.public_qa_task is not None:
+                metadata_updates["public_qa_task"] = dict(self.public_qa_task)
             if self.unified:
                 metadata_updates["result_scope"] = action.result_scope
             mutation = graph.set_prompt(
@@ -4331,7 +3899,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         reason = self.structural_repair_reason
         if self._uses_staged_environment_commit():
             commit_ready = tuple(self.runtime.environment_commit_ready_agents())
-            if commit_ready:
+            if commit_ready and not all(self.runtime.purchase_review_pending(key) for key in commit_ready):
                 return (ActionType.SET_OUTPUT, ActionType.DELETE_AGENT)
         if reason in {"output_not_set", "output_artifact_unusable"}:
             return (
@@ -4748,8 +4316,21 @@ class GraphCanvas(UnifiedSubmissionMixin):
         )
 
     def control_snapshot(self) -> dict[str, Any]:
+        nq_ledger = self.runtime.nq_evidence_context
         if self.unified:
-            return self._unified_control_snapshot()
+            snapshot = self._unified_control_snapshot()
+            if self.dataset in {"hotpotqa", "musique"}:
+                from .qa_worker_feedback import worker_result_observations
+
+                snapshot["worker_results"] = worker_result_observations(
+                    self.graph, self.runtime.artifacts,
+                    snapshot["result_assessments"], self.dirty_agents,
+                )
+            if nq_ledger is not None:
+                snapshot["nq_search_budget"] = nq_ledger.budget_state()
+                if not nq_ledger.remaining_search_calls:
+                    snapshot["allowed_actions"] = [name for name in snapshot["allowed_actions"] if name != "add_agent"]
+            return snapshot
         """Bounded authoritative state supplied to the Director after every turn."""
 
         legal_ids = sorted(self.graph.nodes)
@@ -4772,6 +4353,7 @@ class GraphCanvas(UnifiedSubmissionMixin):
         if (
             len(legal_ids) >= self.graph.max_agents
             or self.topology_edits_frozen
+            or (nq_ledger is not None and not nq_ledger.remaining_search_calls)
             or (self.runtime_routes and self.config.max_rounds - self.round_index < 5)
         ):
             allowed_actions.remove("add_agent")
@@ -4823,7 +4405,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
             if self._uses_staged_environment_commit()
             else []
         )
-        if commit_ready_agents and self.state not in {CanvasState.FINISHED, CanvasState.FAILED}:
+        if (commit_ready_agents and not all(self.runtime.purchase_review_pending(key) for key in commit_ready_agents)
+                and self.state not in {CanvasState.FINISHED, CanvasState.FAILED}):
             # Preserve the staged transaction. The Director may select its
             # owner or explicitly remove a node proven unable to contribute to
             # any latched candidate; Canvas never prunes it as a side effect.
@@ -4888,6 +4471,8 @@ class GraphCanvas(UnifiedSubmissionMixin):
                 ]
         return {
             "canvas_version": self.graph.version,
+            **({"purchase_reviews": self.runtime.purchase_review_packets()} if self.runtime.purchase_review_packets() else {}),
+            **({"nq_search_budget": nq_ledger.budget_state()} if nq_ledger is not None else {}),
             "director_action_protocol_version": DIRECTOR_ACTION_PROTOCOL_VERSION,
             "output_contract_version": OUTPUT_CONTRACT_VERSION,
             "submission_contract_version": SUBMISSION_CONTRACT_VERSION,

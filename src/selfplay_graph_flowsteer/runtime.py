@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from .qa_result_contract import QA_RESULT_CONTRACT_VERSION, qa_artifact_schema, qa_public_context
+from .qa_public_task import QA_PUBLIC_TASK_VERSION
+from .qa_schema_repair import SCHEMA_REPAIR_INSTRUCTION, complete_payload, preserved_fields, restore_preserved_fields
+
 from .unified_contract import is_unified_node, is_task_result, result_instruction, trusted_resource_result, PROTOCOL, SUBMISSION_VERSION
 
 import copy
@@ -8,7 +12,9 @@ import json
 import re
 import time
 import unicodedata
+import uuid
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -18,28 +24,27 @@ from jsonschema.exceptions import SchemaError
 from .action_protocol import ActionCall, ActionSpec, action_spec_from_tool
 from .agent_tools import AgentTool
 from .artifact_protocol import check_artifact, summarize_worker_protocol
-from .backend_failures import classify_backend_failure
+from .backend_failures import BackendRequestError, classify_backend_failure
 from .config import canonical_dataset_name
 from .contracts import AgentArtifact, AgentNode, CodeArtifactRef, ExecutionReport, RelayPacket
 from .dataset_actions import DatasetActionRegistry
 from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
 from .graph import MultiAgentGraph
 from .healthbench_protocol import healthbench_answer_instruction
-from .hotpot_answer_contract import HOTPOT_RESULT_FIELDS, hotpot_output_instruction
-from .latency import (
-    RouteLatencyEstimate,
-    RouteLatencyTracker,
-    RouteTokenTracker,
+from .healthbench_artifact import (
+    VERSION as HEALTHBENCH_REPAIR_VERSION,
+    HealthBenchContextCapacityExceeded,
+    HealthBenchRepair,
+    current_input_binding,
+    input_binding_scope,
+    object_hash,
+    validate_preserved_artifact,
 )
-from .llm import (
-    ChatBackend,
-    LLMResponse,
-    RequestTokenCreditExceeded,
-    WorkerUsageDispatchStopped,
-    request_token_credit,
-    worker_finalization_request,
-)
-from .worker_usage_ledger import WorkerUsageLedger, worker_usage_scope
+from .hotpot_answer_contract import hotpot_output_instruction
+from .latency import RouteLatencyTracker, RouteTokenTracker
+from .llm import ChatBackend, LLMResponse, WorkerUsageDispatchStopped, capture_worker_request_events, worker_finalization_request
+from .worker_usage_ledger import WorkerUsageLedger, active_worker_usage, worker_usage_scope
+from .budget_policy import use_reported_usage
 from .output_contract import (
     OUTPUT_CONTRACT_VERSION,
     WORKER_OUTPUT_ROLE_VERSION,
@@ -47,7 +52,7 @@ from .output_contract import (
     selected_output_instruction,
     worker_output_role_changes_input,
 )
-from .nq_evidence import NQEvidenceContext, corpus_answer_instruction
+from .nq_evidence import NQEvidenceContext, NQSearchBudgetExhausted, corpus_answer_instruction
 from .qa_submission import is_short_qa_dataset
 from .submission_contract import SUBMISSION_CONTRACT_VERSION
 from .student_action_protocol import (
@@ -58,7 +63,7 @@ from .student_action_protocol import (
     decode_student_response,
 )
 from .swe_paths import normalize_swe_directory_path
-from .webshop_budget import execution_accounting, request_budget_quote
+from .webshop_budget import execution_accounting
 from .webshop_guidance import (
     MERGED_CHECKLIST_POLICY,
     MERGED_PAGE_CHECKLIST,
@@ -69,13 +74,21 @@ from .webshop_scheduling import SchedulingState, POLICY as WEBSHOP_SCHEDULING_PO
 from .webshop_identity import visible_product_asin
 from .webshop_navigation import annotate_navigation
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
+from .webshop_purchase_status import (
+    execution_status as webshop_execution_status,
+    grounded_packet as webshop_grounded_packet,
+    recovery_instruction as webshop_status_recovery_instruction,
+    response_conflict as webshop_response_conflict,
+    statement as webshop_status_statement,
+)
 from .webshop_profiles import section_memory_limit
 from .webshop_memory import WebShopMemory, POLICY as MEMORY_V2, JOURNAL_KEY as MEMORY_JOURNAL_KEY, GUIDANCE as MEMORY_GUIDANCE
 from .webshop_memory_projection import project_memory, action_decision_support as memory_action_support
+from .webshop_decision_memory import (WebShopDecisionMemory, POLICY as DECISION_MEMORY_POLICY,
+    GUIDANCE as DECISION_MEMORY_GUIDANCE, action_specs_with_decisions, validate_policy as validate_decision_policy)
 
 WORKER_BACKEND_FAILURE_SENTINEL = "WORKER_BACKEND_FAILURE"
 WORKER_PROTOCOL_FAILURE_SENTINEL = "WORKER_PROTOCOL_FAILURE"
-SWE_SHARED_TOKEN_BUDGET = "swe_shared_request_credit_v1"
 _SWE_MEMORY_MAX_ENTRIES = 8
 _SWE_MEMORY_MAX_CHARS = 18000
 _SWE_MEMORY_ENTRY_MAX_CHARS = 6000
@@ -257,6 +270,41 @@ class ActionBudgetLedger:
     text_protocol_repairs: dict[str, int] = field(default_factory=dict)
     purchase_reserve: PurchaseReservation = field(default_factory=PurchaseReservation)
     webshop_scheduling: SchedulingState = field(default_factory=SchedulingState)
+    purchase_review_holds: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def held(self, scope: str) -> int:
+        return sum(row["scope"] == scope for row in self.purchase_review_holds.values())
+
+    def defer_purchase(self, node, *, revision, scope=None, research=False, closure_session=None):
+        """Transfer only this unexecuted Buy charge into a single commit hold."""
+        if node.agent_id in self.purchase_review_holds:
+            raise ValueError("purchase proposal already holds a Buy action")
+        key = scope or node.agent_id
+        usage = self.usage[key]
+        phase = "closure_used" if closure_session else "revision_used" if revision else "initial_used"
+        if usage.total_used <= 0 or getattr(usage, phase) <= 0:
+            raise ValueError("staged Buy has no current action charge")
+        usage.total_used -= 1
+        setattr(usage, phase, getattr(usage, phase) - 1)
+        usage.research_used -= int(research)
+        if closure_session:
+            usage.closure_environment_remaining += 1
+        self.purchase_review_holds[node.agent_id] = {"scope": key, "phase": phase, "research": research,
+                                                    "closure": bool(closure_session)}
+
+    def release_purchase(self, agent_id):
+        self.purchase_review_holds.pop(agent_id, None)
+
+    def settle_purchase(self, agent_id):
+        hold = self.purchase_review_holds.pop(agent_id, None)
+        if hold is None:
+            return
+        usage = self.usage[hold["scope"]]
+        usage.total_used += 1
+        setattr(usage, hold["phase"], getattr(usage, hold["phase"]) + 1)
+        usage.research_used += int(hold["research"])
+        if hold["closure"]:
+            usage.closure_environment_remaining -= 1
     @staticmethod
     def shared_total(node: AgentNode) -> bool:
         return node.metadata.get("dataset_capability_policy", {}).get("action_budget_policy") == "shared_total_v1"
@@ -264,6 +312,7 @@ class ActionBudgetLedger:
     def reset(self) -> None:
         self.usage.clear()
         self.text_protocol_repairs.clear()
+        self.purchase_review_holds.clear()
         self.purchase_reserve = PurchaseReservation()
         self.webshop_scheduling = SchedulingState()
 
@@ -336,7 +385,8 @@ class ActionBudgetLedger:
             "closure_used": current.closure_used,
             "total_used": current.total_used,
             "total_limit": node.total_tool_budget,
-            "total_remaining": max(0, node.total_tool_budget - current.total_used),
+            "total_remaining": max(0, node.total_tool_budget - current.total_used - self.held(scope or node.agent_id)),
+            "pending_buy_held": self.held(scope or node.agent_id),
             "transferred": current.closure_session is not None,
             "closure_owner": current.closure_owner,
             "closure_active": current.closure_active,
@@ -360,6 +410,9 @@ class ActionBudgetLedger:
         current = self.usage.get(scope or node.agent_id, AgentActionUsage())
         phase_limit = node.revision_tool_budget if revision else node.initial_tool_budget
         phase_used = current.revision_used if revision else current.initial_used
+        held = self.held(scope or node.agent_id)
+        phase_held = sum(row["scope"] == (scope or node.agent_id) and row["phase"] == ("revision_used" if revision else "initial_used")
+                         for row in self.purchase_review_holds.values())
         if current.closure_session is not None:
             # Transferred capacity is no longer spendable by either old phase,
             # another owner, or another invocation of the final closure pass.
@@ -375,13 +428,13 @@ class ActionBudgetLedger:
                 )
                 if active
                 else 0,
-                "total": max(0, node.total_tool_budget - current.total_used),
+                "total": max(0, node.total_tool_budget - current.total_used - held),
                 "environment": current.closure_environment_remaining,
             }
         return {
-            "phase": (max(0, node.total_tool_budget - current.total_used)
-                      if self.shared_total(node) else max(0, phase_limit - phase_used)),
-            "total": max(0, node.total_tool_budget - current.total_used),
+            "phase": (max(0, node.total_tool_budget - current.total_used - held)
+                      if self.shared_total(node) else max(0, phase_limit - phase_used - phase_held)),
+            "total": max(0, node.total_tool_budget - current.total_used - held),
         }
 
     def consume(
@@ -394,7 +447,7 @@ class ActionBudgetLedger:
         research: bool = False,
     ) -> tuple[bool, str | None]:
         current = self.usage.setdefault(scope or node.agent_id, AgentActionUsage())
-        if current.total_used >= node.total_tool_budget:
+        if self.remaining(node, revision=revision, scope=scope, closure_session=closure_session)["total"] <= 0:
             return False, "total_action_budget_exhausted"
         if current.closure_session is not None:
             if (
@@ -407,11 +460,11 @@ class ActionBudgetLedger:
             current.closure_used += 1
             current.closure_environment_remaining -= 1
         elif revision:
-            if not self.shared_total(node) and current.revision_used >= node.revision_tool_budget:
+            if not self.shared_total(node) and self.remaining(node, revision=revision, scope=scope)["phase"] <= 0:
                 return False, "revision_action_budget_exhausted"
             current.revision_used += 1
         else:
-            if not self.shared_total(node) and current.initial_used >= node.initial_tool_budget:
+            if not self.shared_total(node) and self.remaining(node, revision=revision, scope=scope)["phase"] <= 0:
                 return False, "initial_action_budget_exhausted"
             current.initial_used += 1
         current.total_used += 1
@@ -439,6 +492,7 @@ class ModelAgentExecutor:
     nq_evidence_context: NQEvidenceContext | None = None
     webshop_worker_guidance_policy: str = "baseline"
     webshop_worker_memory_policy: str = "factual_memory_v1"
+    webshop_worker_decision_memory_policy: str = "off"
     webshop_worker_execution_policy: str = "graph_tools_v1"
     webshop_native_conversation_history: bool = False
     webshop_compatibility_profile: str = "current"
@@ -446,6 +500,8 @@ class ModelAgentExecutor:
     webshop_scheduling_policy: str = "off"
 
     def __post_init__(self) -> None:
+        validate_decision_policy(self.webshop_worker_decision_memory_policy,
+            self.webshop_worker_memory_policy, self.webshop_worker_execution_policy)
         section_memory_limit(self.webshop_compatibility_profile)
         if self.webshop_scheduling_policy not in {"off", WEBSHOP_SCHEDULING_POLICY}:
             raise ValueError("unknown webshop.scheduling_policy")
@@ -494,6 +550,8 @@ class ModelAgentExecutor:
             )
 
     def execute(self, **kwargs) -> AgentArtifact:
+        if active_worker_usage() is not None:
+            use_reported_usage(kwargs["node"])
         if ((self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES or self.webshop_scheduling_policy == WEBSHOP_SCHEDULING_POLICY)
                 and kwargs["node"].metadata.get("action_adapter") == "webshop"):
             if not self.budget_ledger.shared_total(kwargs["node"]):
@@ -519,8 +577,10 @@ class ModelAgentExecutor:
         usage = self.budget_ledger.usage.get(scope, AgentActionUsage())
         used_before = usage.total_used
         manager = self.budget_ledger.webshop_scheduling
+        effective_remaining = max(0, node.total_tool_budget - usage.total_used - self.budget_ledger.held(scope)
+            + int(bool(state.get("purchase_review_pending"))))
         reason = manager.blocker(node, state, packets,
-            remaining=max(0, node.total_tool_budget - usage.total_used), research_used=usage.research_used)
+            remaining=effective_remaining, research_used=usage.research_used)
         if reason:
             return webshop_runtime_status(node, state, reason,
                 budget=self.budget_ledger.webshop_audit(node, scope=scope),
@@ -544,7 +604,7 @@ class ModelAgentExecutor:
             artifact.webshop_progress.update(state="typed_policy_failure", stop_reason=reason,
                 policy_failure={"code":reason,"runtime_terminal":True,"attribution":"model_policy"})
         artifact.webshop_progress["scheduling"] = manager.snapshot(total=node.total_tool_budget,
-            remaining=max(0,node.total_tool_budget-usage.total_used),research_used=usage.research_used)
+            remaining=max(0,node.total_tool_budget-usage.total_used-self.budget_ledger.held(scope)),research_used=usage.research_used)
         return artifact
 
     def _execute_reserved(
@@ -666,6 +726,17 @@ class ModelAgentExecutor:
                 )
             )
         )
+        if action_adapter == "webshop" and any(
+                getattr(lifecycle, "purchase_review_enabled", False)
+                and lifecycle.result_for(node.agent_id).get("purchase_review_pending")
+                for lifecycle in lifecycle_targets.values()):
+            hold = self.budget_ledger.purchase_review_holds.get(node.agent_id)
+            if hold is not None and hold["scope"] == (self.budget_scope or node.agent_id):
+                after_release = dict(remaining_before_lifecycle or {})
+                after_release["total"] = after_release.get("total", 0) + 1
+                if self.budget_ledger.shared_total(node) or hold["phase"] == ("revision_used" if revision else "initial_used"):
+                    after_release["phase"] = after_release.get("phase", 0) + 1
+                skip_webshop_lifecycle = after_release.get("phase", 0) <= 0 or after_release["total"] <= 0
         initial_environment_state: dict[str, Any] = {}
         webshop_transaction_journal: dict[str, Any] | None = None
         started_lifecycles: list[object] = []
@@ -716,20 +787,28 @@ class ModelAgentExecutor:
                 # WebShop lifecycle.  It survives same-owner revisions but is
                 # never exposed as part of the public environment state.
                 webshop_transaction_journal = raw_webshop_journal
-            artifact = self._execute_active(
-                task=task,
-                node=node,
-                upstream=upstream,
-                peers=peers,
-                revision=revision,
-                seed=seed,
-                prior=prior,
-                initial_environment_state=initial_environment_state,
-                effective_allowed_tools=allowed_tools,
-                stateless_environment_owner=stateless_environment_owner,
-                webshop_transaction_journal=webshop_transaction_journal,
-                closure_session=closure_session,
-            )
+            # QA content recovery belongs to Runtime, including the first call.
+            # The transport's generic length retry can otherwise invent an answer
+            # before the schema-preservation checks ever see the truncated text.
+            qa_contract = node.metadata.get("system_managed_contract", {})
+            qa_managed = canonical_dataset_name(
+                qa_contract.get("dataset", "") if isinstance(qa_contract, dict) else ""
+            ) in {"hotpotqa", "musique"}
+            with worker_finalization_request() if qa_managed else nullcontext():
+                artifact = self._execute_active(
+                    task=task,
+                    node=node,
+                    upstream=upstream,
+                    peers=peers,
+                    revision=revision,
+                    seed=seed,
+                    prior=prior,
+                    initial_environment_state=initial_environment_state,
+                    effective_allowed_tools=allowed_tools,
+                    stateless_environment_owner=stateless_environment_owner,
+                    webshop_transaction_journal=webshop_transaction_journal,
+                    closure_session=closure_session,
+                )
         finally:
             if closure_session is not None:
                 self.budget_ledger.finish_webshop_closure(node, scope=self.budget_scope)
@@ -789,9 +868,21 @@ class ModelAgentExecutor:
             allowed_tools = {name: tool for name, tool in allowed_tools.items() if name == "search"}
         action_specs = [action_spec_from_tool(tool) for tool in allowed_tools.values()]
         action_adapter = str(node.metadata.get("action_adapter", ""))
+        nq_native = (self.nq_evidence_context is not None
+                     and getattr(getattr(self.backend, "config", None), "request_profile", None) == "qwen")
         purchase_reserve = (self.budget_ledger.purchase_reserve
             if action_adapter == "webshop" and self.webshop_purchase_budget_policy in PURCHASE_RESERVE_POLICIES else None)
         scheduling_enabled = action_adapter == "webshop" and self.webshop_scheduling_policy == WEBSHOP_SCHEDULING_POLICY
+        review_lifecycle = next((getattr(tool, "lifecycle", None) for tool in allowed_tools.values()
+                                 if getattr(getattr(tool, "lifecycle", None), "purchase_review_enabled", False)), None)
+        comparison_enabled = any(getattr(getattr(tool, "lifecycle", None), "candidate_comparison_enabled", False)
+                                 for tool in allowed_tools.values())
+        if review_lifecycle is not None and initial_environment_state.get("purchase_review_resumed"):
+            self.budget_ledger.release_purchase(node.agent_id)
+            reservation = self.budget_ledger.purchase_reserve
+            if reservation.plan and reservation.plan["owner"] == node.agent_id:
+                reservation.event("released", owner=node.agent_id, reason="director_continues_purchase_review")
+                reservation.plan = None
         purchase_binding = None
         if purchase_reserve is not None:
             for tool in allowed_tools.values():
@@ -828,8 +919,15 @@ class ModelAgentExecutor:
                     break
             if purchase_binding:
                 session = json.dumps(purchase_binding, sort_keys=True)
-            webshop_memory = WebShopMemory(webshop_journal, owner=node.agent_id, task=task, session=session)
+            webshop_memory = WebShopMemory(webshop_journal, owner=node.agent_id, task=task, session=session,
+                                          comparison_enabled=comparison_enabled)
             webshop_memory.observe(initial_environment_state)
+        decision_memory = None
+        decision_execution_id = uuid.uuid4().hex
+        if webshop_memory is not None and self.webshop_worker_decision_memory_policy == DECISION_MEMORY_POLICY:
+            decision_memory = WebShopDecisionMemory(webshop_journal, memory=webshop_memory,
+                assigned_task=node.prompt, state=initial_environment_state)
+            action_specs = action_specs_with_decisions(action_specs)
         webshop_journal_restored = bool(webshop_journal.get("schema_version"))
         webshop_product_inspections = _webshop_restore_keyed_records(
             webshop_journal.get("product_inspections"), key="asin"
@@ -1015,6 +1113,7 @@ class ModelAgentExecutor:
         ) and bool(node.metadata.get("_runtime_is_output_agent", False)))
         public_task_visible = (
             bool(action_adapter) or short_answer_qa or selected_output_agent
+            or canonical_dataset_name(contract_dataset) in {"hotpotqa", "musique"}
         )
         if public_task_visible:
             # Dataset adapters and short QA follow the guide's (q, p_v, visible
@@ -1022,6 +1121,12 @@ class ModelAgentExecutor:
             # Director's bounded responsibility p_v. The caller renders q from the
             # trusted public TaskSpec; verifier-only payloads are not part of it.
             context["public_task_context"] = task
+        if canonical_dataset_name(contract_dataset) in {"hotpotqa", "musique"}:
+            context.update(qa_public_context(
+                task, is_output_agent=selected_output_agent,
+                public_qa_task=node.metadata.get("public_qa_task"),
+            ))
+            context["artifact_schema"] = qa_artifact_schema(is_output_agent=selected_output_agent)
         if self.nq_evidence_context is not None:
             context["public_task_context"] = task
             context["corpus_evidence"] = self.nq_evidence_context.begin_agent(
@@ -1126,8 +1231,20 @@ class ModelAgentExecutor:
                 "task. Use only the assigned_task plus visible upstream, prior, peer, and "
                 "Action evidence. "
             )
+        if canonical_dataset_name(contract_dataset) in {"hotpotqa", "musique"}:
+            instruction += (
+                "For QA result_scope=task_result, original_question (or its public_task_context "
+                "source) defines the final target even when assigned_task is narrower. "
+                "For result_scope=subtask, resolve the assigned local responsibility. "
+            )
         if webshop_memory is not None:
             instruction += MEMORY_GUIDANCE
+        if decision_memory is not None:
+            instruction += DECISION_MEMORY_GUIDANCE
+            context["action_environment"]["decision_memory"] = decision_memory.project(initial_environment_state)
+        if review_lifecycle is not None:
+            from .webshop_purchase_review import GUIDANCE as review_guidance
+            instruction += review_guidance
         if is_unified_node(node):
             instruction += result_instruction(node, contract_dataset or action_adapter)
         instruction += _worker_output_instruction(
@@ -1138,6 +1255,7 @@ class ModelAgentExecutor:
             is_output_agent=selected_output_agent,
             webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
             local_environment_result=is_unified_node(node) and not is_task_result(node),
+            native_tools_only=nq_native,
         )
         if self.nq_evidence_context is not None:
             instruction += corpus_answer_instruction()
@@ -1167,41 +1285,17 @@ class ModelAgentExecutor:
         prompt_projection_stats: list[dict[str, int]] = []
         response = None
         token_in = token_out = 0
-        qa_credit = node.metadata.get("_runtime_budget_kind") == "short_qa_request_credit_v1"
-        swe_credit = node.metadata.get("_runtime_budget_kind") in {
-            SWE_SHARED_TOKEN_BUDGET, "swe_primary_request_credit_v1",
-        }
-        unified_credit = node.metadata.get("_runtime_budget_kind") == "unified_request_credit_v1"
-        submission_credit = qa_credit or swe_credit or unified_credit
-        credit_label = "worker" if unified_credit else "swe" if swe_credit else "qa"
-        full_graph_credit = (
-            node.metadata.get("_runtime_budget_kind") == "full_graph_request_credit_v1"
+        usage_scope = active_worker_usage()
+        reported_healthbench = (
+            usage_scope is not None and usage_scope[0].dataset == "healthbench_professional"
         )
-        execution_credit = (
-            int(node.metadata["_runtime_token_credit"])
-            if (action_adapter == "webshop" or submission_credit or full_graph_credit)
-            and "_runtime_token_credit" in node.metadata
-            and (
-                action_adapter != "webshop"
-                or node.metadata.get("_runtime_webshop_request_admission_enabled", True)
-            )
-            else None
-        )
+        healthbench_repair = HealthBenchRepair({
+            "question_attempt_id": usage_scope[0].question_attempt_id,
+            "agent_id": node.agent_id, "execution_id": usage_scope[2],
+            "input_sha256": object_hash(messages),
+            "runtime_input_sha256": current_input_binding(),
+        }) if reported_healthbench else None
 
-        def closure_reserve() -> int | None:
-            # Once the Worker has staged a purchase, only its report remains.
-            # A selected output owner also consumes the released closure account.
-            state = context.get("action_environment", {}).get("state") or {}
-            if (
-                action_adapter != "webshop"
-                or execution_credit is None
-                or node.metadata.get("_runtime_budget_phase") != "exploration"
-                or any(
-                    state.get(key) for key in ("commit_pending", "purchased", "done", "terminal")
-                )
-            ):
-                return None
-            return int(node.metadata.get("_runtime_reserved_closure_tokens", 0))
 
         tool_summary: list[str] = []
         react_trace: list[dict[str, Any]] = []
@@ -1347,6 +1441,8 @@ class ModelAgentExecutor:
 
             if webshop_memory is not None:
                 webshop_journal[MEMORY_JOURNAL_KEY] = webshop_memory.persist()
+            if decision_memory is not None:
+                webshop_journal[DECISION_MEMORY_POLICY] = decision_memory.persist()
 
         force_finalize = False
         qa_previous_response = ""
@@ -1373,6 +1469,9 @@ class ModelAgentExecutor:
         student_recovery_margin = 0 if action_adapter == "webshop" else STUDENT_EXECUTION_REPAIRS
         for interaction_round in range(max_interaction_rounds + swe_recovery_margin + student_recovery_margin):
             self._check_deadline()
+            if self.nq_evidence_context is not None and not self.nq_evidence_context.remaining_search_calls:
+                force_finalize = True
+                finalization_reason = "nq_task_search_budget_exhausted"
             if scheduling_enabled and not is_task_result(node) and not force_finalize:
                 usage = self.budget_ledger.usage.get(self.budget_scope or node.agent_id, AgentActionUsage())
                 if usage.research_used >= self.budget_ledger.webshop_scheduling.research_limit(node.total_tool_budget):
@@ -1392,7 +1491,7 @@ class ModelAgentExecutor:
             if (force_finalize and swe_commit_required and swe_workspace_changed
                     and not swe_test_after_latest_edit and "swe_test" in allowed_tools
                     and swe_test_recovery_count < 2
-                    and (execution_credit is None or token_in + token_out < execution_credit)):
+                    and (True)):
                 remaining = (self.budget_ledger.remaining(
                     node, revision=revision, scope=self.budget_scope, closure_session=closure_session,
                 ) if node.operation_policy_configured else
@@ -1411,8 +1510,7 @@ class ModelAgentExecutor:
                         "stage": "swe_post_edit_test_recovery", "attempt": swe_test_recovery_count,
                         "trigger": finalization_reason, "workspace_version": swe_latest_workspace_version,
                         "remaining_actions": min(remaining["phase"], remaining["total"]),
-                        "remaining_tokens": (execution_credit - token_in - token_out
-                                             if execution_credit is not None else None),
+                        "remaining_tokens": (None),
                     })
             if force_finalize:
                 response, recovery_token_in, recovery_token_out, recovery_diagnostics = (
@@ -1424,19 +1522,11 @@ class ModelAgentExecutor:
                             context,
                             action_adapter=action_adapter,
                             stats=prompt_projection_stats,
-                            alfworld_worker_guidance_policy=(self.alfworld_worker_guidance_policy),
+                            alfworld_worker_guidance_policy=self.alfworld_worker_guidance_policy,
                         ),
                         backend_request_events=backend_request_events,
-                        token_credit=(
-                            execution_credit - token_in - token_out
-                            if execution_credit is not None
-                            else None
-                        ),
-                        cap_output=submission_credit or full_graph_credit,
-                        abort_on_credit_exhaustion=full_graph_credit,
-                        credit_label=credit_label,
                         prior_response=qa_previous_response,
-                        pre_reserved_closure_tokens=closure_reserve(),
+                        healthbench_repair=healthbench_repair,
                         short_answer_qa=short_answer_qa,
                         is_output_agent=selected_output_agent,
                         dataset=contract_dataset,
@@ -1464,61 +1554,13 @@ class ModelAgentExecutor:
                         "last_error_code": correction["last_error_code"],
                         "no_progress_streak": webshop_semantic_no_progress_streak})
             try:
-                request_credit = (
-                    execution_credit - token_in - token_out
-                    if execution_credit is not None
-                    else None
-                )
-                if (qa_credit or unified_credit) and request_credit is not None:
-                    # This is the cost of a serialized compact submission, not
-                    # just its output tokens. The account is released to the
-                    # same Worker on finalization; no Canvas output is chosen.
-                    recovery_messages = _finalization_recovery_messages(
-                        instruction=node.prompt,
-                        react_trace=react_trace,
-                        previous_attempt_issue=f"{credit_label}_request_token_credit_exhausted",
-                        visible_context=_action_context_for_prompt(
-                            context,
-                            action_adapter=action_adapter,
-                            alfworld_worker_guidance_policy=self.alfworld_worker_guidance_policy,
-                        ),
-                        short_answer_qa=short_answer_qa,
-                        is_output_agent=selected_output_agent,
-                        dataset=contract_dataset,
-                    )
-                    reserve_quote = request_budget_quote(
-                        {
-                            "messages": recovery_messages,
-                            "max_tokens": max(
-                                4096,
-                                int(
-                                    node.metadata.get(
-                                        "_runtime_finalization_output_reserve",
-                                        0,
-                                    )
-                                ),
-                            ),
-                        }
-                    )
-                    reserve = min(max(0, request_credit), reserve_quote["required_tokens"])
-                    protocol_diagnostics.append(
-                        {
-                            "stage": f"{credit_label}_submission_reserve",
-                            "reserved_tokens": reserve,
-                            "execution_credit": execution_credit,
-                            "request_token_budget": reserve_quote,
-                            "reserve_scope": "current_compact_submission_request",
-                        }
-                    )
-                    request_credit -= reserve
-                response = self._generate_with_credit(
+                response = self._generate(
                     request_messages,
-                    credit_limit=request_credit,
-                    pre_reserved_closure_tokens=closure_reserve(),
-                    cap_output=submission_credit or full_graph_credit,
                     role=self.role,
                     actions=request_action_specs,
-                    **({"max_tokens": 2048, "enable_thinking": False} if test_recovery_active else {}),
+                    **{"max_tokens": 2048, "enable_thinking": False}
+                    if test_recovery_active
+                    else {},
                 )
             except WorkerUsageDispatchStopped as stopped:
                 if action_adapter != "alfworld":
@@ -1528,52 +1570,6 @@ class ModelAgentExecutor:
                     "runtime_generated": True, "reason": stopped.reason, "no_request_dispatched": True})
                 finalization_reason = stopped.reason
                 break
-            except RequestTokenCreditExceeded as exc:
-                if full_graph_credit:
-                    # No completed final outcome: cancel this probe, never
-                    # synthesize a WebShop response or train a half probe.
-                    raise
-                token_in += exc.credit.token_in
-                token_out += exc.credit.token_out
-                backend_request_events.extend(exc.request_events)
-                if submission_credit:
-                    if test_recovery_active:
-                        # The compact request itself cannot fit; retrying it
-                        # without new evidence or credit cannot help.
-                        swe_test_recovery_count = 2
-                    # No answer is selected from history. Let the same Worker
-                    # attempt the existing bounded compact finalization path,
-                    # subject to exactly the same remaining token credit.
-                    protocol_diagnostics.append(
-                        {
-                            "stage": f"{credit_label}_request_token_credit_exhausted",
-                            "accepted": False,
-                            "rejection_reason": "request_token_credit_exhausted",
-                            "required_request_tokens": exc.required,
-                            "execution_credit": execution_credit,
-                            "spent_tokens": token_in + token_out,
-                            "no_request_dispatched": True,
-                            "request_token_budget": exc.budget,
-                        }
-                    )
-                    force_finalize = True
-                    finalization_reason = f"{credit_label}_request_token_credit_exhausted"
-                    response = None
-                    continue
-                response = _webshop_credit_exhausted_response(context)
-                protocol_diagnostics.append(
-                    {
-                        "stage": "webshop_request_token_credit_exhausted",
-                        "accepted": True,
-                        "required_request_tokens": exc.required,
-                        "execution_credit": execution_credit,
-                        "spent_tokens": token_in + token_out,
-                        "no_request_dispatched": True,
-                        "request_token_budget": exc.budget,
-                    }
-                )
-                finalization_reason = "webshop_request_token_credit_exhausted"
-                break
             backend_request_events.extend(_response_backend_request_events(response))
             self._check_deadline()
             if self.rollout_deadline is not None:
@@ -1581,9 +1577,11 @@ class ModelAgentExecutor:
             token_in += response.token_in
             token_out += response.token_out
             native_calling = bool(response.action_calls)
-            if (not native_calling and action_adapter != "webshop"
+            if (not native_calling and action_adapter != "webshop" and not nq_native
                     and response.metadata.get("text_action_protocol") == STUDENT_ACTION_PROTOCOL):
-                decoded = decode_student_response(response.text)
+                decoded = decode_student_response(
+                    response.text, nq_corpus=self.nq_evidence_context is not None,
+                )
                 audit = _protocol_response_diagnostic(
                     response, stage="student_text_action_decode", rejection_reason=decoded.reason,
                 )
@@ -1644,7 +1642,29 @@ class ModelAgentExecutor:
                 response = copy.copy(response)
                 response.text = decoded.text
                 response.assistant_message = {"role": "assistant", "content": decoded.text}
-            calls = response.action_calls or _text_action_calls(response.text)
+            # Native-only datasets never promote response text to a tool call.
+            if (nq_native and not native_calling
+                    and re.search(r'<tool_call>|"(?:action_calls?|tool_calls?)"\s*:', response.text)):
+                repaired = self.nq_evidence_context.claim_repair()
+                protocol_diagnostics.append({
+                    "stage": "nq_native_tool_protocol", "accepted": False,
+                    "rejection_reason": "native_tool_call_required", "actions_executed": 0,
+                    "local_recovery_exhausted": not repaired, "raw_response": response.text,
+                })
+                if not repaired:
+                    response = _protocol_failure_response(response)
+                    break
+                messages.extend([
+                    {"role": "assistant", "content": response.text},
+                    {"role": "user", "content": "No tool was executed. Use the native search function through the API tool-call channel, wait for its real result, then return the final evidence-backed JSON. Do not print action_calls JSON or tool-call XML."},
+                ])
+                max_interaction_rounds += 1
+                continue
+            calls = (response.action_calls if action_adapter == "webshop" or nq_native
+                     else response.action_calls or _text_action_calls(response.text))
+            webshop_text_action = action_adapter == "webshop" and not native_calling and bool(
+                re.search(r'"(?:action_calls?|tool_calls?)"\s*:', response.text)
+            )
             if not native_calling and calls and _recover_text_action_envelope(response.text):
                 protocol_diagnostics.append({
                     "stage": "text_action_envelope_recovered",
@@ -1654,9 +1674,11 @@ class ModelAgentExecutor:
                     "action_count": len(calls),
                 })
             if not calls:
+                purchase_status_conflicts = (webshop_response_conflict(response.text,
+                    context["action_environment"].get("state", {})) if action_adapter == "webshop" else [])
                 if (purchase_reserve is not None and purchase_reserve.policy == PURCHASE_FLEXIBLE_POLICY
                         and scheduling_enabled and is_task_result(node) and not force_finalize
-                        and not environment_terminal
+                        and not environment_terminal and not webshop_text_action
                         and not any(context["action_environment"].get("state", {}).get(k)
                                     for k in ("commit_pending", "purchased", "done"))
                         and context["action_environment"]["remaining"]["total"] > 0
@@ -1665,14 +1687,20 @@ class ModelAgentExecutor:
                     budget = context["action_environment"]["remaining"]["total"]
                     protocol_diagnostics.append(_protocol_response_diagnostic(response,
                         stage="webshop_completion_scope_reminder", rejection_reason="purchase_not_prepared"))
-                    messages.extend([{"role":"assistant","content":response.text},
+                    # Rebuild from trusted facts; never feed an unsupported
+                    # completion claim back as an accepted assistant history.
+                    messages = [{"role":"system","content":instruction},
+                        {"role":"user","content":json.dumps(_webshop_context_for_prompt(context), ensure_ascii=False)},
                         {"role":"user","content":(
+                            webshop_status_recovery_instruction(context["action_environment"].get("state", {}),
+                                claim_conflict=bool(purchase_status_conflicts)) + " " +
                             f"Your current scope is task_result, with {budget} shared environment actions still available. "
                             "The old local research limit does not prevent further shopping. Complete the original task: "
                             "use a useful affordable action to improve the candidate or select/Buy the best observed relevant candidate. "
                             "completion_plan is optional; truthful purchase_evidence is required for Buy. "
+                            "Use the provided native tools for actions; actions written in response text are not executed. "
                             "A report alone does not purchase. If no meaningful affordable action or acceptable candidate exists, "
-                            "return an honest final report with that specific reason. This is the only scope reminder for this question.") }])
+                            "return an honest final report with that specific reason. This is the only scope reminder for this question.") }]
                     max_interaction_rounds += 1
                     continue
                 if self.nq_evidence_context is not None and selected_output_agent:
@@ -1804,7 +1832,30 @@ class ModelAgentExecutor:
                             )
                         continue
                 rejection_reason = _final_artifact_rejection_reason(response.text)
-                if qa_credit and response.metadata.get("finish_reason") in {"length", "MAX_TOKENS"}:
+                if healthbench_repair is not None:
+                    healthbench_repair.consume(
+                        response.text, response.metadata, kind="initial", model_attempt=0,
+                    )
+                    rejection_reason = healthbench_repair.issue
+                    if healthbench_repair.accepted:
+                        protocol_diagnostics.append(_protocol_response_diagnostic(
+                            response, stage="healthbench_artifact_acceptance", rejection_reason=None,
+                        ))
+                        protocol_diagnostics[-1].update(
+                            local_normalization=bool(healthbench_repair.changed_fields),
+                            changed_fields=healthbench_repair.changed_fields,
+                            no_repair_request_dispatched=True,
+                        )
+                if canonical_dataset_name(contract_dataset) in {"hotpotqa", "musique"}:
+                    if complete_payload(response.text) is None:
+                        rejection_reason = "qa_ambiguous_or_incomplete_json"
+                    elif "answer" not in preserved_fields(response.text):
+                        rejection_reason = "qa_missing_string_answer"
+                if webshop_text_action:
+                    rejection_reason = "native_tool_call_required"
+                elif purchase_status_conflicts:
+                    rejection_reason = "purchase_status_conflict"
+                if (short_answer_qa or reported_healthbench) and response.metadata.get("finish_reason") in {"length", "MAX_TOKENS"}:
                     rejection_reason = "truncated_final_response"
                 if (
                     action_adapter == "webshop"
@@ -1813,7 +1864,7 @@ class ModelAgentExecutor:
                     and not webshop_state.get("commit_pending", False)
                     and not webshop_state.get("purchased", False)
                     and webshop_protocol_recoveries == 0
-                    and rejection_reason in {"missing_final_json", "empty_answer"}
+                    and rejection_reason in {"missing_final_json", "empty_answer", "native_tool_call_required", "purchase_status_conflict"}
                 ):
                     # A malformed/interrupted response does not close a live episode.
                     # Refresh trusted current state instead of replaying the failed analysis.
@@ -1836,17 +1887,18 @@ class ModelAgentExecutor:
                         },
                         {
                             "role": "user",
-                            "content": (
-                                "The previous response was incomplete or malformed. The Action "
-                                "phase is still open in the same session. Use the current public "
-                                "state above, not an invented state. Choose a legal Action freely "
-                                "or return a valid final JSON if you choose to stop. This is the "
+                            "content": webshop_status_recovery_instruction(context["action_environment"].get("state", {})) if purchase_status_conflicts else (
+                                "No native tool call was received; no action from the previous response was executed. "
+                                "The Action phase is still open in the same session. Use the current public "
+                                "state above and call a provided native tool through the API tool-call channel. "
+                                "Do not write action_calls, tool_calls, or tool invocations in response text. "
+                                "Choose a legal tool freely or return a valid final report if you choose to stop. This is the "
                                 "only protocol repair for this execution; do not repeat analysis."
                             ),
                         },
                     ]
                     continue
-                if node.operation_policy_configured and rejection_reason is not None:
+                if (node.operation_policy_configured or reported_healthbench or canonical_dataset_name(contract_dataset) in {"hotpotqa", "musique"}) and rejection_reason is not None:
                     protocol_diagnostics.append(
                         _protocol_response_diagnostic(
                             response,
@@ -1855,7 +1907,7 @@ class ModelAgentExecutor:
                         )
                     )
                     force_finalize = True
-                    if qa_credit:
+                    if short_answer_qa or reported_healthbench:
                         qa_previous_response = response.text
                     finalization_reason = ("protocol_recovery_exhausted"
                         if action_adapter == "webshop" and webshop_protocol_recoveries
@@ -1865,6 +1917,21 @@ class ModelAgentExecutor:
             alfworld_final_rejection_count = 0
             request_tools = ({"swe_test": allowed_tools["swe_test"]}
                              if test_recovery_active else allowed_tools)
+            decision_updates = {}
+            original_calls = list(calls)
+            if decision_memory is not None:
+                # Split optional metadata BEFORE generic schema validation. A bad note
+                # must not block a valid core Action or consume protocol repair credit.
+                cleaned_calls = []
+                for index, call in enumerate(calls):
+                    decoded, _ = _decode_action_arguments(call.arguments)
+                    if (str(call.name).strip() in {"webshop_search", "webshop_click"}
+                            and isinstance(decoded, dict) and "decision_update" in decoded):
+                        decoded = copy.deepcopy(decoded)
+                        decision_updates[index] = decoded.pop("decision_update")
+                        call = ActionCall(call.call_id, call.name, decoded)
+                    cleaned_calls.append(call)
+                calls = cleaned_calls
             prepared = [_prepare_action_call(call, request_tools, request_action_specs) for call in calls]
             stateful_batch = len(calls) > 1 and any(
                 bool(getattr(allowed_tools.get(str(call.name).strip()), "stateful", False))
@@ -1874,6 +1941,13 @@ class ModelAgentExecutor:
 
             call_observations: list[tuple[ActionCall, dict[str, Any]]] = []
             for batch_index, (call, arguments, error, failure_reason) in enumerate(prepared):
+                decision_event_key = f"{decision_execution_id}:{interaction_round}:{batch_index}"
+                decision_diagnostic = None
+                if batch_index in decision_updates:
+                    decision_diagnostic = decision_memory.accept(decision_updates[batch_index],
+                        state=context["action_environment"].get("state") or {},
+                        event_key=decision_event_key, action_name=str(call.name).strip(), call_id=call.call_id,
+                        eligible=error is None and not (stateful_batch and (selected_index is not None or force_finalize)))
                 summary = None
                 if error is not None:
                     observation = error
@@ -2152,6 +2226,17 @@ class ModelAgentExecutor:
                                             if isinstance(observation["output"], dict)
                                             else {}
                                         )
+                                        if review_lifecycle is not None and webshop_state.get("purchase_review_pending"):
+                                            from .webshop_purchase_review import comparison_view, review_packet
+                                            self.budget_ledger.defer_purchase(node, revision=revision, scope=self.budget_scope,
+                                                research=scheduling_enabled and not is_task_result(node), closure_session=closure_session)
+                                            packet = review_packet(task=task, state=webshop_state,
+                                                evidence=webshop_state["purchase_evidence_status"]["evidence"],
+                                                comparison=comparison_view(webshop_memory, webshop_state))
+                                            packet["director_assigned_task"] = node.prompt
+                                            packet["action_budget"] = self.budget_ledger.webshop_audit(node, scope=self.budget_scope)
+                                            webshop_state["purchase_review"] = packet
+                                            review_lifecycle.set_purchase_review_packet(node.agent_id, packet)
                                         if purchase_reserve is not None:
                                             purchase_reserve.observe(node.agent_id, purchase_binding, webshop_state)
                                         if closure_session is not None:
@@ -2399,6 +2484,12 @@ class ModelAgentExecutor:
                                             else:
                                                 swe_seen_evidence_signatures.add(evidence_signature)
                                                 swe_semantic_no_progress_streak = 0
+                                except NQSearchBudgetExhausted as exc:
+                                    # Preserve the observed rejection without attributing
+                                    # a normal ledger stop to the retrieval service.
+                                    observation = _action_error(action_name, exc.code, str(exc))
+                                    force_finalize = True
+                                    finalization_reason = exc.code
                                 except Exception as exc:  # noqa: BLE001 - errors are observations
                                     error_message = _safe_tool_error(exc)
                                     observation = _action_error(
@@ -2469,6 +2560,18 @@ class ModelAgentExecutor:
                             summary = f"{action_name}: {json.dumps(arguments, ensure_ascii=False)}"
                 if summary is not None:
                     tool_summary.append(summary)
+                if decision_memory is not None:
+                    decision_memory.receipt(state=webshop_state, observation=observation,
+                        action_name=str(call.name).strip(), call_id=call.call_id, event_key=decision_event_key)
+                    context["action_environment"]["decision_memory"] = decision_memory.project(webshop_state)
+                    if decision_diagnostic is not None:
+                        observation["decision_metadata"] = decision_diagnostic
+                    if review_lifecycle is not None and webshop_state.get("purchase_review_pending"):
+                        packet = webshop_state.get("purchase_review")
+                        if isinstance(packet, dict):
+                            packet["decision_memory"] = decision_memory.project(webshop_state)
+                            review_lifecycle.set_purchase_review_packet(node.agent_id, packet)
+                    sync_webshop_journal()
                 remaining_budget = (
                     self.budget_ledger.remaining(
                         node,
@@ -2490,10 +2593,16 @@ class ModelAgentExecutor:
                     "observation": observation,
                     "remaining_budget": remaining_budget,
                 }
+                if batch_index in decision_updates:
+                    trace_entry["action_with_metadata"] = original_calls[batch_index].to_dict()
                 if len(calls) > 1:
                     trace_entry["batch_index"] = batch_index
                     trace_entry["batch_size"] = len(calls)
                 react_trace.append(trace_entry)
+                if webshop_memory is not None and observation.get("status") != "ok":
+                    webshop_memory.record_failure(action=str(call.name).strip(), arguments=call.arguments,
+                        error=observation.get("error") or {})
+                    sync_webshop_journal()
                 call_observations.append((call, observation))
             message_call_observations = call_observations
             if (
@@ -2527,6 +2636,13 @@ class ModelAgentExecutor:
                     for call, observation in call_observations
                 ]
                 messages = [messages[0], {"role": "user", "content": json.dumps(context, ensure_ascii=False)}]
+                if nq_native and native_calling:
+                    # Preserve the latest provider call IDs and actual tool
+                    # responses alongside the bounded accumulated evidence.
+                    _append_action_observations(
+                        messages, response=response, call_observations=message_call_observations,
+                        native_calling=True,
+                    )
             if action_adapter in {"alfworld", "webshop"} and call_observations:
                 # Stateful environment IDs are scoped to the latest observation.
                 # Retain that state as the sole action context instead of
@@ -2683,19 +2799,11 @@ class ModelAgentExecutor:
                     visible_context=_action_context_for_prompt(
                         context,
                         action_adapter=action_adapter,
-                        alfworld_worker_guidance_policy=(self.alfworld_worker_guidance_policy),
+                        alfworld_worker_guidance_policy=self.alfworld_worker_guidance_policy,
                     ),
                     backend_request_events=backend_request_events,
-                    token_credit=(
-                        execution_credit - token_in - token_out
-                        if execution_credit is not None
-                        else None
-                    ),
-                    cap_output=submission_credit or full_graph_credit,
-                    abort_on_credit_exhaustion=full_graph_credit,
-                    credit_label=credit_label,
                     prior_response=qa_previous_response,
-                    pre_reserved_closure_tokens=closure_reserve(),
+                    healthbench_repair=healthbench_repair,
                     short_answer_qa=short_answer_qa,
                     is_output_agent=selected_output_agent,
                     dataset=contract_dataset,
@@ -2705,11 +2813,50 @@ class ModelAgentExecutor:
             token_out += recovery_token_out
             protocol_diagnostics.extend(recovery_diagnostics)
         assert response is not None
+        nq_selection_audit = None
+        if (self.nq_evidence_context is not None and selected_output_agent
+                and self.nq_evidence_context.answer_selection_enabled):
+            from .nq_answer_selection import apply_selection, selection_messages
+
+            evidence = self.nq_evidence_context.public_context(node.agent_id)
+            if evidence["documents"]:
+                try:
+                    with worker_finalization_request():
+                        checked = self._generate(
+                            selection_messages(task, evidence, response.text),
+                            role=self.role,
+                            actions=(),
+                            max_tokens=2048,
+                            enable_thinking=False,
+                        )
+                    token_in += checked.token_in
+                    token_out += checked.token_out
+                    backend_request_events.extend(_response_backend_request_events(checked))
+                    self._check_deadline()
+                    selected_text, nq_selection_audit = apply_selection(
+                        task, checked.text, response.text,
+                        ledger=self.nq_evidence_context, agent_id=node.agent_id,
+                    )
+                    nq_selection_audit["raw_response"] = checked.text
+                    nq_selection_audit["previous_response"] = response.text
+                    if nq_selection_audit["accepted"]:
+                        response = copy.copy(response)
+                        response.text = selected_text
+                        response.assistant_message = {"role": "assistant", "content": selected_text}
+                except WorkerUsageDispatchStopped as stopped:
+                    # Selection is advisory. A legal last request may already
+                    # have produced a grounded answer beyond the send threshold.
+                    # Preserve it for the evidence and submission checks below.
+                    nq_selection_audit = {
+                        "policy": "nq_short_answer_selection_v1", "accepted": False,
+                        "reason": stopped.reason, "draft_preserved": True,
+                        "no_request_dispatched": True,
+                    }
         if self.nq_evidence_context is not None and selected_output_agent:
             validation = self.nq_evidence_context.validate(node.agent_id, response.text)
             if not validation["valid"] and self.nq_evidence_context.claim_repair():
-                # One evidence-protocol correction, subject to the same token
-                # credit and deadline. Never synthesize or choose an answer.
+                # One evidence-protocol correction, subject to the same question
+                # budget and deadline. Never synthesize or choose an answer.
                 repair_messages = [
                     {"role": "system", "content": corpus_answer_instruction()},
                     {"role": "user", "content": json.dumps({
@@ -2722,13 +2869,7 @@ class ModelAgentExecutor:
                 ]
                 try:
                     with worker_finalization_request():
-                        repaired = self._generate_with_credit(
-                            repair_messages,
-                            credit_limit=(execution_credit - token_in - token_out if execution_credit is not None else None),
-                            pre_reserved_closure_tokens=closure_reserve(),
-                            cap_output=submission_credit or full_graph_credit,
-                            role=self.role, actions=(), max_tokens=2048, enable_thinking=False,
-                        )
+                        repaired = self._generate(repair_messages, role=self.role, actions=(), max_tokens=2048, enable_thinking=False)
                     token_in += repaired.token_in
                     token_out += repaired.token_out
                     backend_request_events.extend(_response_backend_request_events(repaired))
@@ -2740,21 +2881,23 @@ class ModelAgentExecutor:
                     ))
                     protocol_diagnostics[-1]["previous_response"] = response.text
                     response = repaired
-                except RequestTokenCreditExceeded as exc:
-                    token_in += exc.credit.token_in
-                    token_out += exc.credit.token_out
-                    backend_request_events.extend(exc.request_events)
+                except WorkerUsageDispatchStopped as stopped:
+                    # Keep the invalid draft and its validation failure visible;
+                    # exhaustion must not fabricate a repaired answer or a send.
                     protocol_diagnostics.append({
                         "stage": "nq_evidence_repair", "accepted": False,
-                        "rejection_reason": "request_token_credit_exhausted", "no_request_dispatched": True,
+                        "rejection_reason": stopped.reason,
+                        "no_request_dispatched": True,
                     })
         source_ids = [
             packet.artifact_id
             for packet in [*([prior] if prior is not None else []), *upstream, *peers]
         ]
+        preserved = healthbench_repair is not None and healthbench_repair.accepted
         artifact = AgentArtifact.from_model_text(
-            text=response.text,
-            validated_payload=check_artifact(response.text)[0],
+            text=healthbench_repair.raw_response if preserved else response.text,
+            validated_payload=healthbench_repair.payload if preserved else check_artifact(response.text)[0],
+            preserve_answer=preserved,
             artifact_id="pending",
             agent_id=node.agent_id,
             source_artifact_ids=source_ids,
@@ -2763,6 +2906,10 @@ class ModelAgentExecutor:
             token_out=token_out,
             model=response.model,
         )
+        if healthbench_repair is not None:
+            artifact.healthbench_repair = healthbench_repair.audit()
+            if preserved:
+                artifact.normalized_payload = copy.deepcopy(healthbench_repair.payload)
         artifact.model_tool_summary = list(artifact.tool_summary)
         # A later ordinary accepted output can resolve an earlier protocol gate,
         # even without entering _request_final_artifact. Record that acceptance
@@ -2797,8 +2944,25 @@ class ModelAgentExecutor:
             artifact.runtime_tool_evidence["nq_corpus"] = self.nq_evidence_context.validate(
                 node.agent_id, artifact.raw_response, require_submission=selected_output_agent,
             )
+            if nq_selection_audit is not None:
+                artifact.runtime_tool_evidence["nq_answer_selection"] = nq_selection_audit
         if action_adapter == "webshop":
             sync_webshop_journal()
+            live_purchase_state = context["action_environment"].get("state", {})
+            completion_conflicts = webshop_response_conflict(artifact.raw_response, live_purchase_state)
+            if completion_conflicts:
+                # Keep provider text unchanged for audit, but do not relay an
+                # unsupported completion claim as the operational result.
+                original = {key:copy.deepcopy(getattr(artifact,key)) for key in
+                            ("answer","summary","unresolved_issues","evidence","tool_summary")}
+                grounded = webshop_grounded_packet(original, live_purchase_state)
+                artifact.answer = webshop_status_statement(live_purchase_state)
+                for key in ("summary","unresolved_issues","evidence","tool_summary"):
+                    setattr(artifact, key, grounded[key])
+                artifact.integrity_risks.append("purchase_status_conflict")
+                artifact.runtime_tool_evidence["purchase_status_conflict"] = {
+                    "fields":completion_conflicts,"current":webshop_execution_status(live_purchase_state),
+                    "model_report":original}
             reserve_failed = finalization_reason in {"purchase_plan_abandoned", "purchase_plan_repair_exhausted"}
             stalled = (finalization_reason == "webshop_semantic_no_progress_fuse"
                        or (reserve_failed and is_task_result(node)))
@@ -2828,9 +2992,19 @@ class ModelAgentExecutor:
                 else {}
             )
             artifact.webshop_progress = {
-                **({"purchase_reservation": purchase_reserve.snapshot(
-                    self.budget_ledger.remaining(node, revision=revision, scope=self.budget_scope)["total"], node.agent_id),
-                    "purchase_reservation_events": copy.deepcopy(purchase_reserve.events)} if purchase_reserve is not None else {}),
+                **(
+                    {
+                        "purchase_reservation": purchase_reserve.snapshot(
+                            self.budget_ledger.remaining(
+                                node, revision=revision, scope=self.budget_scope
+                            )["total"],
+                            node.agent_id,
+                        ),
+                        "purchase_reservation_events": copy.deepcopy(purchase_reserve.events),
+                    }
+                    if purchase_reserve is not None
+                    else {}
+                ),
                 "trusted": True,
                 "execution_accounting": execution_accounting(
                     events=backend_request_events,
@@ -2839,34 +3013,26 @@ class ModelAgentExecutor:
                     token_out=token_out,
                     action_attempts=len(react_trace),
                 ),
-                "budget_partition": {
-                    "request_admission_enabled": node.metadata.get(
-                        "_runtime_webshop_request_admission_enabled", True
-                    ),
-                    "phase": node.metadata.get("_runtime_budget_phase", "unpartitioned"),
-                    "execution_credit": execution_credit,
-                    "reserved_closure_tokens": node.metadata.get(
-                        "_runtime_reserved_closure_tokens"
-                    ),
-                },
-                "state": (
-                    "stateless_planner"
-                    if stateless_environment_owner
-                    else "typed_policy_failure"
-                    if stalled
-                    else "purchase_staged"
-                    if commit_ready
-                    else "completed" if environment_terminal
-                    else "needs_recovery" if finalization_reason == "protocol_recovery_exhausted"
-                    else "research_paused" if finalization_reason == "webshop_research_budget_handoff"
-                    else "purchase_reserve_paused" if finalization_reason.startswith("purchase_reserve_") or reserve_failed
-                    else "active"
-                ),
+                "state": "stateless_planner"
+                if stateless_environment_owner
+                else "typed_policy_failure"
+                if stalled
+                else "purchase_staged"
+                if commit_ready
+                else "completed"
+                if environment_terminal
+                else "needs_recovery"
+                if finalization_reason == "protocol_recovery_exhausted"
+                else "research_paused"
+                if finalization_reason == "webshop_research_budget_handoff"
+                else "purchase_reserve_paused"
+                if finalization_reason.startswith("purchase_reserve_") or reserve_failed
+                else "active",
                 "stop_reason": finalization_reason,
                 "environment_owner": stateless_environment_owner or node.agent_id,
-                "environment_access": (
-                    "stateless_planner" if stateless_environment_owner else "mutable_owner"
-                ),
+                "environment_access": "stateless_planner"
+                if stateless_environment_owner
+                else "mutable_owner",
                 "journal": {
                     "schema_version": 1,
                     "continuity_scope": "webshop_rollout_owner",
@@ -2874,16 +3040,14 @@ class ModelAgentExecutor:
                     "recent_actions_retained": len(webshop_recent_actions),
                 },
                 "commit_ready": commit_ready,
-                "commit_protocol_status": (
-                    "awaiting_canvas_output_selection" if commit_ready else None
-                ),
+                "commit_protocol_status": "awaiting_canvas_output_selection"
+                if commit_ready
+                else None,
                 "semantic_no_progress_count": webshop_semantic_no_progress_count,
                 "semantic_no_progress_streak": webshop_semantic_no_progress_streak,
-                "completion_path_fuse_deferrals": (webshop_completion_path_fuse_deferrals),
-                "strategy_checkpoint_purchase_deferrals": (
-                    webshop_strategy_checkpoint_purchase_deferrals
-                ),
-                "searches_since_last_product_open": (webshop_searches_since_last_product_open),
+                "completion_path_fuse_deferrals": webshop_completion_path_fuse_deferrals,
+                "strategy_checkpoint_purchase_deferrals": webshop_strategy_checkpoint_purchase_deferrals,
+                "searches_since_last_product_open": webshop_searches_since_last_product_open,
                 "fuse_threshold": _WEBSHOP_SEMANTIC_STALL_FUSE_THRESHOLD,
                 "duplicate_state_action_count": webshop_duplicate_action_count,
                 "unique_public_evidence_count": len(webshop_seen_evidence_signatures),
@@ -2915,14 +3079,17 @@ class ModelAgentExecutor:
                 artifact.webshop_progress["memory_projection"] = copy.deepcopy(context["action_environment"]["webshop_progress"])
                 # Relay only identity/visit facts; full owner-private payloads stay in its store.
                 artifact.webshop_progress["candidate_ledger"] = [
-                    {"asin": k, "preview_title": webshop_memory.title(k)[:240],
-                     "title_excerpt": len(webshop_memory.title(k)) > 240,
+                    {"asin": k, "preview_title": webshop_memory.title(k),
+                     "title_excerpt": False,
                      "inspection_status": "inspected" if p["opened"] else "not_inspected"}
                     for k, p in webshop_memory.data["products"].items()]
                 artifact.webshop_progress["product_inspections"] = [
                     {"asin": k, "sections_viewed": list(p["sections"]), "visit_count": p["visit_count"]}
                     for k, p in webshop_memory.data["products"].items() if p["opened"]]
                 artifact.webshop_progress["worker_memory_policy"] = MEMORY_V2
+            if decision_memory is not None:
+                artifact.webshop_progress["decision_memory"] = decision_memory.project(webshop_state)
+                artifact.webshop_progress["decision_memory_store"] = decision_memory.persist()
             if artifact.webshop_progress["state"] == "needs_recovery":
                 budget = self.budget_ledger.webshop_audit(node, scope=self.budget_scope)
                 artifact.webshop_progress["model_stop_report"] = artifact.summary
@@ -3092,42 +3259,17 @@ class ModelAgentExecutor:
             }
         return artifact
 
-    def _generate_with_credit(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        credit_limit: int | None,
-        pre_reserved_closure_tokens: int | None,
-        cap_output: bool,
-        **kwargs: Any,
-    ) -> LLMResponse:
-        with request_token_credit(
-            credit_limit,
-            pre_reserved_closure_tokens=pre_reserved_closure_tokens,
-            cap_output=cap_output,
-        ) as credit:
-            try:
-                response = self.backend.generate(messages, **kwargs)
-            except Exception as exc:
-                if self._swe_request_usage is not None:
-                    # A failed repair/failover can follow billed completions.
-                    # Preserve this execution's known usage even if no response
-                    # or final Artifact could be produced by the backend.
-                    if credit is not None:
-                        self._swe_request_usage[0] += credit.token_in
-                        self._swe_request_usage[1] += credit.token_out
-                    exc.worker_token_usage = tuple(self._swe_request_usage)
-                raise
+    def _generate(self, messages, **kwargs):
+        try:
+            response = self.backend.generate(messages, **kwargs)
+        except Exception as exc:
             if self._swe_request_usage is not None:
-                if credit is not None:
-                    # The request account spans pool members and length repairs;
-                    # the returned response may describe only the final member.
-                    # Use the complete known totals without double charging them.
-                    response.token_in = max(response.token_in, credit.token_in)
-                    response.token_out = max(response.token_out, credit.token_out)
-                self._swe_request_usage[0] += response.token_in
-                self._swe_request_usage[1] += response.token_out
-            return response
+                exc.worker_token_usage = tuple(self._swe_request_usage)
+            raise
+        if self._swe_request_usage is not None:
+            self._swe_request_usage[0] += response.token_in
+            self._swe_request_usage[1] += response.token_out
+        return response
 
     def _request_final_artifact(
         self,
@@ -3137,16 +3279,18 @@ class ModelAgentExecutor:
         reason: str,
         visible_context: dict[str, Any],
         backend_request_events: list[dict[str, Any]],
-        token_credit: int | None = None,
-        pre_reserved_closure_tokens: int | None = None,
-        cap_output: bool = False,
-        abort_on_credit_exhaustion: bool = False,
-        credit_label: str = "qa",
         prior_response: str = "",
+        healthbench_repair: HealthBenchRepair | None = None,
         short_answer_qa: bool = False,
         is_output_agent: bool = False,
         dataset: str = "",
     ) -> tuple[Any, int, int, list[dict[str, Any]]]:
+        if healthbench_repair is not None:
+            return self._request_healthbench_artifact(
+                state=healthbench_repair, instruction=instruction, react_trace=react_trace,
+                reason=reason, visible_context=visible_context,
+                backend_request_events=backend_request_events, is_output_agent=is_output_agent,
+            )
         token_in = token_out = 0
         diagnostics: list[dict[str, Any]] = []
         response = None
@@ -3154,16 +3298,33 @@ class ModelAgentExecutor:
         previous_response = prior_response
         previous_error: dict[str, Any] = {}
         previous_truncated = False
-        # Reasoning runtimes count hidden/scratch reasoning against the completion
-        # budget. A 1024-token "compact" budget repeatedly cut MiniMax, DeepSeek,
-        # and Grok off before they could emit the requested JSON. Keep the prompt
-        # compact. Runtime alone owns at most two finalization generations:
-        # 4096 initially, 4096 after truncation or 2048 after a format error.
-        # Aggregate completion allowance is 8192; shared wall clocks never reset.
+        qa_repair = canonical_dataset_name(dataset) in {"hotpotqa", "musique"}
+        frozen_fields = preserved_fields(prior_response) if qa_repair else {}
+        if qa_repair and "answer" not in frozen_fields:
+            failure = _protocol_failure_response(LLMResponse(text=prior_response, model="runtime-qa-protocol"))
+            failure.assistant_message = {"role": "assistant", "content": failure.text}
+            failure.training_eligible = False
+            failure.metadata = {"runtime_text_transform": "qa_missing_preservable_answer"}
+            diagnostics.append({
+                "stage": "qa_schema_repair_unavailable", "accepted": False,
+                "rejection_reason": "qa_missing_preservable_answer", "local_recovery_exhausted": True,
+                "no_request_dispatched": True, "raw_response": prior_response,
+                "raw_response_truncated": False,
+            })
+            return failure, 0, 0, diagnostics
+        usage_scope = active_worker_usage()
+        reported_healthbench = (
+            usage_scope is not None and usage_scope[0].dataset == "healthbench_professional"
+        )
+        # Runtime owns at most two content repairs; shared wall clocks never reset.
+        # Reported-usage HealthBench keeps the current route's configured output
+        # limit so a complete reply need not fit a compact finalization allowance.
+        # Other policies retain their existing per-request recovery limits.
         for attempt_index in (1, 2):
-            max_tokens = 4096 if attempt_index == 1 or previous_truncated else 2048
-            max_tokens = min(max_tokens, max(0, 8192 - token_out))
-            if max_tokens <= 0:
+            max_tokens = None if reported_healthbench else (
+                4096 if attempt_index == 1 or previous_truncated else 2048
+            )
+            if max_tokens is not None and max_tokens <= 0:
                 break
             self._check_deadline()
             messages = _finalization_recovery_messages(
@@ -3176,22 +3337,12 @@ class ModelAgentExecutor:
                 short_answer_qa=short_answer_qa,
                 is_output_agent=is_output_agent,
                 dataset=dataset,
+                preserved_artifact_fields=frozen_fields,
             )
             started = time.monotonic()
             try:
                 with worker_finalization_request():
-                    response = self._generate_with_credit(
-                        messages,
-                        credit_limit=(
-                            token_credit - token_in - token_out if token_credit is not None else None
-                        ),
-                        pre_reserved_closure_tokens=pre_reserved_closure_tokens,
-                        cap_output=cap_output,
-                        role=self.role,
-                        actions=(),
-                        max_tokens=max_tokens,
-                        enable_thinking=False,
-                    )
+                    response = self._generate(messages, role=self.role, actions=(), max_tokens=max_tokens, enable_thinking=False)
             except WorkerUsageDispatchStopped as stopped:
                 if visible_context.get("action_environment", {}).get("adapter") != "alfworld":
                     raise
@@ -3199,57 +3350,25 @@ class ModelAgentExecutor:
                     "runtime_generated": True, "reason": stopped.reason, "no_request_dispatched": True})
                 return (_alfworld_usage_stop_response(visible_context, stopped.reason),
                         token_in, token_out, diagnostics)
-            except RequestTokenCreditExceeded as exc:
-                if abort_on_credit_exhaustion:
-                    raise
-                token_in += exc.credit.token_in
-                token_out += exc.credit.token_out
-                backend_request_events.extend(exc.request_events)
-                if cap_output:
-                    diagnostics.append(
-                        {
-                            "stage": f"{credit_label}_finalization_token_credit_exhausted",
-                            "accepted": False,
-                            "rejection_reason": "request_token_credit_exhausted",
-                            "local_recovery_exhausted": True,
-                            "no_request_dispatched": True,
-                            "required_request_tokens": exc.required,
-                            "request_token_budget": exc.budget,
-                        }
-                    )
-                    failure = LLMResponse(
-                        text=json.dumps(
-                            {
-                                "answer": WORKER_PROTOCOL_FAILURE_SENTINEL,
-                                "summary": "No final Artifact was produced within Worker token credit.",
-                                "unresolved_issues": ["request_token_credit_exhausted"],
-                            }
-                        ),
-                        model="runtime-budget-boundary",
-                    )
-                    return failure, token_in, token_out, diagnostics
-                diagnostics.append(
-                    {
-                        "stage": "webshop_finalization_token_credit_exhausted",
-                        "accepted": True,
-                        "required_request_tokens": exc.required,
-                        "no_request_dispatched": True,
-                        "request_token_budget": exc.budget,
-                    }
-                )
-                return (
-                    _webshop_credit_exhausted_response(visible_context),
-                    token_in,
-                    token_out,
-                    diagnostics,
-                )
             elapsed = time.monotonic() - started
             backend_request_events.extend(_response_backend_request_events(response))
             self._check_deadline()
             token_in += response.token_in
             token_out += response.token_out
+            if qa_repair:
+                restored_text, preservation_audit = restore_preserved_fields(response.text, frozen_fields)
+                if preservation_audit:
+                    diagnostics.append(preservation_audit)
+                    response = copy.copy(response)
+                    response.text = restored_text
+                    response.assistant_message = {"role": "assistant", "content": restored_text}
+                    response.metadata = {**response.metadata, "runtime_text_transform": "qa_schema_preservation"}
+                    response.training_eligible = False
             _, previous_error = check_artifact(response.text)
             rejection_reason = previous_error.get("reason")
+            if qa_repair and complete_payload(response.text) is None:
+                rejection_reason = "qa_ambiguous_or_incomplete_json"
+                previous_error = {**previous_error, "reason": rejection_reason}
             previous_truncated = response.metadata.get("finish_reason") in {"length", "MAX_TOKENS"}
             if previous_truncated:
                 rejection_reason = "truncated_final_response"
@@ -3282,13 +3401,77 @@ class ModelAgentExecutor:
                 parse_error=dict(previous_error),
                 generation_attempts=response.metadata.get("generation_attempts", []),
                 content_retry_owner="runtime",
-                finalization_output_budget=8192,
+                finalization_output_budget=(8192 if active_worker_usage() is None else None),
             )
             if rejection_reason is None:
                 return response, token_in, token_out, diagnostics
             previous_issue = rejection_reason
             previous_response = response.text
         assert response is not None
+        diagnostics[-1]["local_recovery_exhausted"] = True
+        return _protocol_failure_response(response), token_in, token_out, diagnostics
+
+    def _request_healthbench_artifact(
+        self, *, state: HealthBenchRepair, instruction: str, react_trace: list[dict],
+        reason: str, visible_context: dict, backend_request_events: list[dict],
+        is_output_agent: bool,
+    ) -> tuple[LLMResponse, int, int, list[dict]]:
+        token_in = token_out = 0
+        diagnostics = []
+        for attempt in (1, 2):
+            self._check_deadline()
+            mode = state.mode
+            messages = state.patch_messages() if mode == "metadata_patch" else _finalization_recovery_messages(
+                instruction=instruction, react_trace=react_trace,
+                previous_attempt_issue=state.issue or reason, visible_context=visible_context,
+                previous_response=state.records[-1]["text"] if state.records else "",
+                previous_error={"reason": state.issue}, is_output_agent=is_output_agent,
+                dataset="healthbench_professional", preserve_healthbench_response=True,
+            )
+            started = time.monotonic()
+            # Admission and settlement still belong to the one shared ledger.
+            # No reserve, estimated cost, or per-repair output allowance.
+            try:
+                with worker_finalization_request():
+                    response = self._generate(messages, role=self.role, actions=(), max_tokens=None, enable_thinking=False)
+            except (HealthBenchContextCapacityExceeded, BackendRequestError) as exc:
+                capacity_audit = getattr(exc, "audit", None)
+                if isinstance(exc, BackendRequestError):
+                    detail = exc.classification.message.casefold()
+                    if not any(marker in detail for marker in (
+                        "context_length_exceeded", "maximum context length",
+                        "exceeds the context window", "input token count exceeds",
+                    )):
+                        raise
+                    backend_request_events.extend(exc.request_events)
+                    capacity_audit = {"source": "provider_enforced", "input_truncated": False,
+                                      "failure": exc.classification.to_dict()}
+                state.issue = "healthbench_context_capacity_exceeded"
+                diagnostics.append({
+                    "stage": f"finalization_{attempt}", "accepted": False,
+                    "rejection_reason": state.issue, "context_capacity": capacity_audit,
+                    "no_request_dispatched": isinstance(exc, HealthBenchContextCapacityExceeded),
+                    "local_recovery_exhausted": True,
+                })
+                failure = LLMResponse(text=json.dumps({"answer": WORKER_PROTOCOL_FAILURE_SENTINEL}),
+                                      model="runtime-context-boundary")
+                return failure, token_in, token_out, diagnostics
+            backend_request_events.extend(_response_backend_request_events(response))
+            token_in += response.token_in
+            token_out += response.token_out
+            self._check_deadline()
+            state.consume(response.text, {**response.metadata, "native_tool_calls": bool(response.action_calls)},
+                          kind=mode, model_attempt=attempt)
+            diagnostics.append(_protocol_response_diagnostic(
+                response, stage=f"finalization_{attempt}", rejection_reason=state.issue,
+            ))
+            diagnostics[-1].update(
+                repair_mode=mode, requested_max_tokens=None, elapsed_s=time.monotonic() - started,
+                content_retry_owner="runtime", local_normalization=bool(state.changed_fields),
+                finalization_output_budget=None,
+            )
+            if state.accepted:
+                return response, token_in, token_out, diagnostics
         diagnostics[-1]["local_recovery_exhausted"] = True
         return _protocol_failure_response(response), token_in, token_out, diagnostics
 
@@ -3321,6 +3504,7 @@ class RoutedModelAgentExecutor:
         alfworld_worker_guidance_policy: str = "factual_memory_v1",
         webshop_worker_guidance_policy: str = "baseline",
         webshop_worker_memory_policy: str = "factual_memory_v1",
+        webshop_worker_decision_memory_policy: str = "off",
         webshop_worker_execution_policy: str = "graph_tools_v1",
         webshop_native_conversation_history: bool = False,
         webshop_compatibility_profile: str = "current",
@@ -3345,6 +3529,9 @@ class RoutedModelAgentExecutor:
         if webshop_worker_memory_policy not in {"factual_memory_v1", MEMORY_V2}:
             raise ValueError("unknown webshop.worker_memory_policy")
         self.webshop_worker_memory_policy = str(webshop_worker_memory_policy)
+        validate_decision_policy(webshop_worker_decision_memory_policy,
+            webshop_worker_memory_policy, webshop_worker_execution_policy)
+        self.webshop_worker_decision_memory_policy = webshop_worker_decision_memory_policy
         if webshop_worker_execution_policy not in WEBSHOP_EXECUTION_POLICIES:
             raise ValueError("unknown webshop.worker_execution_policy")
         self.webshop_worker_execution_policy = webshop_worker_execution_policy
@@ -3446,6 +3633,7 @@ class RoutedModelAgentExecutor:
                 alfworld_worker_guidance_policy=(self.alfworld_worker_guidance_policy),
                 webshop_worker_guidance_policy=self.webshop_worker_guidance_policy,
                 webshop_worker_memory_policy=self.webshop_worker_memory_policy,
+                webshop_worker_decision_memory_policy=self.webshop_worker_decision_memory_policy,
                 webshop_worker_execution_policy=self.webshop_worker_execution_policy,
                 webshop_native_conversation_history=self.webshop_native_conversation_history,
                 webshop_compatibility_profile=self.webshop_compatibility_profile,
@@ -3551,7 +3739,6 @@ class MultiAgentRuntime:
         self._last_input_payloads: dict[tuple[str, bool], dict[str, Any]] = {}
         self._artifact_input_bindings: dict[str, dict[str, Any]] = {}
         self._stale_artifacts: set[str] = set()
-        self._execution_token_remaining: int | None = None
         self.worker_usage_ledger: WorkerUsageLedger | None = None
         self.nq_evidence_context: NQEvidenceContext | None = None
 
@@ -3660,13 +3847,14 @@ class MultiAgentRuntime:
         ledger = getattr(self.executor, "budget_ledger", None)
         scope = "tool-rollout:whole-graph"
         usage = ledger.usage.get(scope, AgentActionUsage()) if ledger is not None else AgentActionUsage()
+        held = ledger.held(scope) if ledger is not None else 0
         return {"policy": "shared_total_v1", "scope": "per_question",
                 "used": usage.total_used, "max": total_limit,
-                "remaining": max(0, total_limit - usage.total_used),
+                "remaining": max(0, total_limit - usage.total_used - held), "pending_buy_held": held,
                 "initial_used": usage.initial_used, "revision_used": usage.revision_used,
                 "closure_used": usage.closure_used,
                 "reset_on_node_edit": False,
-                **({"purchase_reservation": ledger.purchase_reserve.snapshot(max(0, total_limit - usage.total_used))}
+                **({"purchase_reservation": ledger.purchase_reserve.snapshot(max(0, total_limit - usage.total_used - held))}
                    if ledger is not None and getattr(self.executor, "webshop_purchase_budget_policy", "off") in PURCHASE_RESERVE_POLICIES else {})}
 
     @property
@@ -3679,7 +3867,16 @@ class MultiAgentRuntime:
         ledger = self.executor.budget_ledger
         usage = ledger.usage.get("tool-rollout:whole-graph", AgentActionUsage())
         return ledger.webshop_scheduling.snapshot(total=total,
-            remaining=max(0,total-usage.total_used),research_used=usage.research_used)
+            remaining=max(0,total-usage.total_used-ledger.held("tool-rollout:whole-graph")),research_used=usage.research_used)
+
+    def purchase_review_pending(self, agent_id):
+        return bool(self.environment_result_for(agent_id).get("purchase_review_pending"))
+
+    def purchase_review_packets(self):
+        return {key: self.environment_result_for(key)["purchase_review"]
+                for key in self.environment_commit_ready_agents()
+                if self.environment_result_for(key).get("purchase_review_pending")
+                and self.environment_result_for(key).get("purchase_review")}
 
     def webshop_scheduling_blocker(self, node, graph=None):
         if not self.webshop_scheduling_enabled or node.metadata.get("action_adapter") != "webshop":
@@ -3689,21 +3886,28 @@ class MultiAgentRuntime:
         sources = (graph.directed_predecessors(node.agent_id) | graph.bidirectional_neighbors(node.agent_id)) if graph else set()
         packets = [self.artifacts[key] for key in sorted(sources) if key in self.artifacts]
         return ledger.webshop_scheduling.blocker(node,self.environment_result_for(node.agent_id),packets,
-            remaining=max(0,node.total_tool_budget-usage.total_used),research_used=usage.research_used)
+            remaining=max(0,node.total_tool_budget-usage.total_used-ledger.held("tool-rollout:whole-graph")
+                          + int(self.purchase_review_pending(node.agent_id))),research_used=usage.research_used)
 
     def webshop_reservation_blocker(self, node):
         ledger = getattr(self.executor, "budget_ledger", None)
         if (ledger is None or node.metadata.get("action_adapter") != "webshop"
                 or getattr(self.executor, "webshop_purchase_budget_policy", "off") not in PURCHASE_RESERVE_POLICIES):
             return None
+        if self.purchase_review_pending(node.agent_id):
+            return None
         return ledger.purchase_reserve.blocker(node.agent_id, is_task_result(node),
             self.shared_tool_budget_status(node.total_tool_budget)["remaining"])
 
     def swe_execution_blocker(self, node: AgentNode) -> str | None:
-        """A fresh SWE workspace needs tools; in-flight finalization is separate."""
-        if node.metadata.get("action_adapter") in {"swe_bench", "alfworld"} and self.worker_usage_ledger is not None:
+        """Compatibility entry for existing dataset callers."""
+        return self.worker_execution_blocker(node)
+
+    def worker_execution_blocker(self, node: AgentNode) -> str | None:
+        """Apply the question budget to every Worker, including Workers without tools."""
+        if self.worker_usage_ledger is not None:
             reason = self.worker_usage_ledger.stop_reason()
-            if reason is not None:
+            if reason is not None and reason != "worker_usage_request_inflight":
                 return reason
         if (node.metadata.get("action_adapter") == "swe_bench"
                 and node.operation_policy_configured and node.allowed_tools
@@ -3751,6 +3955,13 @@ class MultiAgentRuntime:
                 f"found {len(capable)}"
             )
         lifecycle, commit = capable[0]
+        ledger = getattr(self.executor, "budget_ledger", None)
+        review_hold = copy.deepcopy(ledger.purchase_review_holds.get(agent_id)) if ledger is not None else None
+        if self.purchase_review_pending(agent_id) and ledger is not None:
+            validate = getattr(lifecycle, "validate_purchase_proposal", None)
+            if callable(validate):
+                validate(agent_id)
+            ledger.settle_purchase(agent_id)
         set_committer = getattr(lifecycle, "set_committer", None)
         if callable(set_committer):
             set_committer(agent_id)
@@ -3766,6 +3977,14 @@ class MultiAgentRuntime:
             artifact = copy.deepcopy(artifact)
             self.artifacts[agent_id] = artifact
         artifact.environment_result = dict(result)
+        if review_hold is not None:
+            usage = ledger.usage[review_hold["scope"]]
+            budget = artifact.webshop_progress.get("action_budget", {})
+            budget.update(total_used=usage.total_used, initial_used=usage.initial_used,
+                revision_used=usage.revision_used, closure_used=usage.closure_used,
+                pending_buy_held=ledger.held(review_hold["scope"]),
+                total_remaining=max(0, budget.get("total_limit", 16) - usage.total_used - ledger.held(review_hold["scope"])))
+            artifact.webshop_progress["purchase_review"] = copy.deepcopy(result.get("purchase_review", {}))
         ledger = getattr(self.executor, "budget_ledger", None)
         if ledger is not None and getattr(self.executor, "webshop_purchase_budget_policy", "off") in PURCHASE_RESERVE_POLICIES:
             manager = ledger.purchase_reserve
@@ -3775,6 +3994,9 @@ class MultiAgentRuntime:
         return dict(result)
 
     def discard_environment_candidate(self, agent_id: str) -> None:
+        ledger = getattr(self.executor, "budget_ledger", None)
+        if ledger is not None:
+            ledger.release_purchase(agent_id)
         for lifecycle in self._environment_lifecycles():
             discard = getattr(lifecycle, "discard_pending", None)
             if callable(discard):
@@ -3807,10 +4029,11 @@ class MultiAgentRuntime:
         graph: MultiAgentGraph,
         dirty_agents: set[str] | None = None,
         invalidation_reasons: dict[str, set[str]] | None = None,
-        token_credit: int | None = None,
     ) -> ExecutionReport:
         graph.assert_valid(final=False)
-        self._execution_token_remaining = token_credit
+        if self.worker_usage_ledger is not None:
+            for node in graph.nodes.values():
+                use_reported_usage(node)
         if graph.submission_protocol == PROTOCOL:
             for lifecycle in self._environment_lifecycles():
                 setter = getattr(lifecycle, "set_submission_protocol", None)
@@ -4230,12 +4453,6 @@ class MultiAgentRuntime:
         node = graph.nodes[agent_id]
         node.metadata["_runtime_full_graph_closure_attempted"] = True
         node.metadata["_runtime_webshop_output_closure"] = True
-        if node.metadata.get("_runtime_webshop_request_admission_enabled", True):
-            node.metadata.update(
-                _runtime_budget_phase="closure",
-                _runtime_token_credit=remaining_token_credit,
-                _runtime_reserved_closure_tokens=0,
-            )
         prior = self._packet(
             self.artifacts[agent_id], [agent_id], phase="selected_output_recovery_prior"
         )
@@ -4360,6 +4577,13 @@ class MultiAgentRuntime:
         )
         reasons = sorted(set(reason_codes) | input_reasons)
         cached = None if self.full_graph_replay or node.metadata.get("_runtime_explicit_recovery") else self.cache.get(cache_key)
+        if (cached is not None and self.worker_usage_ledger is not None
+                and self.worker_usage_ledger.dataset == "healthbench_professional"
+                and (cached.agent_id != agent_id
+                     or cached.healthbench_repair.get("binding", {}).get("runtime_input_sha256") != cache_key
+                     or not validate_preserved_artifact(
+                    cached, question_attempt_id=self.worker_usage_ledger.question_attempt_id))):
+            cached = None
         cacheable = cached is not None and cached.answer not in {
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
@@ -4393,12 +4617,12 @@ class MultiAgentRuntime:
         if self.webshop_scheduling_enabled and node.metadata.get("action_adapter") == "webshop":
             status = self.shared_tool_budget_status(node.total_tool_budget)
             resource = self.environment_result_for(agent_id)
-            if status["remaining"] <= 0 and (not resource or resource.get("resource_status") == "unknown"
+            if status["remaining"] <= 0 and not resource.get("purchase_review_pending") and (not resource or resource.get("resource_status") == "unknown"
                     or resource.get("termination_reason") in {"agent_never_executed","missing_output_agent","environment_step_failed"}
                     or resource.get("commit_pending") or resource.get("commit_ready")):
                 report.blocked_agents[agent_id] = "webshop_no_safe_runtime_finalization"
                 return None, False, 0, 0
-        blocker = self.swe_execution_blocker(node)
+        blocker = self.worker_execution_blocker(node)
         if blocker is not None:
             report.blocked_agents[agent_id] = blocker
             return None, False, 0, 0
@@ -4431,35 +4655,31 @@ class MultiAgentRuntime:
                     node.metadata["_runtime_tool_scope"] = scope
                 set_budget_scope(scope)
         started = time.monotonic()
-        if self._execution_token_remaining is not None and "_runtime_token_credit" in node.metadata:
-            # The scheduler may discover additional stale nodes after estimating
-            # the dirty closure. All actual executions share one remaining account.
-            remaining = max(0, self._execution_token_remaining)
-            if node.metadata.get("_runtime_budget_kind") in {
-                SWE_SHARED_TOKEN_BUDGET, "swe_primary_request_credit_v1",
-            }:
-                # Executions are sequential. Cache hits above spend nothing;
-                # each real SWE execution/revision receives the live balance,
-                # never the stale per-node allocation from an earlier wave.
-                node.metadata["_runtime_token_credit"] = remaining
-            else:
-                node.metadata["_runtime_token_credit"] = min(
-                    int(node.metadata["_runtime_token_credit"]), remaining,
-                )
+        worker_request_events: list[dict[str, Any]] = []
         try:
             with worker_usage_scope(
-                self.worker_usage_ledger if node.metadata.get("action_adapter") in {"swe_bench", "alfworld"} else None,
+                self.worker_usage_ledger,
                 agent_id=agent_id, execution_id=f"{self._execution_seq}:{agent_id}",
-            ):
+            ), input_binding_scope(cache_key), capture_worker_request_events(worker_request_events):
                 artifact = self.executor.execute(
                     task=task, node=node, upstream=upstream, peers=peers,
                     revision=revision, seed=self.seed, prior=prior,
                 )
         except WorkerUsageDispatchStopped as stopped:
             report.blocked_agents[agent_id] = stopped.reason
+            # No final Artifact exists, but prior sends and failures still need
+            # their original event IDs and ledger-attempt links in the trajectory.
+            report.execution_events.append({
+                "event": "worker_usage_execution_stopped", "agent_id": agent_id,
+                "reason": stopped.reason, "backend_request_events": worker_request_events,
+            })
             return None, False, 0, 0
-        if self._execution_token_remaining is not None:
-            self._execution_token_remaining -= artifact.token_in + artifact.token_out
+        # A selector/repair can catch a stop and preserve an earlier Artifact.
+        # Keep any physical failover events omitted from that response as well.
+        existing_event_ids = {event.get("event_id") for event in artifact.backend_request_events}
+        artifact.backend_request_events.extend(
+            event for event in worker_request_events if event["event_id"] not in existing_event_ids
+        )
         _enforce_artifact_integrity(artifact)
         duration_s = time.monotonic() - started
         if artifact.answer not in {
@@ -4481,7 +4701,9 @@ class MultiAgentRuntime:
                 require_submission=is_task_result(node, legacy_selected=bool(node.metadata.get("_runtime_is_output_agent", False))),
             )
             artifact.runtime_tool_evidence["nq_corpus"] = result
-            self.nq_evidence_context.bind_artifact(artifact.artifact_id, result)
+            self.nq_evidence_context.bind_artifact(
+                artifact.artifact_id, result, agent_id=agent_id, raw_response=artifact.raw_response,
+            )
         if (artifact.answer not in {
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
@@ -4542,169 +4764,9 @@ class MultiAgentRuntime:
                     return previous, False, artifact.token_in, artifact.token_out
         return artifact, False, artifact.token_in, artifact.token_out
 
-    def estimate_new_agent_s(
-        self,
-        routes: tuple[str, ...],
-        *,
-        quantile: float,
-        minimum_samples: int,
-        cold_start_s: float,
-        workload_scope: str = "",
-    ) -> dict[str, object]:
-        candidates = tuple(routes) or ("default",)
-        estimates = [
-            self.route_latency_tracker.estimate(
-                _workload_route_key(route, workload_scope),
-                quantile=quantile,
-                minimum_samples=minimum_samples,
-                cold_start_s=cold_start_s,
-            )
-            for route in candidates
-        ]
-        # ADD_AGENT precedes Director SET_MODEL, so admission must remain safe
-        # for every route that the Director is allowed to choose.
-        selected = max(estimates, key=lambda item: item.seconds)
-        payload = {
-            "estimated_worker_s": selected.seconds,
-            "call_count": 1,
-            "routes": [item.to_dict() for item in estimates],
-            "estimation_mode": "new_agent_worst_candidate_route",
-        }
-        return payload
 
-    def estimate_new_agent_tokens(
-        self,
-        routes: tuple[str, ...],
-        *,
-        quantile: float,
-        minimum_samples: int,
-        cold_start_tokens: int,
-        workload_scope: str = "",
-    ) -> dict[str, object]:
-        candidates = tuple(routes) or ("default",)
-        estimates = [
-            self.route_token_tracker.estimate(
-                _workload_route_key(route, workload_scope),
-                quantile=quantile,
-                minimum_samples=minimum_samples,
-                cold_start_tokens=cold_start_tokens,
-            )
-            for route in candidates
-        ]
-        selected = max(estimates, key=lambda item: item.tokens)
-        return {
-            "estimated_worker_tokens": selected.tokens,
-            "call_count": 1,
-            "routes": [item.to_dict() for item in estimates],
-            "estimation_mode": "new_agent_worst_candidate_route",
-        }
 
-    def estimate_execution_s(
-        self,
-        graph: MultiAgentGraph,
-        dirty_agents: set[str],
-        *,
-        quantile: float,
-        minimum_samples: int,
-        cold_start_s: float,
-    ) -> dict[str, object]:
-        dirty = graph.dirty_closure(set(dirty_agents))
-        calls: list[RouteLatencyEstimate] = []
-        for layer in graph.layers():
-            for component in graph.components_in_layer(layer):
-                configured = [
-                    agent_id for agent_id in component if graph.nodes[agent_id].configured
-                ]
-                if not configured or not any(
-                    agent_id in dirty or agent_id not in self.artifacts for agent_id in configured
-                ):
-                    continue
-                passes = 2 if len(configured) > 1 else 1
-                for _ in range(passes):
-                    for agent_id in configured:
-                        route = self._route_for(graph.nodes[agent_id])
-                        workload_route = _workload_route_key(
-                            route,
-                            str(graph.nodes[agent_id].metadata.get("action_adapter", "")),
-                        )
-                        calls.append(
-                            self.route_latency_tracker.estimate(
-                                workload_route,
-                                quantile=quantile,
-                                minimum_samples=minimum_samples,
-                                cold_start_s=cold_start_s,
-                            )
-                        )
-        return {
-            "estimated_worker_s": sum(item.seconds for item in calls),
-            "call_count": len(calls),
-            "routes": [item.to_dict() for item in calls],
-            "estimation_mode": "dirty_subgraph_sequential_calls",
-        }
 
-    def estimate_execution_tokens(
-        self,
-        graph: MultiAgentGraph,
-        dirty_agents: set[str],
-        *,
-        quantile: float,
-        minimum_samples: int,
-        cold_start_tokens: int,
-        workload_scope_override: str = "",
-        use_observed_agent_floor: bool = True,
-    ) -> dict[str, object]:
-        dirty = graph.dirty_closure(set(dirty_agents))
-        calls: list[dict[str, object]] = []
-        for layer in graph.layers():
-            for component in graph.components_in_layer(layer):
-                configured = [
-                    agent_id for agent_id in component if graph.nodes[agent_id].configured
-                ]
-                if not configured or not any(
-                    agent_id in dirty or agent_id not in self.artifacts for agent_id in configured
-                ):
-                    continue
-                passes = 2 if len(configured) > 1 else 1
-                for _ in range(passes):
-                    for agent_id in configured:
-                        route = self._route_for(graph.nodes[agent_id])
-                        workload_route = _workload_route_key(
-                            route,
-                            workload_scope_override
-                            or str(graph.nodes[agent_id].metadata.get("action_adapter", "")),
-                        )
-                        route_estimate = self.route_token_tracker.estimate(
-                            workload_route,
-                            quantile=quantile,
-                            minimum_samples=minimum_samples,
-                            cold_start_tokens=cold_start_tokens,
-                        )
-                        call = route_estimate.to_dict()
-                        artifact = self.artifacts.get(agent_id)
-                        observed_tokens = (
-                            artifact.token_in + artifact.token_out if artifact is not None else 0
-                        )
-                        if use_observed_agent_floor and observed_tokens > route_estimate.tokens:
-                            # A route switch or sparse route history must not make
-                            # admission forget the cost just observed for this same
-                            # Agent. This floor prevents a legal graph edit from
-                            # predictably crossing the hard cumulative budget.
-                            call.update(
-                                {
-                                    "tokens": observed_tokens,
-                                    "source": "observed_agent_floor",
-                                    "route_estimate_tokens": route_estimate.tokens,
-                                    "observed_agent_id": agent_id,
-                                    "observed_agent_tokens": observed_tokens,
-                                }
-                            )
-                        calls.append(call)
-        return {
-            "estimated_worker_tokens": sum(int(item["tokens"]) for item in calls),
-            "call_count": len(calls),
-            "routes": calls,
-            "estimation_mode": "dirty_subgraph_sequential_calls",
-        }
 
     def _route_for(self, node: AgentNode) -> str:
         route_for = getattr(self.executor, "route_for", None)
@@ -4902,6 +4964,9 @@ class MultiAgentRuntime:
             )
         contract = node.metadata.get("system_managed_contract")
         contract_dataset = str(contract.get("dataset", "")) if isinstance(contract, dict) else ""
+        if canonical_dataset_name(contract_dataset) in {"hotpotqa", "musique"}:
+            payload["qa_result_contract_version"] = QA_RESULT_CONTRACT_VERSION
+            payload["qa_public_task_version"] = QA_PUBLIC_TASK_VERSION
         if worker_output_role_changes_input(
             dataset=contract_dataset,
             action_adapter=str(node.metadata.get("action_adapter", "")),
@@ -4916,6 +4981,8 @@ class MultiAgentRuntime:
             )
         if is_unified_node(node):
             payload.update(submission_protocol=PROTOCOL, result_scope=node.metadata.get("result_scope"), output_contract_version=OUTPUT_CONTRACT_VERSION, submission_contract_version=SUBMISSION_VERSION, worker_output_role_version=WORKER_OUTPUT_ROLE_VERSION)
+        if self.worker_usage_ledger is not None and self.worker_usage_ledger.dataset == "healthbench_professional":
+            payload["healthbench_artifact_repair_version"] = HEALTHBENCH_REPAIR_VERSION
         return payload
 
     @staticmethod
@@ -4943,6 +5010,7 @@ class MultiAgentRuntime:
         self._last_input_payloads[(agent_id, bool(payload["revision"]))] = copy.deepcopy(payload)
         self._artifact_input_bindings[agent_id] = copy.deepcopy({
             "artifact_id": artifact.artifact_id,
+            "healthbench_repair_sha256": object_hash(artifact.healthbench_repair) if artifact.healthbench_repair else None,
             "input_hash": self._cache_key(payload),
             "generation": self._execution_seq,
             "revision": bool(payload["revision"]),
@@ -4977,6 +5045,11 @@ class MultiAgentRuntime:
         if agent_id not in self.artifacts or agent_id in self._stale_artifacts:
             return False
         artifact = self.artifacts[agent_id]
+        if (self.worker_usage_ledger is not None
+                and self.worker_usage_ledger.dataset == "healthbench_professional"
+                and not validate_preserved_artifact(
+                    artifact, question_attempt_id=self.worker_usage_ledger.question_attempt_id)):
+            return False
         if not allow_failed and artifact.answer in {
             WORKER_BACKEND_FAILURE_SENTINEL,
             WORKER_PROTOCOL_FAILURE_SENTINEL,
@@ -4986,8 +5059,17 @@ class MultiAgentRuntime:
         binding = self._artifact_input_bindings.get(agent_id)
         if not binding or binding["artifact_id"] != artifact.artifact_id:
             return False
+        if artifact.healthbench_repair and (
+            binding.get("healthbench_repair_sha256") != object_hash(artifact.healthbench_repair)
+            or artifact.healthbench_repair["binding"].get("runtime_input_sha256") != binding["input_hash"]
+        ):
+            return False
         payload = self._last_input_payloads.get((agent_id, binding["revision"]))
         if payload is None or binding["input_hash"] != self._cache_key(payload):
+            return False
+        if "qa_result_contract_version" in payload and (
+            payload.get("qa_public_task_version") != QA_PUBLIC_TASK_VERSION
+        ):
             return False
         if task is not None and task != binding["task"]:
             return False
@@ -5305,6 +5387,13 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
         and successful_call_ids
         and terminal_tool_failure_code in _SAFE_POST_SUCCESS_BUDGET_REJECTION_CODES
     )
+    nq_evidence = artifact.runtime_tool_evidence.get("nq_corpus", {})
+    nq_grounded_budget_stop = bool(
+        terminal_tool_failure_observed
+        and terminal_tool_failure_code in {"nq_task_search_budget_exhausted", "nq_no_progress_search_limit"}
+        and nq_evidence.get("valid") is True
+        and nq_evidence.get("status") in {"supported", "intermediate", "insufficient_evidence"}
+    )
     # A final code-commit Agent may legitimately stop after a rejected/failed
     # Action when its clean final response turns previously trusted repository
     # evidence into a validated GROUNDED_FAILURE.  Preserve the observed failure
@@ -5318,6 +5407,7 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
         and not typed_policy_failure
         and not swe_post_commit_no_progress
         and not post_success_budget_rejection
+        and not nq_grounded_budget_stop
     )
     terminal_protocol_failure = (
         terminal_protocol_failure_observed
@@ -5325,7 +5415,8 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
         and not webshop_staged_purchase_protocol_complete
     )
     all_tool_actions_failed = (
-        all_tool_actions_failed_observed and not reservation_pause and not grounded_failure and not typed_policy_failure
+        all_tool_actions_failed_observed and not reservation_pause and not grounded_failure
+        and not typed_policy_failure and not nq_grounded_budget_stop
     )
     recovered_tool_failure = bool(
         failed_call_ids
@@ -5333,7 +5424,7 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
         and not terminal_tool_failure
     )
     unsupported_tool_claim = bool(
-        turns and not successful_call_ids and _claims_tool_verification(artifact)
+        turns and not successful_call_ids and _claims_tool_verification(artifact) and not nq_grounded_budget_stop
     )
     claimed_confidence = float(
         artifact.confidence
@@ -5347,6 +5438,10 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
     effective_confidence = claimed_confidence
     risks: list[str] = []
     confidence_caps: dict[str, float] = {}
+
+    if artifact.runtime_tool_evidence.get("purchase_status_conflict"):
+        risks.append("purchase_status_conflict")
+        confidence_caps["purchase_status_conflict"] = 0.0
 
     if typed_policy_failure:
         # Keep the model's original claim separately for audit, but a trusted
@@ -5387,6 +5482,8 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
     artifact.confidence = max(0.0, min(1.0, effective_confidence))
     artifact.integrity_risks = list(dict.fromkeys(risks))
     artifact.runtime_tool_evidence = {
+        **{key: value for key, value in artifact.runtime_tool_evidence.items()
+           if key in {"nq_corpus", "nq_answer_selection", "purchase_status_conflict"}},
         "trusted": True,
         "attempted_count": len(turns),
         "successful_count": len(successful_call_ids),
@@ -5423,6 +5520,12 @@ def _enforce_artifact_integrity(artifact: AgentArtifact) -> None:
                 "post_success_budget_rejection_waived": True,
                 "budget_rejection_code": terminal_tool_failure_code,
             }
+        )
+    if nq_grounded_budget_stop:
+        artifact.runtime_tool_evidence.update(
+            terminal_failure_observed=True,
+            nq_evidence_only_finalization=True,
+            budget_rejection_code=terminal_tool_failure_code,
         )
     if grounded_failure:
         artifact.runtime_tool_evidence.update(
@@ -6899,6 +7002,7 @@ def _worker_output_instruction(
     is_output_agent: bool = False,
     webshop_worker_guidance_policy: str = "baseline",
     local_environment_result: bool = False,
+    native_tools_only: bool = False,
 ) -> str:
     actions = available_actions if isinstance(available_actions, list) else []
     if short_answer_qa:
@@ -7043,10 +7147,15 @@ def _worker_output_instruction(
         )
     else:
         action_requirement = "Action use is optional. "
+    action_transport = (
+        "To act, call a provided native tool through the API tool-call channel. "
+        "Actions written in response text are never executed. Use response text only for the final report. "
+        if action_adapter == "webshop" or native_tools_only else
+        'Alternatively, return one or more Action calls using {"action_calls":[{"name":"action_name","arguments":{...}}]}. '
+    )
     return (
         instruction
-        + "Alternatively, return one or more Action calls using "
-        + '{"action_calls":[{"name":"action_name","arguments":{...}}]}. '
+        + action_transport
         + calling_rule
         + "After action_observation or action_observations arrives, inspect it and either make "
         + "further Action calls or return the final JSON. "
@@ -7373,6 +7482,8 @@ def _finalization_recovery_messages(
     short_answer_qa: bool = False,
     is_output_agent: bool = False,
     dataset: str = "",
+    preserve_healthbench_response: bool = False,
+    preserved_artifact_fields: dict[str, Any] | None = None,
 ) -> list[dict[str, str]]:
     action_environment = visible_context.get("action_environment", {})
     action_adapter = (
@@ -7396,10 +7507,10 @@ def _finalization_recovery_messages(
         "previous_attempt_issue": previous_attempt_issue,
         "previous_response": (
             previous_response
-            if len(previous_response) <= 8000
+            if preserve_healthbench_response or len(previous_response) <= 8000
             else previous_response[:4000] + "\n[excerpt omitted]\n" + previous_response[-4000:]
         ),
-        "previous_response_excerpted": len(previous_response) > 8000,
+        "previous_response_excerpted": not preserve_healthbench_response and len(previous_response) > 8000,
         "previous_error": dict(previous_error or {}),
         "artifact_schema": {
             "answer": recovery_answer_description(
@@ -7415,6 +7526,10 @@ def _finalization_recovery_messages(
     }
     if "public_task_context" in visible_context:
         recovery_context["public_task_context"] = visible_context["public_task_context"]
+    if canonical_dataset_name(dataset) in {"hotpotqa", "musique"}:
+        for field in ("original_question", "original_question_source", "result_scope", "qa_result_contract_version"):
+            if field in visible_context:
+                recovery_context[field] = visible_context[field]
     if "corpus_evidence" in visible_context:
         recovery_context["corpus_evidence"] = visible_context["corpus_evidence"]
         recovery_context["artifact_schema"].update(
@@ -7450,6 +7565,19 @@ def _finalization_recovery_messages(
         recovery_context["webshop_current_public_state"] = _webshop_finalization_state(
             action_environment.get("state", {}),
         )
+        progress = action_environment.get("webshop_progress") or {}
+        if progress.get("projection_revision") == "structured_facts_v1":
+            # Closing/schema repair is also a Worker request. Keep all previously
+            # observed facts and the full current page, including the targets of
+            # memory's current-page references, without reopening the Action phase.
+            recovery_context["action_environment"] = {
+                "adapter": "webshop",
+                "state": copy.deepcopy(action_environment.get("state", {})),
+                "webshop_progress": copy.deepcopy(progress),
+            }
+            recovery_context["webshop_current_public_state"] = {
+                "ref": "action_environment.state",
+            }
         recovery_context["webshop_finalization_contract"] = {
             "action_phase_closed": True,
             "terminal_reason": previous_attempt_issue,
@@ -7512,10 +7640,11 @@ def _finalization_recovery_messages(
     if canonical_dataset_name(dataset) == "hotpotqa":
         output_instruction = hotpot_output_instruction(is_output_agent=is_output_agent)
         output_instruction += " " + role_instruction
-        recovery_context["artifact_schema"] = {
-            key: recovery_context["artifact_schema"][key] for key in HOTPOT_RESULT_FIELDS
-        }
-    if action_adapter == "healthbench_professional":
+    if canonical_dataset_name(dataset) in {"hotpotqa", "musique"}:
+        recovery_context["artifact_schema"] = qa_artifact_schema(is_output_agent=is_output_agent)
+        recovery_context["preserved_artifact_fields"] = dict(preserved_artifact_fields or {})
+        output_instruction += SCHEMA_REPAIR_INSTRUCTION
+    if action_adapter == "healthbench_professional" or preserve_healthbench_response:
         output_instruction = (
             "Return exactly one JSON object with answer, summary, confidence, evidence, "
             "unresolved_issues, and tool_summary. "
@@ -8409,6 +8538,7 @@ def _webshop_context_for_prompt(
                     "products_visited",
                     "purchase_evidence_checkpoint",
                     "policy_failure",
+                    "decision_memory",
                 )
                 if key in progress
             }
@@ -8427,6 +8557,9 @@ def _webshop_context_for_prompt(
         projected[key] = compacted[-4:]
         retained_packets += len(projected[key])
     prior = compact_packet(projected.get("prior_artifact"))
+    live_environment = projected.get("action_environment") or {}
+    if prior is not None and live_environment.get("environment_access") != "stateless_planner":
+        prior = webshop_grounded_packet(prior, live_environment.get("state") or {})
     projected["prior_artifact"] = prior
     retained_packets += int(prior is not None)
 
@@ -8438,6 +8571,7 @@ def _webshop_context_for_prompt(
         environment.pop("alfworld_progress", None)
         state = environment.get("state")
         if isinstance(state, dict):
+            environment["purchase_execution_status"] = webshop_execution_status(state)
             progress = environment.get("webshop_progress")
             progress = progress if isinstance(progress, dict) else {}
             state["decision_phase"] = _webshop_decision_phase(state)
@@ -8456,7 +8590,7 @@ def _webshop_context_for_prompt(
                 progress=progress,
             )
             page_text = str(state.get("page_text", ""))
-            if len(page_text) > 8_000:
+            if len(page_text) > 8_000 and progress.get("projection_revision") != "structured_facts_v1":
                 state["page_text"] = (
                     page_text[:4_000]
                     + "\n...[middle omitted from Worker prompt; full audit copy retained]...\n"
@@ -8695,21 +8829,6 @@ def _webshop_prompt_projection_summary(
     }
 
 
-def _webshop_credit_exhausted_response(context: dict[str, Any]) -> LLMResponse:
-    state = _webshop_finalization_state(context.get("action_environment", {}).get("state"))
-    return LLMResponse(
-        text=json.dumps(
-            {
-                "answer": "Worker token credit exhausted; see trusted environment outcome",
-                "summary": "Runtime stopped before an unaffordable model request. No additional Action was executed.",
-                "confidence": 0.0,
-                "evidence": [json.dumps(state, ensure_ascii=False)],
-                "unresolved_issues": ["webshop_request_token_credit_exhausted"],
-                "tool_summary": [],
-            }
-        ),
-        model="runtime-token-credit-guard",
-    )
 
 
 def _webshop_finalization_state(state: object) -> dict[str, Any]:

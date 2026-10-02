@@ -31,6 +31,7 @@ from .alfworld import (
     alfworld_lifecycles,
 )
 from .answer_submission import AnswerFinalizer, AnswerSubmissionConfig
+from .healthbench_artifact import validate_preserved_artifact
 from .config import (
     DEFAULT_DATASET_MAX_TOTAL_TOKENS,
     CanvasConfig,
@@ -39,11 +40,13 @@ from .config import (
     canonical_dataset_name,
 )
 from .dataset_actions import default_dataset_action_registry
+from .budget_policy import clear_legacy_allocations, use_reported_usage
 from .dataset_adapters import (
     HEALTHBENCH_PROFESSIONAL_JUDGE_MODEL,
     HealthBenchOfficialRubricVerifier,
     HealthBenchRubricVerifier,
     solver_task_text,
+    bind_public_qa_task,
 )
 from .deadline import RolloutDeadline, WorkerWallClockLimitExceeded
 from .delegation import DUPLICATE_RESPONSIBILITY_POLICIES
@@ -79,6 +82,7 @@ from .rollouts import Tokenizer
 from .route_health import PersistentRouteCircuitOpenError, RouteHealthStore
 from .runtime import (
     WORKER_BACKEND_FAILURE_SENTINEL,
+    WORKER_PROTOCOL_FAILURE_SENTINEL,
     ModelAgentExecutor,
     MultiAgentRuntime,
     RoutedModelAgentExecutor,
@@ -111,7 +115,6 @@ from .webshop import (
     WebShopSessionLifecycle,
     webshop_lifecycles,
 )
-from .webshop_budget import budget_partition
 from .webshop_guidance import WEBSHOP_WORKER_GUIDANCE_POLICIES
 from .webshop_native import NativeWebShopLifecycle
 from .webshop_native_protocol import NATIVE_POLICY, WEBSHOP_EXECUTION_POLICIES
@@ -132,7 +135,7 @@ class GraphEvaluationBackendError(RuntimeError):
 
 
 REMOTE_RUNTIME_MAX_CONCURRENCY = 16
-_REMOTE_RUNTIME_20_CONCURRENCY_MODELS = frozenset({"gpt-6-astra"})
+_REMOTE_RUNTIME_20_CONCURRENCY_MODELS = frozenset({"gpt-6-astra", "lab-gpt-5.5-2"})
 _REMOTE_RUNTIME_30_CONCURRENCY_PREFIXES = ("minimax",)
 _REMOTE_RUNTIME_50_CONCURRENCY_PREFIXES = ("deepseek",)
 
@@ -246,11 +249,21 @@ class FixedRuntimeConfig:
                 else REMOTE_RUNTIME_MAX_CONCURRENCY
             )
         )
-        if not self.managed_locally and self.max_concurrency > remote_limit:
+        from urllib.parse import urlsplit
+
+        local_qwen = (
+            self.request_profile == "qwen"
+            and urlsplit(self.base_url).hostname in {"localhost", "127.0.0.1", "::1"}
+        )
+        # A separately launched local Qwen service has no provider account quota.
+        # Keep the configured request gate even when this process does not own
+        # server startup; managed_locally controls service lifecycle, not location.
+        enforce_provider_limit = not self.managed_locally and not local_qwen
+        if enforce_provider_limit and self.max_concurrency > remote_limit:
             raise ValueError(
                 f"externally managed runtime.max_concurrency must not exceed {remote_limit}"
             )
-        if not self.managed_locally and any(
+        if enforce_provider_limit and any(
             int(limit) > remote_limit for limit in self.max_concurrency_by_dataset.values()
         ):
             raise ValueError(
@@ -322,6 +335,8 @@ class NQPolicyConfig:
     evidence_token_budget: int = 12000
     max_submission_repairs: int = 1
     allow_web_fallback: bool = False
+    answer_selection_enabled: bool = False
+    max_cached_searches_per_agent: int = 2
 
     def validate(self) -> None:
         if not self.profile.strip():
@@ -334,7 +349,8 @@ class NQPolicyConfig:
             raise ValueError("NQ corpus mode requires at least one nonempty search")
         if self.max_search_calls_per_task < self.min_nonempty_searches_before_answer:
             raise ValueError("NQ search budget is below the required nonempty searches")
-        if self.evidence_token_budget <= 0 or self.max_submission_repairs < 0:
+        if (self.evidence_token_budget <= 0 or self.max_submission_repairs < 0
+                or self.max_cached_searches_per_agent < 1):
             raise ValueError("NQ evidence token and repair budgets are invalid")
         if not self.require_evidence_refs or self.allow_web_fallback:
             raise ValueError("NQ corpus mode requires citations and forbids web fallback")
@@ -390,6 +406,7 @@ class RetrievalConfig:
 @dataclass(frozen=True)
 class AIMEActionConfig:
     enabled: bool = False
+    implementation: str = "aime-no-code-comments-shared-usage-default-20261002"
     timeout_s: float = 5.0
     max_output_chars: int = 8000
     max_code_chars: int = 12000
@@ -399,6 +416,9 @@ class AIMEActionConfig:
     max_total_calls: int = 4
 
     def validate(self) -> None:
+        from .aime_formal import VERSION
+        if self.implementation not in {"legacy", VERSION}:
+            raise ValueError("unknown aime_actions.implementation")
         if not self.enabled:
             return
         if self.timeout_s <= 0:
@@ -428,14 +448,23 @@ class WebShopConfig:
     env_feedback_enabled: bool = False
     worker_guidance_policy: str = "baseline"
     worker_memory_policy: str = "factual_memory_v1"
+    worker_decision_memory_policy: str = "off"
     worker_execution_policy: str = "graph_tools_v1"
     native_conversation_history: bool = False
     compatibility_profile: str = "current"
     purchase_budget_policy: str = "off"
     scheduling_policy: str = "off"
+    purchase_review_enabled: bool = False
+    candidate_comparison_enabled: bool = False
 
     def validate(self) -> None:
         section_memory_limit(self.compatibility_profile)
+        from .webshop_decision_memory import validate_policy
+        validate_policy(self.worker_decision_memory_policy, self.worker_memory_policy, self.worker_execution_policy)
+        if self.purchase_review_enabled and (not self.staged_commit_enabled or self.worker_execution_policy != "graph_tools_v1" or self.worker_memory_policy != "factual_memory_v2"):
+            raise ValueError("purchase review requires staged graph tools and factual_memory_v2")
+        if self.candidate_comparison_enabled and self.worker_memory_policy != "factual_memory_v2":
+            raise ValueError("candidate comparison requires factual_memory_v2")
         if self.scheduling_policy not in {"off", "bounded_research_v1"}:
             raise ValueError("unknown webshop.scheduling_policy")
         if self.scheduling_policy != "off" and (self.worker_execution_policy != "graph_tools_v1" or not self.staged_commit_enabled):
@@ -772,6 +801,8 @@ class AdaptiveApplicationConfig:
     director_reward: DirectorRewardConfig = field(default_factory=DirectorRewardConfig)
     director_prompt_variant: str = "v2.1"
     director_thinking_by_dataset: dict[str, bool] = field(default_factory=dict)
+    director_observation_schema: str = "legacy_full_v3"
+    director_observation_schema_by_dataset: dict[str, str] = field(default_factory=dict)
 
     @property
     def skillbank_context_enabled(self) -> bool:
@@ -814,6 +845,8 @@ class AdaptiveApplicationConfig:
         self.alfworld.validate()
         self.swe.validate()
         self.director_reward.validate()
+        from .director_observation import validate_observation_config
+        validate_observation_config(self.director_observation_schema, self.director_observation_schema_by_dataset)
         from .director import DIRECTOR_PROMPT_VARIANTS
         if self.director_prompt_variant not in DIRECTOR_PROMPT_VARIANTS:
             raise ValueError("director.prompt_variant must be 'v2', 'v2.1', 'v2.2', or 'v3'")
@@ -914,60 +947,6 @@ class AdaptiveApplicationConfig:
             raise ValueError(
                 "canvas.max_total_tokens_by_dataset requires non-empty dataset keys "
                 "and positive limits"
-            )
-        minimum_canvas_token_budget = min(
-            (self.canvas.max_total_tokens, *dataset_token_budgets.values())
-        )
-        if not 0 <= self.canvas.graph_growth_token_reserve < minimum_canvas_token_budget:
-            raise ValueError(
-                "canvas graph_growth_token_reserve must be non-negative and below "
-                "every configured max_total_tokens budget"
-            )
-        if not 0 < self.canvas.worker_latency_quantile <= 1:
-            raise ValueError("canvas.worker_latency_quantile must be in (0, 1]")
-        if (
-            min(
-                self.canvas.worker_latency_window,
-                self.canvas.worker_latency_min_samples,
-            )
-            <= 0
-        ):
-            raise ValueError("canvas Worker latency sample limits must be positive")
-        if self.canvas.worker_latency_min_samples > self.canvas.worker_latency_window:
-            raise ValueError(
-                "canvas.worker_latency_min_samples cannot exceed worker_latency_window"
-            )
-        if (
-            min(
-                self.canvas.worker_latency_cold_start_s,
-                self.canvas.finalization_time_reserve_s,
-            )
-            <= 0
-        ):
-            raise ValueError("canvas Worker latency and finalization reserves must be positive")
-        if any(
-            not math.isfinite(value) or value <= 0
-            for value in self.canvas.finalization_time_reserve_by_dataset.values()
-        ):
-            raise ValueError("dataset finalization reserves must be finite and positive")
-        if not 0 < self.canvas.worker_token_quantile <= 1:
-            raise ValueError("canvas.worker_token_quantile must be in (0, 1]")
-        if (
-            min(
-                self.canvas.worker_token_window,
-                self.canvas.worker_token_min_samples,
-                self.canvas.worker_token_cold_start,
-                self.canvas.finalization_token_reserve,
-            )
-            <= 0
-        ):
-            raise ValueError("canvas Worker token sample limits and reserves must be positive")
-        if self.canvas.worker_token_min_samples > self.canvas.worker_token_window:
-            raise ValueError("canvas.worker_token_min_samples cannot exceed worker_token_window")
-        if self.canvas.finalization_token_reserve >= minimum_canvas_token_budget:
-            raise ValueError(
-                "canvas.finalization_token_reserve must be below every configured "
-                "max_total_tokens budget"
             )
         if (
             min(
@@ -1100,7 +1079,12 @@ class AdaptiveApplicationConfig:
                 "v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
                 admission_config={"canvas": asdict(self.canvas),
                                   "answer_submission": asdict(self.answer_submission),
-                                  "alfworld_task_prompt_source": self.alfworld.task_prompt_source},
+                                  "director_observation": {
+                                      "default": self.director_observation_schema,
+                                      "by_dataset": dict(self.director_observation_schema_by_dataset),
+                                  },
+                                  "alfworld_task_prompt_source": self.alfworld.task_prompt_source,
+                                  "aime_implementation": self.aime_actions.implementation},
             ),
             "policies": {
                 "proposer": self.proposer_model.to_dict(),
@@ -1188,6 +1172,8 @@ class AdaptiveApplicationConfig:
                 "variant": "v3" if self.canvas.submission_protocol == "unified_task_result_v1" else self.director_prompt_variant,
                 "variant_by_dataset": dict(self.pats.director_prompt_variant_by_dataset),
                 "thinking_by_dataset": dict(self.director_thinking_by_dataset),
+                "observation_schema": self.director_observation_schema,
+                "observation_schema_by_dataset": dict(self.director_observation_schema_by_dataset),
             },
             "healthbench_judge_audit": {
                 "runtime_route": self.healthbench_judge_runtime_route,
@@ -1351,8 +1337,12 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
                 canonical_dataset_name(dataset): str(protocol)
                 for dataset, protocol in canvas.get("submission_protocol_by_dataset", {}).items()
             },
-            alfworld_terminal_candidate_policy=str(canvas.get("alfworld_terminal_candidate_policy", "off")),
-            submission_journal_dir=str(_path(canvas.get("submission_journal_dir"), root, "state/submissions")),
+            alfworld_terminal_candidate_policy=str(
+                canvas.get("alfworld_terminal_candidate_policy", "off")
+            ),
+            submission_journal_dir=str(
+                _path(canvas.get("submission_journal_dir"), root, "state/submissions")
+            ),
             max_recovery_executions=int(canvas.get("max_recovery_executions", 2)),
             action_budget_policy=str(canvas.get("action_budget_policy", "phase_split_v1")),
             webshop_action_budget_policy=canvas.get("webshop_action_budget_policy"),
@@ -1361,7 +1351,7 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             director_budget_policy=str(canvas.get("director_budget_policy", "rounds_v1")),
             max_director_edits=canvas.get("max_director_edits"),
             max_director_edits_by_dataset=dict(canvas.get("max_director_edits_by_dataset", {})),
-            max_total_tokens=int(canvas.get("max_total_tokens", 32_768)),
+            max_total_tokens=int(canvas.get("max_total_tokens", 32768)),
             max_total_tokens_by_dataset={
                 canonical_dataset_name(dataset): int(limit)
                 for dataset, limit in raw_dataset_token_budgets.items()
@@ -1373,37 +1363,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             relay_max_chars=int(canvas.get("relay_max_chars", 4000)),
             feedback_max_chars=int(canvas.get("feedback_max_chars", 6000)),
             artifact_summary_max_chars=int(canvas.get("artifact_summary_max_chars", 320)),
+            math_summary_head_chars=int(canvas.get("math_summary_head_chars", 256)),
+            math_summary_tail_chars=int(canvas.get("math_summary_tail_chars", 1024)),
+            math_answer_feedback_chars=int(canvas.get("math_answer_feedback_chars", 2000)),
             structural_repair_enabled=bool(canvas.get("structural_repair_enabled", True)),
-            graph_growth_token_reserve=int(canvas.get("graph_growth_token_reserve", 8192)),
-            remaining_time_admission_enabled=bool(
-                canvas.get("remaining_time_admission_enabled", True)
-            ),
-            worker_latency_quantile=float(canvas.get("worker_latency_quantile", 0.95)),
-            worker_latency_window=int(canvas.get("worker_latency_window", 64)),
-            worker_latency_min_samples=int(canvas.get("worker_latency_min_samples", 3)),
-            worker_latency_cold_start_s=float(canvas.get("worker_latency_cold_start_s", 30.0)),
-            finalization_time_reserve_s=float(canvas.get("finalization_time_reserve_s", 20.0)),
-            finalization_time_reserve_by_dataset={
-                str(key): float(value)
-                for key, value in canvas.get(
-                    "finalization_time_reserve_by_dataset",
-                    {
-                        "healthbench_professional": 180.0,
-                        "swe_bench": 120.0,
-                    },
-                ).items()
-            },
-            remaining_token_admission_enabled=bool(
-                canvas.get("remaining_token_admission_enabled", True)
-            ),
             native_webshop_output_materialization=bool(
                 canvas.get("native_webshop_output_materialization", False)
             ),
-            worker_token_quantile=float(canvas.get("worker_token_quantile", 0.95)),
-            worker_token_window=int(canvas.get("worker_token_window", 64)),
-            worker_token_min_samples=int(canvas.get("worker_token_min_samples", 3)),
-            worker_token_cold_start=int(canvas.get("worker_token_cold_start", 4096)),
-            finalization_token_reserve=int(canvas.get("finalization_token_reserve", 2048)),
             repair_recent_action_limit=int(canvas.get("repair_recent_action_limit", 5)),
             semantic_no_progress_limit=int(canvas.get("semantic_no_progress_limit", 2)),
             output_selection_budget=int(canvas.get("output_selection_budget", 1)),
@@ -1498,21 +1464,33 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             nq_frozen_top_k=int(retrieval.get("nq_frozen_top_k", 0)),
             nq_evidence_mode=(
                 str(retrieval["nq_evidence_mode"]).strip().casefold()
-                if "nq_evidence_mode" in retrieval else None
+                if "nq_evidence_mode" in retrieval
+                else None
             ),
             nq_policy=NQPolicyConfig(
                 profile=str(nq_policy.get("profile", "nq-dense8-v1")).strip(),
                 expected_identity_sha256=str(nq_policy.get("expected_identity_sha256", "")).strip(),
-                min_nonempty_searches_before_answer=int(nq_policy.get("min_nonempty_searches_before_answer", 1)),
+                min_nonempty_searches_before_answer=int(
+                    nq_policy.get("min_nonempty_searches_before_answer", 1)
+                ),
                 max_search_calls_per_task=int(nq_policy.get("max_search_calls_per_task", 4)),
                 require_evidence_refs=bool(nq_policy.get("require_evidence_refs", True)),
                 evidence_token_budget=int(nq_policy.get("evidence_token_budget", 12000)),
                 max_submission_repairs=int(nq_policy.get("max_submission_repairs", 1)),
                 allow_web_fallback=bool(nq_policy.get("allow_web_fallback", False)),
+                answer_selection_enabled=bool(nq_policy.get("answer_selection_enabled", False)),
+                max_cached_searches_per_agent=int(
+                    nq_policy.get("max_cached_searches_per_agent", 2)
+                ),
             ),
         ),
         aime_actions=AIMEActionConfig(
             enabled=bool(aime_actions.get("enabled", False)),
+            implementation=str(
+                aime_actions.get(
+                    "implementation", "aime-no-code-comments-shared-usage-default-20261002"
+                )
+            ),
             timeout_s=float(aime_actions.get("timeout_s", 5.0)),
             max_output_chars=int(aime_actions.get("max_output_chars", 8000)),
             max_code_chars=int(aime_actions.get("max_code_chars", 12000)),
@@ -1542,10 +1520,13 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             .strip()
             .casefold(),
             worker_execution_policy=str(webshop.get("worker_execution_policy", "graph_tools_v1")),
+            worker_decision_memory_policy=str(webshop.get("worker_decision_memory_policy", "off")),
             native_conversation_history=bool(webshop.get("native_conversation_history", False)),
             compatibility_profile=str(webshop.get("compatibility_profile", "current")),
             purchase_budget_policy=str(webshop.get("purchase_budget_policy", "off")),
             scheduling_policy=str(webshop.get("scheduling_policy", "off")),
+            purchase_review_enabled=bool(webshop.get("purchase_review_enabled", False)),
+            candidate_comparison_enabled=bool(webshop.get("candidate_comparison_enabled", False)),
         ),
         alfworld=ALFWorldConfig(
             task_prompt_source=str(alfworld.get("task_prompt_source", "dataset")),
@@ -1614,7 +1595,8 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             local_test_timeout_s=float(swe.get("local_test_timeout_s", 60.0)),
             public_test_environment_root=(
                 _path(swe["public_test_environment_root"], root, "state/swe/public-test-envs")
-                if swe.get("public_test_environment_root") else None
+                if swe.get("public_test_environment_root")
+                else None
             ),
             public_test_setup_timeout_s=float(swe.get("public_test_setup_timeout_s", 300.0)),
             max_output_chars=int(swe.get("max_output_chars", 12_000)),
@@ -1644,6 +1626,11 @@ def load_adaptive_config(path: str | Path, *, validate: bool = True) -> Adaptive
             version=str((director_reward or {}).get("version", LEGACY_REWARD_VERSION))
         ),
         director_prompt_variant=str(director.get("prompt_variant", "v2.1")).strip().casefold(),
+        director_observation_schema=str(director.get("observation_schema", "legacy_full_v3")),
+        director_observation_schema_by_dataset={
+            canonical_dataset_name(key): str(value)
+            for key, value in director.get("observation_schema_by_dataset", {}).items()
+        },
         director_thinking_by_dataset={
             canonical_dataset_name(dataset): enabled
             for dataset, enabled in director.get("thinking_by_dataset", {}).items()
@@ -1849,6 +1836,7 @@ class AdaptiveApplicationResult:
             "mace_statistics_path": self.mace_statistics_path,
             "token_in": worker_token_in,
             "token_out": worker_token_out,
+            "worker_usage": dict(usage),
             "model_roles": self.task.metadata.get("model_roles", {}),
         }
 
@@ -2220,23 +2208,11 @@ class AdaptiveSolverApplication:
                 self.runtime.environment_fingerprint = active_swe_lifecycles[
                     0
                 ].environment_fingerprint
-            calls = max(
-                1,
-                int(
-                    self.runtime.estimate_execution_tokens(
-                        graph,
-                        set(graph.nodes),
-                        quantile=self.config.canvas.worker_token_quantile,
-                        minimum_samples=self.config.canvas.worker_token_min_samples,
-                        cold_start_tokens=self.config.canvas.worker_token_cold_start,
-                    )["call_count"]
-                ),
-            )
             dataset = canonical_dataset_name(task.metadata.get("dataset", ""))
+            usage_policy = self.config.canvas.worker_usage_policy(dataset)
             token_budget = self.config.canvas.max_total_tokens_by_dataset.get(
                 dataset, self.config.canvas.max_total_tokens
             )
-            usage_policy = self.config.canvas.worker_usage_policy(dataset)
             if usage_policy is not None:
                 # Counterfactual siblings own independent environments and accounts.
                 # Never reopen or charge the primary rollout's persisted account.
@@ -2247,46 +2223,13 @@ class AdaptiveSolverApplication:
                     question_attempt_id=attempt_id,
                     threshold=int(usage_policy.get("start_threshold", token_budget)),
                     max_unsettled_attempts=int(usage_policy.get("max_unsettled_attempts", 2)),
+                    dataset=dataset,
                 )
-            webshop_partition = (
-                budget_partition(
-                    total_limit=int(token_budget),
-                    spent=0,
-                    configured_minimum=self.config.canvas.finalization_token_reserve,
-                    call_count=calls,
-                    closure=False,
-                )
-                if dataset == "webshop" and self.config.canvas.remaining_token_admission_enabled
-                else None
-            )
             for node in graph.nodes.values():
                 if usage_policy is not None:
-                    node.metadata["_runtime_budget_kind"] = "reported_usage_threshold_v1"
-                    continue
-                if dataset == "webshop":
-                    node.metadata["_runtime_webshop_request_admission_enabled"] = (
-                        self.config.canvas.remaining_token_admission_enabled
-                    )
+                    use_reported_usage(node)
                 else:
-                    node.metadata["_runtime_token_credit"] = int(token_budget) // calls
-                if webshop_partition is not None:
-                    node.metadata.update(
-                        _runtime_token_credit=webshop_partition["per_execution_credit"],
-                        _runtime_reserved_closure_tokens=webshop_partition[
-                            "reserved_closure_tokens"
-                        ],
-                        _runtime_budget_phase="exploration",
-                    )
-                if dataset in {"nq_open", "hotpotqa", "webshop"}:
-                    if dataset != "webshop":
-                        node.metadata["_runtime_budget_kind"] = "short_qa_request_credit_v1"
-                        node.metadata["_runtime_finalization_output_reserve"] = (
-                            self.config.canvas.finalization_token_reserve
-                        )
-                else:
-                    # Environment branches must obey admission before a request,
-                    # not just reject an already over-budget graph afterwards.
-                    node.metadata["_runtime_budget_kind"] = "full_graph_request_credit_v1"
+                    clear_legacy_allocations(node)
             worker_task = (
                 active_alfworld_lifecycles[0].effective_task
                 if active_alfworld_lifecycles else solver_task_text(
@@ -2297,6 +2240,7 @@ class AdaptiveSolverApplication:
                     )
             )
             with request_dataset(task.metadata.get("dataset", task.task_type)):
+                bind_public_qa_task(task, graph)
                 report = self.runtime.execute(
                     task=worker_task,
                     graph=graph,
@@ -2304,7 +2248,9 @@ class AdaptiveSolverApplication:
                 )
             if report.cache_hits:
                 raise RuntimeError("full graph branch reused execution cache")
-            if set(report.artifacts) != set(graph.nodes):
+            if (set(report.artifacts) != set(graph.nodes)
+                    and not (usage_policy is not None
+                             and dataset in {"nq_open", "healthbench_professional"})):
                 raise RuntimeError("full graph branch did not execute every node")
             if active_webshop_lifecycles:
                 self.runtime.complete_full_graph_webshop_output(
@@ -2335,9 +2281,17 @@ class AdaptiveSolverApplication:
                          "dispatch_policy_valid": ledger.dispatches_valid()}
                 task.metadata["worker_usage"] = usage
                 self.last_graph_evaluation["worker_usage"] = usage
-                if not usage["usage_complete"] or not usage["dispatch_policy_valid"]:
+                # Complete NQ/HealthBench answers remain gradable when provider
+                # usage is missing. Keep that uncertainty in the branch report.
+                if (not usage["dispatch_policy_valid"]
+                        or (not usage["usage_complete"]
+                            and dataset not in {"nq_open", "healthbench_professional"})):
                     raise GraphEvaluationIncompleteError(
                         "full graph branch has incomplete or invalid Worker usage; no counterfactual credit"
+                    )
+                if dataset == "healthbench_professional" and set(report.artifacts) != set(graph.nodes):
+                    raise GraphEvaluationIncompleteError(
+                        "HealthBench branch has no complete answer; Worker dispatch stopped"
                     )
             if report.incomplete_bidirectional_components:
                 raise GraphEvaluationIncompleteError(
@@ -2457,6 +2411,17 @@ class AdaptiveSolverApplication:
                 else None
             )
             prediction = submission.submitted_answer if submission else output
+            if (ledger is not None and dataset == "healthbench_professional"
+                    and (output_artifact is None
+                         or not validate_preserved_artifact(
+                             output_artifact, question_attempt_id=ledger.question_attempt_id)
+                         or prediction != output_artifact.answer
+                         or output in {WORKER_PROTOCOL_FAILURE_SENTINEL, WORKER_BACKEND_FAILURE_SENTINEL}
+                         or not prediction.strip()
+                         or (submission is not None and not submission.valid))):
+                raise GraphEvaluationIncompleteError(
+                    "HealthBench branch has no complete answer; do not invoke Judge or invent a reply"
+                )
             if nq_corpus:
                 from .observability import VerificationResult
 
@@ -2466,6 +2431,11 @@ class AdaptiveSolverApplication:
                 self.last_graph_evaluation["nq_corpus_evidence_audit"] = audit
                 if any(call["status"] in {"error", "pending"} for call in audit["calls"]):
                     raise GraphEvaluationIncompleteError("NQ counterfactual retrieval did not complete")
+                if (ledger is not None and ledger.stop_reason() is not None
+                        and not nq_check.get("valid")):
+                    raise GraphEvaluationIncompleteError(
+                        "NQ branch has no valid evidence-backed answer; Worker dispatch stopped"
+                    )
                 if not nq_check.get("valid"):
                     verification = VerificationResult(
                         0.0, False, "nq_invalid_evidence_submission", str(nq_check.get("reason", "")),
@@ -2551,6 +2521,17 @@ def create_adaptive_application(
     director_tokenizer: Tokenizer | None = None,
     director_enable_thinking: bool | None = None,
 ) -> AdaptiveSolverApplication:
+    aime_factory_options = {
+        "mock": mock,
+        "director_backend": director_backend,
+        "worker_backend": worker_backend,
+        "distiller_backend": distiller_backend,
+        "verifier": verifier,
+        "route_latency_tracker": route_latency_tracker,
+        "route_token_tracker": route_token_tracker,
+        "director_tokenizer": director_tokenizer,
+        "director_enable_thinking": director_enable_thinking,
+    }
     config.validate()
     if config.retrieval.nq_evidence_mode == "corpus_tool" and not mock:
         _validate_nq_corpus_service(config.retrieval)
@@ -2628,6 +2609,8 @@ def create_adaptive_application(
             search_observation_mode=config.webshop.search_observation_mode,
             env_feedback_enabled=config.webshop.env_feedback_enabled,
             compatibility_profile=config.webshop.compatibility_profile,
+            purchase_review_enabled=config.webshop.purchase_review_enabled,
+            candidate_comparison_enabled=config.webshop.candidate_comparison_enabled,
         )
         if isinstance(webshop_lifecycle, NativeWebShopLifecycle):
             webshop_lifecycle.require_native_actions = config.webshop.worker_execution_policy == NATIVE_POLICY
@@ -2746,6 +2729,7 @@ def create_adaptive_application(
             alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
             webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
             webshop_worker_memory_policy=config.webshop.worker_memory_policy,
+            webshop_worker_decision_memory_policy=config.webshop.worker_decision_memory_policy,
             webshop_worker_execution_policy=config.webshop.worker_execution_policy,
             webshop_native_conversation_history=config.webshop.native_conversation_history,
             webshop_compatibility_profile=config.webshop.compatibility_profile,
@@ -2800,6 +2784,7 @@ def create_adaptive_application(
                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
                 webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
                 webshop_worker_memory_policy=config.webshop.worker_memory_policy,
+                webshop_worker_decision_memory_policy=config.webshop.worker_decision_memory_policy,
                 webshop_worker_execution_policy=config.webshop.worker_execution_policy,
                 webshop_native_conversation_history=config.webshop.native_conversation_history,
                 webshop_compatibility_profile=config.webshop.compatibility_profile,
@@ -2815,6 +2800,7 @@ def create_adaptive_application(
                 alfworld_worker_guidance_policy=(config.alfworld.worker_guidance_policy),
                 webshop_worker_guidance_policy=config.webshop.worker_guidance_policy,
                 webshop_worker_memory_policy=config.webshop.worker_memory_policy,
+                webshop_worker_decision_memory_policy=config.webshop.worker_decision_memory_policy,
                 webshop_worker_execution_policy=config.webshop.worker_execution_policy,
                 webshop_native_conversation_history=config.webshop.native_conversation_history,
                 webshop_compatibility_profile=config.webshop.compatibility_profile,
@@ -2844,10 +2830,10 @@ def create_adaptive_application(
         ),
         route_latency_tracker=(
             route_latency_tracker
-            or RouteLatencyTracker(window_size=config.canvas.worker_latency_window)
+            or RouteLatencyTracker()
         ),
         route_token_tracker=(
-            route_token_tracker or RouteTokenTracker(window_size=config.canvas.worker_token_window)
+            route_token_tracker or RouteTokenTracker()
         ),
     )
     skillbank = (
@@ -2951,12 +2937,14 @@ def create_adaptive_application(
         director_thinking_by_dataset=(
             config.director_thinking_by_dataset if director_enable_thinking is None else {}
         ),
+        director_observation_schema=config.director_observation_schema,
+        director_observation_schema_by_dataset=config.director_observation_schema_by_dataset,
         required_nq_frozen_top_k=config.retrieval.nq_frozen_top_k,
         nq_evidence_mode=config.retrieval.nq_evidence_mode,
         nq_policy=config.retrieval.nq_policy,
         director_tokenizer=director_tokenizer,
     )
-    return AdaptiveSolverApplication(
+    application = AdaptiveSolverApplication(
         config=config,
         solver=solver,
         runtime=runtime,
@@ -2966,6 +2954,10 @@ def create_adaptive_application(
         model_router=model_router,
         owned_backends=tuple(owned_backends),
     )
+    from .aime_formal import VERSION, FormalAIMEApplication
+    if config.aime_actions.implementation == VERSION:
+        return FormalAIMEApplication(application, aime_factory_options)
+    return application
 
 
 def _gateway_config(

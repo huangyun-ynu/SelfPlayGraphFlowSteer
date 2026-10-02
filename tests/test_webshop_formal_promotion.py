@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .webshop_native_fixture import native_response
+
 import argparse
 import copy
 import json
@@ -62,7 +64,7 @@ def test_formal_m02_config_preserves_model_choices_and_thinking(name, monkeypatc
     assert config.runtime_endpoint_pools["gemini"] == ("gemini", "gemini2")
     assert config.endpoint_pool_member_queue_wait_s == 0.5
     assert config.skillbank_enabled
-    assert not config.canvas.remaining_token_admission_enabled
+    assert not hasattr(config.canvas, 'remaining_token_admission_enabled')
     assert config.model_manifest()["webshop"]["compatibility_profile"] == M02_PROFILE
 
 
@@ -71,7 +73,8 @@ def test_m02_rejects_accidental_native_or_history_mix(monkeypatch):
     # Exercise the M02 compatibility check independently of the promoted
     # scheduler/reservation prerequisite checks, which also reject native mode.
     config = replace(config, webshop=replace(config.webshop,
-        purchase_budget_policy="off", scheduling_policy="off"))
+        purchase_budget_policy="off", scheduling_policy="off", purchase_review_enabled=False,
+        candidate_comparison_enabled=False))
     for change in ({"worker_execution_policy": "skillflow_native_v1"},
                    {"worker_memory_policy": "skillflow_history_v1"},
                    {"worker_guidance_policy": "laser_checklist_v1"}):
@@ -190,7 +193,7 @@ def test_real_application_routes_director_choice_and_enables_qwen_thinking(chose
         json.dumps({"action": "set_model", "target": "agent_1", "runtime_route": chosen}),
         '{"action":"finish","target":"agent_1"}',
     ])
-    responses = [json.dumps({"action_call": {"name": "webshop_search", "arguments": {"query": "shirt"}}}),
+    responses = [native_response({"name": "webshop_search", "arguments": {"query": "shirt"}}),
                  json.dumps({"answer": "Inspected candidates", "evidence": ["Visible page"],
                              "unresolved_issues": ["Not purchased"]})]
     backends = {route: MockBackend(list(responses)) for route in config.runtime_pool()}

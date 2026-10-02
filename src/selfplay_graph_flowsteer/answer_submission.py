@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from .aime_submission import is_aime_dataset, parse_aime_answer
+from .healthbench_artifact import VERSION as HEALTHBENCH_REPAIR_VERSION
+from .healthbench_artifact import preservation_enabled
 from .healthbench_protocol import healthbench_answer_instruction
 from .hotpot_answer_contract import hotpot_submission_instruction
 from .observability import TaskSpec
@@ -57,6 +59,12 @@ class AnswerFinalizer:
         *,
         raw_summary: str = "",
     ) -> AnswerSubmission:
+        if preservation_enabled(task.metadata):
+            raw = str(raw_answer or "")
+            return AnswerSubmission(
+                raw_answer=raw, submitted_answer=raw, method=HEALTHBENCH_REPAIR_VERSION,
+                changed=False, valid=bool(raw.strip()),
+            )
         raw = str(raw_answer or "").strip()
         # Normalize an unambiguous valid scalar, otherwise preserve the entire
         # nonempty answer for grading. Never repair, truncate or choose a number.

@@ -30,7 +30,7 @@ from .execution_audit import audit_cross_agent_read_overlap
 from .features import execution_policy_features_many
 from .graph import MultiAgentGraph
 from .graph_learning import canonical_graph_key
-from .llm import RequestTokenCreditExceeded, request_priority
+from .llm import WorkerUsageDispatchStopped, request_priority
 from .observability import (
     EnvironmentResultIncompleteError,
     TaskSpec,
@@ -2430,6 +2430,7 @@ class SelfPlayRunConfig:
     primary_dataset_duration_estimates_s: dict[str, float] = field(default_factory=dict)
     counterfactual_dataset_duration_estimates_s: dict[str, float] = field(default_factory=dict)
     duration_history_version: str = ""
+    director_observation_policy: dict[str, Any] | None = None
 
 
 class SelfPlayRolloutRunner:
@@ -2569,9 +2570,9 @@ class SelfPlayRolloutRunner:
 
     def run(self, seeds: Iterable[SeedInput], *, resume: bool = False) -> DryRunSelfPlayResult:
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        persist_context_policy(self.output_dir, resume=resume, observation=self.config.director_observation_policy)
         if resume:
             _recover_completed_primary_spool(self.output_dir)
-        persist_context_policy(self.output_dir, resume=resume)
         mode_path = self.output_dir / "proposer_learning.json"
         requested = (
             self.config.proposer_learning_mode
@@ -5582,7 +5583,7 @@ class SelfPlayRolloutRunner:
                         _append_jsonl(graph_partial_path, graph_record)
                 except (
                     CollectionInfrastructureIncidentError,
-                    RequestTokenCreditExceeded,
+                    WorkerUsageDispatchStopped,
                     GraphEvaluationIncompleteError,
                 ) as exc:
                     infrastructure_failures_by_task.setdefault(task_id, []).append(

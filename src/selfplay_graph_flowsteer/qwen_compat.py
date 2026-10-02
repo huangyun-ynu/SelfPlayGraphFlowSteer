@@ -146,6 +146,58 @@ def response_policy_parts(message: Any, *, thinking_prefilled: bool = False) -> 
     return reasoning, content
 
 
+def recover_qwen_policy_parts(
+    message: Any,
+    *,
+    completion_token_ids: Sequence[int],
+    content_logprobs: Sequence[Any],
+) -> tuple[str, str] | None:
+    """Recover a tool-parser-stripped thinking boundary from the same sample.
+
+    Some vLLM tool parsers remove ``</think>`` from message.content even when
+    no reasoning parser is configured. The per-token logprob bytes still
+    contain that sampled delimiter. Accept them only when all sampled tokens
+    are present and removing that one delimiter reproduces message.content
+    exactly. Never search reasoning for a JSON action or infer a boundary.
+    """
+
+    if getattr(message, "reasoning_content", None) or getattr(message, "reasoning", None):
+        return None
+    content = str(getattr(message, "content", "") or "")
+    if "</think>" in content or not completion_token_ids:
+        return None
+    if len(completion_token_ids) != len(content_logprobs):
+        return None
+    pieces = []
+    for item in content_logprobs:
+        token_bytes = getattr(item, "bytes", None)
+        if token_bytes is None or getattr(item, "logprob", None) is None:
+            return None
+        try:
+            pieces.append(bytes(token_bytes))
+        except (TypeError, ValueError):
+            return None
+    # Require the delimiter to be a sampled token, not a literal string
+    # assembled from ordinary tokens inside a quoted example.
+    if pieces.count(b"</think>") != 1:
+        return None
+    # vLLM includes the sampled EOS in token IDs/logprobs but omits it from
+    # message.content. Remove only a known, complete, final Qwen stop token
+    # for this comparison; retain the original IDs/logprobs in the response.
+    if pieces[-1] in {b"<|im_end|>", b"<|endoftext|>"}:
+        pieces = pieces[:-1]
+    try:
+        raw_content = b"".join(pieces).decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return None
+    if raw_content.count("</think>") != 1:
+        return None
+    if raw_content.replace("</think>", "", 1) != content:
+        return None
+    boundary = raw_content.index("</think>") + len("</think>")
+    return raw_content[:boundary], raw_content[boundary:]
+
+
 def encode_chat_trajectory(
     tokenizer: Any,
     messages: Sequence[dict[str, str]],

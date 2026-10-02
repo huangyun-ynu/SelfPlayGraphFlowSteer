@@ -118,12 +118,7 @@ def build(tmp_path, monkeypatch, threshold=15):
     tools = {'alfworld_step': ALFWorldStepTool(life)}
     registry = default_dataset_action_registry(tools)
     runtime = MultiAgentRuntime(ModelAgentExecutor(backend, tools=tools, action_registry=registry))
-    config = CanvasConfig(submission_protocol='unified_task_result_v1',
-        submission_journal_dir=str(tmp_path / 'journal'), max_rounds=24,
-        max_total_tokens=threshold, max_total_tokens_by_dataset={'alfworld': threshold},
-        alfworld_terminal_candidate_policy='finish_only_v1',
-        worker_token_budget_by_dataset={'alfworld': {'policy': 'reported_usage_threshold_v1', 'start_threshold': threshold}},
-        remaining_time_admission_enabled=False, remaining_token_admission_enabled=False)
+    config = CanvasConfig(submission_protocol='unified_task_result_v1', submission_journal_dir=str(tmp_path / 'journal'), max_rounds=24, max_total_tokens=threshold, max_total_tokens_by_dataset={'alfworld': threshold}, alfworld_terminal_candidate_policy='finish_only_v1', worker_token_budget_by_dataset={'alfworld': {'policy': 'reported_usage_threshold_v1', 'start_threshold': threshold}})
     return life, task, backend, registry, runtime, config
 
 
@@ -221,8 +216,9 @@ def test_config_and_manifest_pin_alfworld_protocol(tmp_path):
     legacy = replace(config, alfworld=replace(config.alfworld, task_prompt_source='dataset')).model_manifest()['execution_semantics']
     assert reset != legacy
     assert 'worker_usage_ledger' in reset['contract_source_sha256']
-    with pytest.raises(ValueError, match='requires unified'):
-        CanvasConfig(worker_token_budget_by_dataset={'alfworld': {'policy': 'reported_usage_threshold_v1'}})
+    budget = CanvasConfig(worker_token_budget_by_dataset={'alfworld': {'policy': 'reported_usage_threshold_v1'}})
+    assert budget.worker_usage_policy('alfworld')['policy'] == 'reported_usage_threshold_v1'
+    assert CanvasConfig().worker_usage_policy('alfworld')['start_threshold'] == 350000
 
 
 def test_export_uses_physical_usage_even_when_response_tokens_not_in_artifact(tmp_path, monkeypatch):

@@ -22,6 +22,7 @@ from .healthbench_audit import (
 from .llm import ChatBackend, current_request_priority, request_priority
 from .observability import TaskSpec, VerificationResult
 from .public_evidence import public_document
+from .qa_public_task import PublicQATask, QA_DATASETS, public_qa_task_from_prompt
 
 HEALTHBENCH_PROFESSIONAL_JUDGE_MODEL = "gpt-5.5"
 _JUDGE_EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="rubric")
@@ -176,6 +177,24 @@ Return just the json object in markdown format. Do not include any other text in
 """.strip()
 
 
+def public_qa_task_context(task: TaskSpec) -> dict[str, Any] | None:
+    """Return only the public question provenance attached at dataset ingestion."""
+    if str(task.metadata.get("dataset", "")).strip().casefold() not in QA_DATASETS:
+        return None
+    anchor = task.metadata.get("public_qa_task")
+    if isinstance(anchor, dict):
+        return PublicQATask.from_dict(anchor).to_dict()
+    # Old checkpoints/TaskSpecs have only the original public renderer output.
+    return public_qa_task_from_prompt(task.prompt, task_id=task.task_id).to_dict()
+
+
+def bind_public_qa_task(task: TaskSpec, graph: Any) -> None:
+    anchor = public_qa_task_context(task)
+    if anchor is not None:
+        for node in graph.nodes.values():
+            node.metadata["public_qa_task"] = dict(anchor)
+
+
 def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = False) -> str:
     """Render trusted per-example context without changing the original question."""
 
@@ -186,9 +205,11 @@ def solver_task_text(task: TaskSpec, *, include_submission_contract: bool = Fals
     # selected output Agent.  The Canvas/Director may still request it
     # explicitly, but intermediate QA Workers should receive only the task and
     # trusted context.
-    contract = submission_contract(task) if include_submission_contract else ""
     task_text = task.prompt
     dataset = str(task.metadata.get("dataset", "")).strip().casefold()
+    # QA contracts are injected according to each node's result_scope by the
+    # Runtime. Appending the final contract to shared q also affects subtasks.
+    contract = submission_contract(task) if include_submission_contract and dataset not in QA_DATASETS else ""
     verifier = str(task.metadata.get("verifier", "")).strip().casefold()
     if dataset == "healthbench_professional" or verifier == "healthbench_rubric":
         task_text = _structured_conversation_text(task.metadata.get("conversation")) or task.prompt

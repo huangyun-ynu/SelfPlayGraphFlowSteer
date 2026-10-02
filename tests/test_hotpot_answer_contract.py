@@ -22,13 +22,14 @@ def test_evidence_first_artifact_survives_runtime_and_submission_without_gold(re
         "Eastmere is farther north because 55 N exceeds 32 N.",
         0.95, [], [], "Eastmere",
     ]))
-    backend = MockBackend((["{\"answer\":null}"] if recover else []) + [json.dumps(result)])
+    malformed = {**result, "confidence": "high"}
+    backend = MockBackend(([json.dumps(malformed)] if recover else []) + [json.dumps(result)])
     question = "[Eastmere] Latitude 55 N. [Westmere] Latitude 32 N. Which is farther north?"
     task = TaskSpec("synthetic", question, reference="PRIVATE_REFERENCE_DO_NOT_EXPOSE",
                     metadata={"dataset": "hotpotqa"})
     canvas = GraphCanvas(task=question, dataset="hotpotqa", runtime_routes=("mock",),
                          runtime=MultiAgentRuntime(ModelAgentExecutor(backend)),
-                         config=CanvasConfig(max_rounds=50, remaining_token_admission_enabled=False))
+                         config=CanvasConfig(max_rounds=50))
     actions = [
         dict(action="add_agent", agent_id="a"),
         dict(action="set_prompt", target="a", role="Evidence analyst",

@@ -1,192 +1,161 @@
-"""Automatic bounded projection; memory never adds a Worker Action or quota."""
+"""Render all observed public facts automatically, without per-block quotas."""
 from __future__ import annotations
 
 import copy
-import re
-from typing import Any
-from .webshop_memory import WebShopMemory, POLICY, encoded
-
-MAX_CHARS = 6000
-_STOP_WORDS = frozenset('i am looking for want would like find buy a an the it should be and or with that this is are to of in on at have has need must product item please suitable'.split())
+from .webshop_memory import WebShopMemory, POLICY, PROJECTION_REVISION, encoded
 
 
-def _terms(task: str) -> set[str]:
-    return {word for word in re.findall(r"[\w.-]+", task.casefold())
-            if word not in _STOP_WORDS and (len(word) >= 3 or word.isdigit())}
-
-
-def _excerpts(text: str, terms: set[str]) -> list[tuple[int, int]]:
-    """Public literal matches select excerpts, never product/requirement judgments.
-
-    Fixed windows preserve exact original text. Include the opening context and
-    windows containing task terms; the caller marks all omitted ranges explicitly.
-    """
-    windows = [(i, min(len(text), i + 420)) for i in range(0, len(text), 420)]
-    if not windows:
-        return []
-    ranked = sorted(windows[1:], key=lambda span: (
-        -sum(term in text[span[0]:span[1]].casefold() for term in terms), span[0]))
-    return [windows[0], *ranked]
+def _unique_latest(entries, key):
+    """Deduplicate equal content, preserving the latest source for each value."""
+    result = {}
+    for entry in entries:
+        value = key(entry)
+        result.pop(value, None)
+        result[value] = entry
+    return list(result.values())
 
 
 def project_memory(store: WebShopMemory, *, state: dict, remaining: dict | None = None,
-                   recent_actions=(), no_progress: int = 0,
-                   planned_asin: str = "", max_chars: int = MAX_CHARS) -> dict:
-    if max_chars < 900:
-        raise ValueError("WebShop memory projection budget must be at least 900 characters")
+                   recent_actions=(), no_progress: int = 0, planned_asin: str = "") -> dict:
     products = store.data["products"]
     asin = str((state.get("product") or {}).get("asin", "")).casefold()
-    latest = store.data["batches"][-1] if store.data["batches"] else {}
-    batch = [c["asin"] for c in latest.get("candidates", [])]
-    pinned = [k for k in (asin, planned_asin.casefold()) if k in products]
-    ordered = list(dict.fromkeys(pinned + batch))
-    result: dict[str, Any] = {
-        "schema": POLICY,
-        "current": {"asin": asin[:100], "live_choices_source": "action_environment.state",
+    batch = store.data["batches"][-1] if store.data["batches"] else {}
+    ordered = list(dict.fromkeys([k for k in (asin, planned_asin.casefold()) if k in products]
+                                + list(products)))
+    result = {
+        "schema": POLICY, "projection_revision": PROJECTION_REVISION,
+        "current": {"asin": asin, "live_choices_source": "action_environment.state",
                     "remaining": remaining or {}, "no_progress_streak": no_progress},
-        "candidate_ledger": [], "evidence": [],
-        "history": {"recent_queries": [b["query"] for b in store.data["batches"][-3:]]},
+        "candidate_ledger": [], "observed_products": [], "evidence": [],
+        "history": {"queries": [], "actions": [], "result_batches": []},
         "memory": {"coverage": store.data["coverage"], "candidate_count": len(products),
-                   "recent_batch_count": len(batch), "omitted_candidates": len(products),
-                   "delivery": "automatic", "history_is_not_current_state": True,
+                   "recent_batch_count": len(batch.get("candidates", [])),
+                   "omitted_candidates": 0, "omitted_section_records": 0,
+                   "recent_batch_partial": False, "history_partial": (
+                       store.data["coverage"] == "legacy_partial" or any(
+                           q["search_count"] is None for q in store.data["queries"])),
+                   "delivery": "automatic", "projection_chars": 0,
+                   "history_is_not_current_state": True,
                    "observed_products_scope": "historical_public_snapshots_not_current_choices",
-                   "excerpt_selection": "public_order_and_literal_task_terms",
-                   "full_evidence_retained_in_run_store": True, "projection_chars": 0,
-                   "omitted_section_records": 0, "recent_batch_partial": False},
+                   "full_evidence_retained_in_run_store": True,
+                   "fixed_character_quotas": False},
     }
-    result["history"]["recent_actions"] = [
-        {"action": a.get("action"), "new_evidence": a.get("new_evidence"),
-         **({"rejection": a["rejection_code"]} if a.get("rejection_code") else {})}
-        for a in recent_actions[-2:]]
-    while len(encoded(result["history"])) > 350:
-        result["memory"]["history_partial"] = True
-        if result["history"]["recent_queries"]:
-            result["history"]["recent_queries"].pop(0)
-        elif result["history"]["recent_actions"]:
-            result["history"]["recent_actions"].pop(0)
-        else:
-            break
     if asin:
         result["current"]["fact"] = store.fact(asin)
         result["current"]["sections_observed"] = list(products.get(asin, {}).get("sections", {}))
-        while len(encoded(result["current"])) > 800 and result["current"]["sections_observed"]:
-            result["current"]["sections_observed"].pop()
-            result["current"]["section_index_partial"] = True
-    # Leave room for exact accounting even for the smallest supported budget.
-    if len(encoded(result)) > max_chars - 80:
-        result["current"] = {"asin": asin[:100], "live_choices_source": "action_environment.state"}
-        result["history"] = {}
-    candidate_budget = min(3000, max(0, max_chars - len(encoded(result)) - 80))
+
+    for index, query in enumerate(store.data["queries"]):
+        result["history"]["queries"].append({"query_id": index,
+            **{k: copy.deepcopy(v) for k, v in query.items() if k != "key"}})
+    for event in store.data["events"]:
+        result["history"]["actions"].append({k: copy.deepcopy(v) for k, v in event.items()
+                                               if k != "source"})
+    result["history"]["result_batches"] = [
+        {"query_id": batch.get("query_id"), "event_sequence": batch.get("event_sequence"),
+         "candidate_order": [c["asin"] for c in batch["candidates"]]}
+        for batch in store.data["batches"]]
+    if not store.data["events"] and recent_actions:
+        result["history"]["legacy_recent_actions"] = copy.deepcopy(list(recent_actions))
+        result["history"]["legacy_action_history_partial"] = True
+
     for key in ordered:
+        p = products[key]
+        titles = _unique_latest(p.get("titles", []), lambda e: e["ref"])
         title = store.title(key)
-        card = {"asin": key, "title": title[:240], "product_page": store.fact(key)["observation_status"]}
-        if len(title) > 240:
-            card.update(title_excerpt=True, full_title_chars=len(title))
-        if len(encoded(result["candidate_ledger"] + [card])) <= candidate_budget:
-            result["candidate_ledger"].append(card)
-    shown = {c["asin"] for c in result["candidate_ledger"]}
-    result["memory"]["omitted_candidates"] = len(products) - len(shown)
-    result["memory"]["recent_batch_partial"] = bool(set(batch) - shown)
+        latest_title_ref = p["titles"][-1]["ref"] if p.get("titles") else None
+        card = {"asin": key, "title": title,
+                "product_page": store.fact(key)["observation_status"],
+                "visit_count": p["visit_count"],
+                "query_ids": list(dict.fromkeys(b["query_id"] for b in store.data["batches"]
+                    if b.get("query_id") is not None and any(c["asin"] == key for c in b["candidates"])))}
+        prior_titles = [store._get(e["ref"]) for e in titles if e["ref"] != latest_title_ref]
+        if prior_titles:
+            card["other_observed_titles"] = prior_titles
+        if p.get("previews"):
+            card["search_preview_prices"] = [e["values"] for e in
+                _unique_latest(p["previews"], lambda e: encoded(e["values"]))]
+            card["preview_is_not_selected_variant"] = True
+        result["candidate_ledger"].append(card)
+        if p.get("opened"):
+            observations = p.get("product_observations") or ([p["last_product_observation"]]
+                if p.get("last_product_observation") else [])
+            prices = []
+            for snapshot in observations:
+                value = {k: copy.deepcopy(v) for k, v in snapshot.get("product", {}).items()
+                         if k in {"price", "price_min", "price_max", "price_text"}}
+                prices.append({"value": value, "state_version": snapshot.get("state_version")})
+            prices = _unique_latest(prices, lambda e: encoded(e["value"]))
+            choices = []
+            for entry in _unique_latest(p.get("options", []), lambda e: e["ref"]):
+                choices.append({"values": store._get(entry["ref"]),
+                    "state_version": entry.get("state_version"),
+                    "evidence_in_store": "partial" if entry.get("partial") else "full"})
+            item = {"asin": key, "price_at_observation": prices[-1]["value"] if prices else {},
+                    "state_version": p.get("last_product_observation", {}).get("state_version"),
+                    "option_values": choices[-1]["values"] if choices else {},
+                    "evidence_in_prompt": "full"}
+            if len(prices) > 1:
+                item["earlier_observed_prices"] = prices[:-1]
+            if len(choices) > 1:
+                item["earlier_observed_options"] = choices[:-1]
+            selections = _unique_latest(p.get("options", []),
+                lambda e: encoded(e.get("selected_options_at_observation", {})))
+            item["historical_selected_options"] = [
+                {"values": copy.deepcopy(e.get("selected_options_at_observation", {})),
+                 "state_version": e.get("state_version"), "scope": "historical_not_current"}
+                for e in selections]
+            result["observed_products"].append(item)
 
-    def add(key: str, value: Any) -> bool:
-        trial = dict(result, **{key: value})
-        if len(encoded(trial)) <= max_chars - 80:
-            result[key] = value
-            return True
-        return False
+        for name, versions in p.get("sections", {}).items():
+            for entry in _unique_latest(versions, lambda e: e["cleaned"]):
+                text = store._get(entry["cleaned"])
+                record = {"asin": key, "section": name,
+                    "observation_status": "observed",
+                    "evidence_in_store": "partial" if entry.get("partial") else "full",
+                    "evidence_in_prompt": "full", "source": entry["source"],
+                    "full_chars": len(text), "excerpts": []}
+                effect = state.get("action_effect") or {}
+                on_page = (key == asin and state.get("page_type") == "product_section"
+                           and effect.get("kind") == "view_" + name
+                           and str(state.get("page_text", "")) == store._get(entry["raw"]))
+                if on_page:
+                    record["current_page_ref"] = "action_environment.state.page_text"
+                else:
+                    record["excerpts"] = [{"range": [0, len(text)], "text": text}]
+                result["evidence"].append(record)
 
-    terms = _terms(store.task)
-    # Comparing previously opened products requires their public price/variants,
-    # including after leaving the page. Provide these automatically; "seen" alone
-    # cannot carry the information that justified returning to a candidate.
-    history_keys = list(dict.fromkeys(pinned + list(reversed(list(products)))))
-    observed_products = []
-    request_text = " ".join(store.task.casefold().split())
-    for key in history_keys:
-        product_record = products[key]
-        if not product_record.get("opened") or (key == asin and state.get("page_type") == "product"):
-            continue
-        snapshot = product_record.get("last_product_observation", {})
-        price = {k: v for k, v in snapshot.get("product", {}).items()
-                 if k in {"price", "price_min", "price_max", "price_text"}}
-        entries = product_record.get("options", [])
-        entry = entries[-1] if entries else {}
-        values = store._get(entry["ref"]) if entry else {}
-        item = {"asin": key, "price_at_observation": price,
-                "state_version": snapshot.get("state_version"), "option_values": {},
-                "group_counts": {name: len(v) for name, v in values.items()},
-                "evidence_in_prompt": "omitted" if values else "full"}
-        candidate = observed_products + [item]
-        if len(encoded(candidate)) > 1700 or not add("observed_products", candidate):
-            continue
-        observed_products = candidate
-        # Fill every group in rounds. Exact public option strings in the request
-        # are literal quotes, not a semantic match/selection recommendation.
-        pending = {name: sorted(enumerate(choices), key=lambda pair: (
-            -int(" ".join(pair[1].casefold().split()) in request_text),
-            -sum(t in pair[1].casefold() for t in terms), pair[0])) for name, choices in values.items()}
-        progress = True
-        per_product = max(400, 1700 // max(1, min(3, sum(bool(p.get("opened")) for p in products.values()))))
-        while progress:
-            progress = False
-            for name, choices in pending.items():
-                if not choices:
-                    continue
-                _, value = choices.pop(0)
-                expanded = copy.deepcopy(observed_products)
-                last = expanded[-1]
-                last["option_values"].setdefault(name, []).append(value)
-                last["evidence_in_prompt"] = "full" if all(
-                    len(last["option_values"].get(n, [])) == len(v) for n, v in values.items()) else "excerpt"
-                if len(encoded(last)) <= per_product and len(encoded(expanded)) <= 1700 and add("observed_products", expanded):
-                    observed_products = expanded
-                    progress = True
-    # Prioritize current/explicitly planned products. Then cover other observed
-    # products in public visit order, round-robin across sections.
-    evidence_asins = list(dict.fromkeys(pinned + list(reversed(list(products)))))
-    evidence_records = []
-    for key in evidence_asins:
-        for name, versions in products[key].get("sections", {}).items():
-            if not versions:
+    # Reuse live price/options only when they fully represent the latest snapshot.
+    if state.get("page_type") == "product":
+        live_options = {}
+        for action in state.get("valid_subactions", []):
+            if action.get("option_name") and "option_value" in action:
+                values = live_options.setdefault(action["option_name"], [])
+                if action["option_value"] not in values:
+                    values.append(action["option_value"])
+        for item in result["observed_products"]:
+            if item["asin"] != asin:
                 continue
-            entry = versions[-1]
-            text = store._get(entry["cleaned"])
-            record = {"asin": key, "section": name, **store.fact(key, name),
-                      "source": entry["source"], "full_chars": len(text), "excerpts": []}
-            effect = state.get("action_effect", {})
-            on_page = (key == asin and state.get("page_type") == "product_section"
-                       and effect.get("kind") == "view_" + name
-                       and len(str(state.get("page_text", ""))) <= 8000)
-            if on_page:
-                record.update(evidence_in_prompt="full", current_page_ref="action_environment.state.page_text")
-            evidence_records.append((record, text, [] if on_page else _excerpts(text, terms)))
-    # Facts and omitted evidence references fit first; chunks share the remainder.
-    selected = []
-    for record, text, windows in evidence_records:
-        if len(selected) >= 3:
-            break
-        if add("evidence", result["evidence"] + [record]):
-            selected.append((len(result["evidence"]) - 1, text, windows))
-    made_progress = True
-    while made_progress:
-        made_progress = False
-        for index, text, windows in selected:
-            if not windows:
-                continue
-            start, end = windows.pop(0)
-            records = copy.deepcopy(result["evidence"])
-            record = records[index]
-            record["excerpts"].append({"range": [start, end], "text": text[start:end]})
-            record["excerpts"].sort(key=lambda e: e["range"][0])
-            retained = sum(e["range"][1] - e["range"][0] for e in record["excerpts"])
-            record["evidence_in_prompt"] = "full" if retained == len(text) else "excerpt"
-            if add("evidence", records):
-                made_progress = True
-    result["memory"]["omitted_section_records"] = len(evidence_records) - len(result["evidence"])
-    result["memory"]["projection_chars"] = 0
+            live_price = {k: v for k, v in (state.get("product") or {}).items()
+                          if k in {"price", "price_min", "price_max", "price_text"}}
+            if item["option_values"] == live_options:
+                item.pop("option_values")
+                item["current_options_ref"] = "action_environment.state.valid_subactions"
+            if item["price_at_observation"] == live_price:
+                item.pop("price_at_observation")
+                item["current_price_ref"] = "action_environment.state.product"
+
+    if store.comparison_enabled:
+        from .webshop_purchase_review import comparison_view
+        comparison = comparison_view(store, state)
+        # Full facts are already automatically delivered above. Expose citation
+        # keys without duplicating section text in every Worker request.
+        comparison["sources"] = {key: {k: v for k, v in value.items() if k not in {"text", "value"}}
+                                 for key, value in comparison["sources"].items()}
+        comparison["evidence_location"] = "candidate_ledger, observed_products and evidence in this memory"
+        result["candidate_comparison"] = comparison
+        result["projection_revision"] = "structured_compare_v2"
     for _ in range(3):
         result["memory"]["projection_chars"] = len(encoded(result))
-    assert len(encoded(result)) <= max_chars
     return result
 
 

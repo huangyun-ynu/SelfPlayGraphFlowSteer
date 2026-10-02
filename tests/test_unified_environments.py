@@ -15,8 +15,7 @@ def shopping(tmp_path, responses):
     executor,backend,life,client,registry=build(responses)
     canvas=GraphCanvas(task='Buy a product',dataset='webshop',
         runtime=MultiAgentRuntime(executor),action_adapter=registry.get('webshop'),
-        config=CanvasConfig(submission_protocol='unified_task_result_v1',
-            submission_journal_dir=str(tmp_path), max_rounds=40, max_total_tokens=1000000, remaining_token_admission_enabled=False))
+        config=CanvasConfig(submission_protocol='unified_task_result_v1', submission_journal_dir=str(tmp_path), max_rounds=40, max_total_tokens=1000000))
     return canvas,backend,life,client
 
 

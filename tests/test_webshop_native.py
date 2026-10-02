@@ -423,11 +423,7 @@ def canvas_build(responses):
     canvas = GraphCanvas(
         task="Buy a product",
         runtime=MultiAgentRuntime(e),
-        config=CanvasConfig(
-            max_total_tokens=1000000,
-            remaining_token_admission_enabled=False,
-            remaining_time_admission_enabled=False,
-        ),
+        config=CanvasConfig(max_total_tokens=1000000),
         action_adapter=registry.get("webshop"),
         dataset="webshop",
     )

@@ -1,0 +1,460 @@
+{
+  "provenance": "Existing aime-official30-run01; provider completions preserved, token IDs omitted. Recovery completions in tests are synthetic.",
+  "cases": [
+    {
+      "source_attempt_id": "14f8b1f05ab147fd8aadc294acc70d40",
+      "source_task_id": "aime-2026/2026/22",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-97acd5d00b6cd2c7",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 4238,
+          "total_tokens": 20622,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "420193430d594004a43e19903cd6c567",
+      "source_task_id": "aime-2026/2026/23",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-ae55a87fd0535d67",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3269,
+          "total_tokens": 19653,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "59dfe733990a493a932dcb2fe0896f4c",
+      "source_task_id": "aime-2026/2026/28",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-a2b61e6106b37208",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3622,
+          "total_tokens": 20006,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "732d9c4784594468b74093427b3628d5",
+      "source_task_id": "aime-2026/2026/28",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-86c0c619f81ea059",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3263,
+          "total_tokens": 19647,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "7c817107c03744b2b2b73eae3476a821",
+      "source_task_id": "aime-2026/2026/14",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-b6f16bc52aac5ca4",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3201,
+          "total_tokens": 19585,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "7cd551aab2b744219a41ceb8c02404ba",
+      "source_task_id": "aime-2026/2026/15",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-919d678ad60755b4",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3391,
+          "total_tokens": 19775,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "7e48bdc4236d44159e30b0bc599af5a3",
+      "source_task_id": "aime-2026/2026/22",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-a47108efb0903acb",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 4301,
+          "total_tokens": 20685,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "8fd1268579724fe0b25c324ffa721216",
+      "source_task_id": "aime-2026/2026/22",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-93c0a6627f9c3e8c",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3241,
+          "total_tokens": 19625,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "ad1266c9644248c6ae3b34df2b0800ae",
+      "source_task_id": "aime-2026/2026/28",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-a06230c11c08eb14",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3263,
+          "total_tokens": 19647,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "b0384efb5f214dad982e5e7a7cf5c29e",
+      "source_task_id": "aime-2026/2026/28",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-89d80952eb0860c6",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3326,
+          "total_tokens": 19710,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "be49f15ae396476b9cb277a303147d0d",
+      "source_task_id": "aime-2026/2026/28",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-904d821bf3a1b219",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3559,
+          "total_tokens": 19943,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "e9fa098027c04dd18f8e4f08e8372e0f",
+      "source_task_id": "aime-2026/2026/28",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": null,
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-babb58479252ca90",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 3326,
+          "total_tokens": 19710,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    },
+    {
+      "source_attempt_id": "edaa91e1bf52445c8534289f988f9957",
+      "source_task_id": "aime-2026/2026/27",
+      "max_tokens": 16384,
+      "completion": {
+        "model": "Qwen3.5-9B",
+        "finish_reason": "tool_calls",
+        "message": {
+          "content": "The previous agent's claim that heights are 5 and 1 was incorrect. The correct heights are 15 and 13. Let me re-evaluate the geometry.",
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": [
+            {
+              "id": "chatcmpl-tool-9008a1f206d13bff",
+              "function": {
+                "arguments": "{}",
+                "name": "python_exec"
+              },
+              "type": "function"
+            }
+          ],
+          "reasoning": null
+        },
+        "usage": {
+          "completion_tokens": 16384,
+          "prompt_tokens": 5392,
+          "total_tokens": 21776,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    }
+  ]
+}

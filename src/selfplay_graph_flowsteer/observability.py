@@ -502,7 +502,10 @@ class JSONLTraceStore:
 def replay_trace(trace: ExecutionTrace, *, runtime: MultiAgentRuntime) -> GraphCanvas:
     # Local import avoids the TaskSpec/dataset-adapter module cycle while ensuring
     # replayed Workers receive the same trusted public q as live execution.
-    from .dataset_adapters import solver_task_text
+    from .dataset_adapters import public_qa_task_context, solver_task_text
+    from .config import CanvasConfig
+    from .submission_contract import _director_call_context
+    from uuid import uuid4
 
     raw_nodes = trace.final_graph.get("nodes", [])
     configured_nodes = [
@@ -516,19 +519,37 @@ def replay_trace(trace: ExecutionTrace, *, runtime: MultiAgentRuntime) -> GraphC
         metadata = template.get("metadata", {})
         adapter_id = (
             str(metadata.get("action_adapter", "")).strip() if isinstance(metadata, dict) else ""
-        ) or "trace_replay"
-        dataset = str(trace.task.metadata.get("dataset", adapter_id)).strip() or adapter_id
-        action_adapter = DatasetActionAdapter(
-            adapter_id=adapter_id,
-            datasets=(dataset,),
-            action_names=tuple(str(value) for value in template.get("allowed_tools", [])),
-            initial_action_budget=int(template.get("initial_tool_budget", 0)),
-            revision_action_budget=int(template.get("revision_tool_budget", 0)),
-            total_action_budget=int(template.get("total_tool_budget", 0)),
         )
+        # Unified text-only Agents are configured too, but have no Action
+        # environment. Do not invent a trace_replay adapter for these nodes.
+        if adapter_id or template.get("allowed_tools"):
+            adapter_id = adapter_id or "trace_replay"
+            dataset = str(trace.task.metadata.get("dataset", adapter_id)).strip() or adapter_id
+            action_adapter = DatasetActionAdapter(
+                adapter_id=adapter_id,
+                datasets=(dataset,),
+                action_names=tuple(str(value) for value in template.get("allowed_tools", [])),
+                initial_action_budget=int(template.get("initial_tool_budget", 0)),
+                revision_action_budget=int(template.get("revision_tool_budget", 0)),
+                total_action_budget=int(template.get("total_tool_budget", 0)),
+            )
     canvas = GraphCanvas(
         task=solver_task_text(trace.task),
+        public_qa_task=public_qa_task_context(trace.task),
         runtime=runtime,
+        config=CanvasConfig(
+            submission_protocol=trace.final_graph.get("submission_protocol", "legacy"),
+            max_agents=int(trace.final_graph.get("max_agents", 8)),
+            max_rounds=max(24, len(trace.events) + 1),
+        ),
+        runtime_routes=tuple(trace.final_graph.get("runtime_routes", ())),
+        # Re-execution owns a fresh submission journal. Reusing the historical
+        # run ID can load its terminal receipt and deactivate the new Canvas.
+        run_id=f"{trace.run_id}-replay-{uuid4().hex}",
+        binary_relation_policy=any(
+            event.payload.get("relation_decision", {}).get("phase") in {"proposal", "choice"}
+            for event in trace.events
+        ),
         action_adapter=action_adapter,
         dataset=str(trace.task.metadata.get("dataset", "")),
         managed_delegation_contracts=any(
@@ -544,15 +565,46 @@ def replay_trace(trace: ExecutionTrace, *, runtime: MultiAgentRuntime) -> GraphC
         raw_action = str(event.payload["raw_action"])
         if '"set_operation_policy"' in raw_action:
             continue
-        step = canvas.step(raw_action)
+        relation = event.payload.get("relation_decision") or {}
+        parsed = {} if relation.get("phase") == "choice" else json.loads(raw_action)
+        before_agents = set(canvas.graph.nodes)
+        if relation.get("phase") == "choice":
+            step = canvas.resolve_relation_choice("on" if relation["chosen_present"] else "off")
+        elif canvas.unified and parsed.get("action") == "finish":
+            call_id = f"trace-replay-{event.sequence}"
+            canvas.observe_submission_candidates(call_id)
+            step = canvas.step(raw_action, director_context=_director_call_context(canvas.run_id, call_id))
+        else:
+            step = canvas.step(raw_action)
         if not step.accepted:
             raise RuntimeError(
                 f"trace replay diverged at sequence {event.sequence}: {step.feedback}"
             )
+        # Preserve node incarnation identity from the persisted graph, rather
+        # than giving an input-equivalent replay a new random incarnation.
+        if parsed.get("action") == "add_agent":
+            target = next(iter(set(canvas.graph.nodes) - before_agents))
+            source_nodes = event.payload.get("graph", {}).get("nodes", raw_nodes)
+            source = next((node for node in source_nodes if node.get("agent_id") == target), None)
+            if source and source.get("metadata", {}).get("incarnation_id"):
+                canvas.graph.nodes[target].metadata["incarnation_id"] = source["metadata"]["incarnation_id"]
     replayed = canvas.graph.to_dict()
     expected = dict(trace.final_graph)
     replayed.pop("version", None)
     expected.pop("version", None)
+    if canvas.unified:
+        # Execution telemetry is not a policy graph parameter. In particular,
+        # replay without the original usage ledger has different runtime credit
+        # fields. Validate the policy graph and trusted question, not that state.
+        expected = json.loads(json.dumps(expected))
+        for graph in (replayed, expected):
+            for node in graph["nodes"]:
+                metadata = node.setdefault("metadata", {})
+                for key in list(metadata):
+                    if key.startswith("_runtime_"):
+                        metadata.pop(key)
+                if canvas.public_qa_task is not None:
+                    metadata.setdefault("public_qa_task", dict(canvas.public_qa_task))
     if replayed != expected:
         raise RuntimeError("trace replay produced a different final graph")
     return canvas

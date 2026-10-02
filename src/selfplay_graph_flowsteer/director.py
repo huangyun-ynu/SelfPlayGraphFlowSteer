@@ -21,6 +21,10 @@ from .llm import (
     MockBackend,
     director_recovery_budget,
 )
+from .director_observation import (
+    COMPACT_OBSERVATION, LEGACY_OBSERVATION, DirectorObservationBuilder,
+    validate_observation_config,
+)
 from .submission_contract import (
     SubmissionReceipt,
     _director_call_context,
@@ -587,6 +591,8 @@ class DirectorRun:
     turns: list[DirectorTurn] = field(default_factory=list)
     candidate_output: str = ""
     submission_receipt: SubmissionReceipt | None = None
+    observation_audits: list[dict[str, Any]] = field(default_factory=list)
+    blocked_context_request: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -597,6 +603,8 @@ class DirectorRun:
             "submission_receipt": self.submission_receipt.to_dict() if self.submission_receipt else None,
             "graph": self.graph,
             "turns": [turn.to_dict() for turn in self.turns],
+            **({"observation_audits": self.observation_audits} if self.observation_audits else {}),
+            **({"blocked_context_request": self.blocked_context_request} if self.blocked_context_request else {}),
         }
 
 
@@ -614,6 +622,7 @@ class GraphDirector:
         enable_thinking: bool | None = None,
         tokenizer: Any | None = None,
         call_namespace: str = "",
+        observation_schema: str = LEGACY_OBSERVATION,
     ) -> None:
         self.context_mode = director_context_mode()
         self.context_schema = (
@@ -621,6 +630,16 @@ class GraphDirector:
             if self.context_mode in TIMELINE_CONTEXT_MODES
             else DIRECTOR_CONTEXT_SCHEMA
         )
+        validate_observation_config(observation_schema, {})
+        self.observation_schema = observation_schema
+        self.observation_builder = (
+            DirectorObservationBuilder(dataset=canvas.dataset)
+            if observation_schema == COMPACT_OBSERVATION else None
+        )
+        if self.observation_builder and self.context_mode != "append_only":
+            raise ValueError("compact_factual_v1 requires append_only history")
+        self.observation_audits: list[dict[str, Any]] = []
+        self.blocked_context_request: dict[str, Any] = {}
         self.backend = backend
         self.canvas = canvas
         self.role = role
@@ -649,6 +668,7 @@ class GraphDirector:
             exc.partial_state = {
                 **(getattr(exc, "partial_state", None) or {}),
                 "director_turns": [turn.to_dict() for turn in self._completed_turns],
+                "observation_audits": self.observation_audits,
                 "canvas_state": self.canvas.state.value,
                 "round_index": self.canvas.round_index,
                 "graph": self.canvas.graph.to_dict(),
@@ -681,6 +701,10 @@ class GraphDirector:
         system_prompt = (
             base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
         )
+        if self.canvas.unified and self.canvas.dataset == "hotpotqa":
+            from .qa_result_contract import QA_DIRECTOR_GUIDANCE
+
+            system_prompt += "\n" + QA_DIRECTOR_GUIDANCE + "\n"
         if self.canvas.unified and self.canvas.dataset == "webshop":
             # Environment completion semantics, not a search/selection strategy.
             # The public goal can be phrased as "find" or "looking for"; its
@@ -704,6 +728,8 @@ class GraphDirector:
             system_prompt += (
                 "\n## Optional Orchestration Knowledge\n" + self.solver_skill_context + "\n"
             )
+        if self.observation_builder:
+            system_prompt += self.observation_builder.system_contract(self.canvas.control_snapshot())
         system_message = {"role": "system", "content": system_prompt}
         # Keep the policy history without replaying obsolete control snapshots.
         # Every prior sampled thinking/action and its factual environment feedback remain
@@ -750,6 +776,25 @@ class GraphDirector:
 
         def current_user_prefix() -> str:
             return "" if history_turns else f"Task:\n{self.canvas.director_task}\n\n"
+
+        def control_content() -> str:
+            snapshot = self.canvas.control_snapshot()
+            if self.observation_builder is None:
+                return ("Authoritative Canvas control snapshot:\n" + _snapshot_text(snapshot)
+                        + "\n\nCanvas feedback:\n" + feedback)
+            audit = self.observation_builder.audit(snapshot, feedback, prior_messages=chronological_messages)
+            audit["director_turn_index"] = len(turns)
+            self.observation_audits.append(audit)
+            return audit["observation"]
+
+        def observation_diagnostics() -> dict[str, Any]:
+            if not self.observation_builder:
+                return {}
+            audit = self.observation_audits[-1]
+            return {"director_observation_schema": self.observation_schema,
+                    "observation_audit_index": len(self.observation_audits) - 1,
+                    "observation_sha256": audit["observation_sha256"],
+                    "observation_renderer_sha256": audit["renderer_sha256"]}
 
         responsibility_failures = 0
         responsibility_issue: dict[str, Any] = {}
@@ -819,10 +864,7 @@ class GraphDirector:
                 assert pending is not None
                 binary_messages = prompt_messages_for(
                     current_user_prefix()
-                    + "Authoritative Canvas control snapshot:\n"
-                    + _snapshot_text(self.canvas.control_snapshot())
-                    + "\n\nCanvas feedback:\n"
-                    + feedback
+                    + control_content()
                     + "\n\nChoose off or on for this relation."
                 )
                 try:
@@ -836,7 +878,12 @@ class GraphDirector:
                         role=self.role,
                         token_ids=self.relation_token_ids,
                     )
-                except DirectorContextExhausted:
+                except DirectorContextExhausted as exc:
+                    if self.observation_builder:
+                        self.blocked_context_request = {
+                            "messages": binary_messages, "kind": "relation_choice", "requested_output": 1,
+                            "error": str(exc), "observation_audit_index": len(self.observation_audits) - 1,
+                        }
                     self.canvas.terminate_context_limit_without_graph_repair()
                     break
                 except (AttributeError, BinaryChoiceUnavailable, TypeError, ValueError) as exc:
@@ -880,6 +927,7 @@ class GraphDirector:
                             "bounded_recovery_call": stalled_turns == 3,
                             "generated_action": True,
                             "director_context_schema": self.context_schema,
+                            **observation_diagnostics(),
                             "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
                             "timeline_prefix_audit": timeline_audit,
                             "binary_policy_audit": audit,
@@ -908,6 +956,8 @@ class GraphDirector:
                     )
                 )
                 continue
+            if self.observation_builder and self.canvas.unified:
+                self.canvas.observe_submission_candidates(f"{self.call_namespace}:{len(turns)}:action")
             if responsibility_failures == 1 and self.canvas.pending_agent_id:
                 issue_field = str(responsibility_issue.get("field") or "violating field")
                 issue_code = str(responsibility_issue.get("code") or "responsibility_violation")
@@ -938,23 +988,20 @@ class GraphDirector:
                         "Task entities and goals are allowed, but answers, procedural solution "
                         "steps, and explicit Action control are not."
                     )
+                if self.observation_builder:
+                    retry_instruction = "The current legal targets and field requirements remain authoritative."
                 user_content = (
                     "Your previous SET_PROMPT was rejected. Retry only the currently required "
                     f"SET_PROMPT for {self.canvas.pending_agent_id}. Use the four short fields "
                     "role, objective, scope, and expected_output. The rejection was "
                     f"{issue_code} in {issue_field}. {retry_instruction}\n\n"
                     + current_user_prefix()
-                    + "Authoritative Canvas control snapshot:\n"
-                    + _snapshot_text(self.canvas.control_snapshot())
-                    + "\n\nCanvas feedback:\n"
-                    + feedback
+                    + control_content()
                 )
             else:
                 user_content = (
-                    current_user_prefix() + "Authoritative Canvas control snapshot:\n"
-                    f"{_snapshot_text(self.canvas.control_snapshot())}\n\n"
-                    f"Canvas feedback:\n{feedback}\n\n"
-                    "Return the next single JSON action."
+                    current_user_prefix() + control_content()
+                    + "\n\nReturn the next single JSON action."
                 )
             if protocol_error:
                 import json
@@ -967,7 +1014,7 @@ class GraphDirector:
                     "field structure and return exactly one object, with no prose or examples. "
                     "This is a normal Director turn within the existing budget."
                 )
-            if self.canvas.unified:
+            if self.canvas.unified and not self.observation_builder:
                 self.canvas.observe_submission_candidates(f"{self.call_namespace}:{len(turns)}:action")
             prompt_messages = prompt_messages_for(user_content)
             awaiting_prompt = self.canvas.state is CanvasState.AWAITING_PROMPT
@@ -983,7 +1030,13 @@ class GraphDirector:
                         ),
                         enable_thinking=self.enable_thinking,
                     )
-            except DirectorContextExhausted:
+            except DirectorContextExhausted as exc:
+                if self.observation_builder:
+                    self.blocked_context_request = {
+                        "messages": prompt_messages, "kind": "action",
+                        "requested_output": DIRECTOR_PROMPT_MAX_TOKENS if awaiting_prompt else DIRECTOR_ACTION_MAX_TOKENS,
+                        "error": str(exc), "observation_audit_index": len(self.observation_audits) - 1,
+                    }
                 self.canvas.terminate_context_limit_without_graph_repair()
                 break
             if self.canvas.rollout_deadline is not None:
@@ -1045,6 +1098,12 @@ class GraphDirector:
                 "bounded_recovery_call": stalled_turns == 3,
                 "raw_output_chars": len(raw_policy_text),
                 "backend_request_events": response.metadata.get("backend_request_events", []),
+                "qwen_thinking_boundary_restored": response.metadata.get(
+                    "qwen_thinking_boundary_restored", False
+                ),
+                "qwen_thinking_boundary_source": response.metadata.get(
+                    "qwen_thinking_boundary_source"
+                ),
                 "json_objects_found": parsed.candidate_count,
                 "director_action_protocol_version": ("director_action_json_v3" if self.canvas.unified else DIRECTOR_ACTION_PROTOCOL_VERSION),
                 "parse_error_code": parsed.action.parse_error_code,
@@ -1057,6 +1116,7 @@ class GraphDirector:
                 "behavior_logprobs_exact": exact_behavior,
                 "trajectory_training_eligible": training_eligible,
                 "director_context_schema": self.context_schema,
+                **observation_diagnostics(),
                 "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
                 "timeline_prefix_audit": timeline_audit,
             }
@@ -1142,6 +1202,8 @@ class GraphDirector:
             turns=turns,
             candidate_output=candidate_output,
             submission_receipt=self.canvas.submission_receipt,
+            observation_audits=self.observation_audits,
+            blocked_context_request=self.blocked_context_request,
         )
 
 

@@ -87,7 +87,9 @@ class UnifiedSubmissionMixin:
             key:self.submission_assessment(key) for key in self.graph.nodes}
         ready = [key for key,a in assessments.items() if a["submit_ready"]
                  and (a["payload_kind"] == "purchase" or status["total_remaining"] == 0)]
-        result = {**status, "mode":"finish" if ready else "exhausted" if status["total_remaining"] == 0 else "working",
+        reviews = [key for key in ready if self.runtime.purchase_review_pending(key)]
+        result = {**status, "mode":"review" if reviews else "finish" if ready else "exhausted" if status["total_remaining"] == 0 else "working",
+                  "review_targets": reviews,
                   "finish_targets":ready,"promotion_targets":[],"cleanup_targets":[],
                   "run_blockers":{key:self.runtime.webshop_scheduling_blocker(node,self.graph)
                                   for key,node in self.graph.nodes.items() if node.configured}}
@@ -267,6 +269,13 @@ class UnifiedSubmissionMixin:
             ):
                 blockers.append("stale_artifact")
             risks = artifact_integrity_failure_risks(artifact)
+            if self.dataset == "healthbench_professional" and self.runtime.worker_usage_ledger is not None:
+                from .healthbench_artifact import validate_preserved_artifact
+
+                if not validate_preserved_artifact(
+                    artifact, question_attempt_id=self.runtime.worker_usage_ledger.question_attempt_id,
+                ):
+                    blockers.append("answer_preservation_violation")
             if self.dataset == "webshop":
                 kind = "purchase"
                 ready = target in self.runtime.environment_commit_ready_agents()
@@ -368,7 +377,8 @@ class UnifiedSubmissionMixin:
         if self.runtime.webshop_scheduling_blocker(node,self.graph) is not None:
             return False
         if (self.dataset == "webshop" and self.runtime.webshop_scheduling_enabled
-                and target in self.runtime.environment_commit_ready_agents()):
+                and target in self.runtime.environment_commit_ready_agents()
+                and not self.runtime.purchase_review_pending(target)):
             return False
         if self.runtime.webshop_reservation_blocker(node) is not None:
             return False
@@ -381,6 +391,11 @@ class UnifiedSubmissionMixin:
                 return False
             if self.runtime.environment_continuation_status(target).get("can_continue") is False:
                 return False
+        if self.runtime.purchase_review_pending(target):
+            # A RUN releases this owner's unexecuted Buy hold, preserving the
+            # same page and existing limits. Terminal/unknown resources stay blocked.
+            budget = self.runtime.shared_tool_budget_status(node.total_tool_budget)
+            return budget["remaining"] + 1 > 0 and not any(resource.get(key) for key in ("done", "terminal", "purchased"))
         if target in self.dirty_agents or artifact is None:
             return True
         from .runtime import artifact_integrity_failure_risks
@@ -489,9 +504,17 @@ class UnifiedSubmissionMixin:
                 raw_answer = str(artifact.answer or "")
                 if assessment["payload_kind"] == "text":
                     submission = AnswerFinalizer(AnswerSubmissionConfig(enabled=True)).finalize(
-                        TaskSpec(self.run_id, self.worker_task, metadata={"dataset": self.dataset}), raw_answer
+                        TaskSpec(self.run_id, self.worker_task, metadata={
+                            "dataset": self.dataset,
+                            "worker_usage": (self.runtime.worker_usage_ledger.status()
+                                             if self.runtime.worker_usage_ledger is not None else {}),
+                        }), raw_answer
                     )
                     submitted_answer = submission.submitted_answer
+                    if (self.dataset == "healthbench_professional"
+                            and self.runtime.worker_usage_ledger is not None
+                            and submitted_answer != artifact.answer):
+                        raise ValueError("answer_preservation_violation")
                     normalization = submission.method
                     nq_check = assessment["payload"].get("nq_corpus_submission", {})
                     if nq_check.get("status") == "insufficient_evidence":
@@ -613,6 +636,11 @@ class UnifiedSubmissionMixin:
         parameters["set_layer"]["targets"] = ids
         parameters["set_prompt"]["targets"] = [self.pending_agent_id] if self.pending_agent_id else ids
         parameters["set_prompt"]["result_scopes"] = ["subtask", "task_result"]
+        if self.dataset in {"hotpotqa", "musique"}:
+            parameters["set_prompt"].pop("revision_evidence_by_target", None)
+            parameters["set_prompt"].pop("revision_counts", None)
+            parameters["set_prompt"]["revision_requires_evidence"] = False
+            parameters["set_prompt"]["scope_change_invalidates_result"] = True
         relations = ["consider_relation"] if self.binary_relation_policy else ["set_relation", "remove_relation"]
         allowed = ["add_agent", "set_prompt", "set_model", "set_layer", *relations, "delete_agent", "run_agent", "finish"]
         if len(ids) >= self.config.max_agents or self.topology_edits_frozen or (
@@ -676,6 +704,9 @@ class UnifiedSubmissionMixin:
                 allowed.remove("add_agent")
         return {
             **({"webshop_scheduling":scheduling} if scheduling else {}),
+            **({"purchase_reviews": self.runtime.purchase_review_packets(),
+                "purchase_review_instruction": "Review the original request, current selection, public evidence and Worker uncertainty. FINISH accepts this proposal. RUN_AGENT resumes its owner and releases the unexecuted Buy hold; you author any further responsibility."}
+               if self.runtime.purchase_review_packets() else {}),
             "canvas_version": self.graph.version, "director_action_protocol_version": ACTION_PROTOCOL,
             "submission_contract_version": SUBMISSION_VERSION, "submission_protocol": PROTOCOL,
             "submission_status": self._unified_transaction["state"] if self._unified_transaction else "working",

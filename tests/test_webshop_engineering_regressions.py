@@ -1,4 +1,6 @@
 """State/transaction regressions independent of model quality or hidden reward."""
+
+from .webshop_native_fixture import native_response
 from dataclasses import replace
 import json
 import pytest
@@ -58,7 +60,7 @@ def test_malformed_action_keeps_budget_and_exposes_bounded_recovery(tmp_path):
 
 def test_format_failure_can_resume_to_real_staging_without_refund(tmp_path):
     def action(name, **arguments):
-        return json.dumps({'action_call':{'name':name,'arguments':arguments}})
+        return native_response({'name':name,'arguments':arguments})
     responses=[action('webshop_search',query='product'),
         action('webshop_click',target_id=f'open_product:0:{ASIN1}',state_version=1),
         '{"action_call":','{"action_call":',report('Unable to emit action'),

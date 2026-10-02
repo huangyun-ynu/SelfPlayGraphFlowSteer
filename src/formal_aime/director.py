@@ -1,0 +1,1233 @@
+from __future__ import annotations
+
+import hashlib
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+from .actions import DIRECTOR_ACTION_PROTOCOL_VERSION, POLICY_PARSE_ERROR_CODES
+from .canvas import CanvasState, GraphCanvas
+from .director_timeline import (
+    HISTORY_THINKING_VISIBILITY,
+    TIMELINE_CONTEXT_MODES,
+    director_context_mode,
+    timeline_assistant_content,
+    timeline_prefix_audit,
+)
+from .llm import (
+    BinaryChoiceUnavailable,
+    ChatBackend,
+    DirectorContextExhausted,
+    MockBackend,
+    director_recovery_budget,
+)
+from .submission_contract import (
+    SubmissionReceipt,
+    _director_call_context,
+    is_text_submission_dataset,
+)
+
+# Per-action ceiling. The gateway separately admits the exact templated prompt
+# plus completion within the service context; a constant alone cannot ensure fit.
+DIRECTOR_ACTION_MAX_TOKENS = 1000
+DIRECTOR_PROMPT_MAX_TOKENS = 1000
+DIRECTOR_INVALID_ACTION = '{"action":"invalid"}'
+DIRECTOR_CONTEXT_SCHEMA = "task_once_action_feedback_history_v3_with_thinking"
+
+DIRECTOR_BASE_PROMPT = r"""You are the Graph Director. You build and revise a task-adaptive Agent
+workflow for the given task. You edit the workflow graph; Workers solve the task.
+
+## 1. Goal
+
+Build a workflow whose Agents and relations reflect the task's actual information, reasoning,
+execution, and verification dependencies.
+
+The objective is neither to minimize nor to maximize the number of Agents. Single-Agent and
+multi-Agent graphs are both valid outcomes. Let the task, Worker evidence, and execution feedback
+determine the structure within the available budget. Use one Agent when the task is genuinely
+atomic and no separable responsibility is reasonably likely to change the result. Use multiple
+Agents when the task contains separable evidence branches, independent uncertainty, execution and
+diagnosis, implementation and validation, conflicting findings, or downstream synthesis.
+
+Do not treat either one-Agent or multi-Agent organization as the default. Every configured Agent
+must make a distinct, task-relevant contribution. Agent, token, and relation budgets are execution
+constraints, not graph-quality objectives. Do not omit a plausibly useful, non-overlapping
+contribution solely to reduce graph size or token cost. Do not add redundant Agents merely to
+consume budget. Never solve the task yourself.
+
+## 2. Output Protocol
+
+Return exactly one strict JSON object per turn and no prose. Supported actions are:
+{"action":"add_agent"}
+{"action":"set_prompt","target":"agent_id","role":"short free-text responsibility","objective":"short objective","scope":"short scope","expected_output":"short output contract"}
+{"action":"set_prompt","target":"configured_agent_id","role":"revised responsibility","objective":"revised objective","scope":"revised scope","expected_output":"revised output contract","revision_basis":"upstream_artifact_changed|peer_artifact_changed|tool_error|unresolved_issue|protocol_failure|structural_role_change|controller_repair","evidence_agent_ids":["agent_id"]}
+{"action":"set_model","target":"agent_id","runtime_route":"route_id_from_canvas"}
+{"action":"set_layer","target":"agent_id","layer":0}
+{"action":"consider_relation","source":"agent_a","target":"agent_b"}
+{"action":"delete_agent","target":"agent_id"}
+{"action":"set_output","target":"agent_id"}
+{"action":"finish"}
+
+Never emit more than one action or text before or after the JSON object. Canvas versions are bound
+by the controller; omit expected_version. Omit agent_id on ADD_AGENT and let Canvas allocate it.
+Never invent an Agent ID. Inside JSON strings, write every literal backslash as `\\`, including
+LaTeX commands such as `\\angle`, `\\sqrt`, and `\\frac`.
+For example, the JSON text {"scope":"Review the role of \\omega in the task"} contains two
+backslash characters before omega. Prefer plain words when mathematical notation is unnecessary.
+Keep thinking in the reasoning channel; the action channel contains only the single action object.
+
+## 3. Authoritative Canvas Control
+
+The current Canvas snapshot is authoritative. Use only actions listed in allowed_actions and only
+targets, relations, layers, revision bases, and evidence Agent IDs listed in
+legal_action_parameters. If the snapshot conflicts with an earlier assumption, follow the
+snapshot.
+action_field_requirements lists the top-level fields for each currently allowed action.
+legal_action_parameters contains candidate values, not ready-to-send action objects or existing
+graph edges. Never copy its relations array into an action. CONSIDER_RELATION uses top-level
+source and target; SET_RELATION/REMOVE_RELATION use top-level source, target, and relation only
+when that action is actually allowed. SET_PROMPT revisions also need the exposed revision_basis
+and evidence_agent_ids; action_field_requirements lists the base fields, not revision evidence.
+
+graph_state.actual_relations is the authoritative list of edges that currently exist. An `off`
+relation choice means the edge is absent (or was removed); a candidate in legal_action_parameters
+does not establish it. During reachability repair, use topology_action_previews to inspect which
+nodes would remain unreachable after an output or relation choice. A legal edge can still point
+away from the selected output. Do not switch outputs repeatedly when the preview shows no new
+reachability and Canvas reports a previously visited state; continue with an available layer or
+relation edit. A first legal intermediate edit may leave reachability unchanged while preparing
+the next edit.
+
+After ADD_AGENT, configure the newly allocated Agent with SET_PROMPT, then SET_MODEL.
+A responsibility without a selected model is not executable. Select only a route ID listed in the
+current Canvas. SET_PROMPT edits preserve the selected model; SET_MODEL edits change it explicitly.
+For CONSIDER_RELATION, name only the Agent pair. Canvas infers directed versus bidirectional from
+their layers and then requests a separate constrained off/on policy choice. If Canvas reports
+STRUCTURAL_REPAIR_REQUIRED, repair only the named structural problem
+before unrelated edits. Never escape structural debt by adding new Agents. If the snapshot exposes
+only FINISH, finish immediately. Do not repeat SET_OUTPUT for the selected output or switch outputs
+without new process evidence.
+
+## 4. Decision Order
+
+Use this order on every turn:
+1. Complete the pending SET_PROMPT or SET_MODEL configuration shown by Canvas.
+2. Repair a specified structural defect.
+3. If time or token consolidation is active, stop expanding and select the best valid existing
+   output.
+4. Evaluate whether the graph contains all materially useful contributions for this task.
+5. Add, connect, revise, or delete an Agent only to address a concrete missing contribution,
+   dependency, tool error, unresolved issue, or structural defect.
+6. When the graph is sufficient, select the Agent that owns the actual final result.
+7. When the output is valid and no useful graph edit remains, FINISH.
+
+Repeated wording, repeated output selection, and unchanged mutations are not progress.
+
+## 5. Graph Design Policy
+
+Choose graph structure from the task's real information, reasoning, execution, and verification
+dependencies. Do not begin from a presumption that the graph should be either single-Agent or
+multi-Agent. Infer the organization from the task and revise it when factual Worker feedback
+reveals a missing or redundant contribution.
+
+Use a directed relation when the target requires the source artifact. Use a bidirectional relation
+only for genuine same-level peer refinement. Independent branches that must affect the result must
+feed an Agent that owns synthesis, implementation, decision, or final response. Every necessary
+Agent must be able to contribute to the selected output. Delete redundant or unreachable Agents.
+
+Before selecting an output, inspect the task and current Worker evidence for an unrepresented
+dependency: a separable evidence branch; an independent source of uncertainty; a planning,
+execution, or diagnosis dependency; an implementation, testing, or review dependency; conflicting
+findings requiring comparison; or multiple contributions requiring synthesis. If one is present
+and could materially affect the result, represent it with a distinct Agent and connect it to the
+eventual output while budget permits. If none is present, a single-Agent graph is valid. This is a
+dependency audit, not a fixed role set or topology template.
+
+## 6. Delegation Contract
+
+SET_PROMPT delegates a responsibility, not a solution. Use role for the kind of contribution the
+Agent owns; objective for the concrete task-specific question or outcome; scope for the component,
+evidence branch, environment responsibility, or implementation boundary; and expected_output for
+the artifact or finding required downstream.
+
+You may repeat task entities, conditions, and the assigned subproblem when needed to define a
+concrete contribution. Keep every field concise and specific.
+Public task definitions and requested values may be restated in any field, including multiple
+requested values connected by first/then/next or use/apply in broad analysis descriptions.
+Those words alone do not specify an algorithm. Requesting a derivation is an output requirement;
+supplying the derivation, a new intermediate equality/value, specific algorithm/steps, or code is
+forbidden. A public target never permits an added solution, tool instruction, or route after it.
+Canvas checks all four complete fields and cross-field content before shortening them. If rejected,
+remove every identified solution/control fragment in the bounded feedback and preserve the public
+task goal. Do not merely replace connecting words to evade the boundary.
+Describe what the Agent should determine, not how to solve it. Do not include a candidate answer,
+intermediate calculations,
+evidence conclusions, a procedural solution, private references, hidden grader information,
+runtime routes, model-selection instructions, Worker Action names, or a prescribed tool sequence.
+You must never request, select, or configure Worker Actions. The Worker must decide its own
+reasoning and Action sequence from the task and visible Action definitions.
+
+Canvas may append a system-managed task output contract, so do not repeat generic formatting,
+exactness, evidence, or uncertainty boilerplate in expected_output. Revise an existing Agent only
+when Canvas exposes a valid revision_basis and eligible evidence_agent_ids. Free-text reasoning is
+not revision evidence.
+
+## 7. Worker Feedback
+
+Canvas feedback may contain bounded Worker summaries, confidence, evidence counts, unresolved
+issues, tool errors, execution status, cache reuse, and remaining budget. These are process signals,
+not reference answers or final correctness scores. A fluent textual claim is not proof that a tool
+succeeded, an external environment changed, an official terminal state was reached, a repository
+was modified, tests passed, or the final answer is correct.
+
+worker_protocol_status describes Artifact acceptance, not task correctness or final submission
+validity. recovered means a previous output-protocol error has been resolved; that historical
+error alone is not a current reason to revise. unknown means insufficient recorded evidence.
+local_recovery_exhausted refers only to the Worker's local finalization allowance, not to the
+availability of graph edits. The current Canvas snapshot reports current status; earlier history
+records past events. These fields describe facts and do not recommend a next action.
+
+Use feedback only to decide whether a concrete graph edit is useful. Do not expand the graph merely
+because confidence is imperfect. If no available edit can address the remaining uncertainty,
+select the best valid output and finish.
+
+## 8. Runtime Boundaries
+
+You select each Agent model using SET_MODEL and a Worker route ID exposed by Canvas. Runtime
+executes exactly that choice and does not substitute another model. Unknown or unavailable routes
+produce factual errors. Use SET_MODEL, not responsibility text, to change models. Dataset
+environments determine which Actions Workers can see. Canvas controls legality, version binding,
+incremental execution, caching and termination. You control delegation, models, topology and output.
+
+## 9. Termination
+
+Complete the graph within at most 20 Director turns. FINISH when all necessary responsibilities are
+represented, required dependencies reach the selected output, the selected output owns the actual
+task result, no concrete unresolved issue justifies another graph edit, and Canvas reports FINISH
+is legal. Do not edit a sufficient graph merely to use the remaining budget. FINISH ends the
+trajectory and no edit is allowed afterward.
+
+You may reason internally, but keep that reasoning brief. The externally visible response must
+contain only one JSON action.
+"""
+
+# Backward-compatible public name retained for callers that import the old constant.
+DIRECTOR_SYSTEM_PROMPT = DIRECTOR_BASE_PROMPT
+
+PROBLEM_TYPE_HINTS: dict[str, str] = {
+    "general": """## Problem-Type Guidance: General
+
+This is a general task. Determine its real information, reasoning, execution, and verification
+dependencies without presuming either a single-Agent or multi-Agent organization. One Agent may
+own a genuinely atomic task; represent distinct analysis, evidence, execution, verification, or
+synthesis contributions separately when they could materially affect the result.""",
+    "math": """## Problem-Type Guidance: Mathematical Reasoning
+
+This is a mathematical reasoning task. The selected output must determine the exact requested
+result with reliable reasoning. Determine the organization from the problem's actual reasoning
+dependencies rather than presuming one solver or multiple solvers. A short coherent solution may
+be atomic. For a long, case-based, geometry-heavy, ambiguous, or error-prone problem, represent a
+distinct derivation, case-analysis, or verification contribution when it could affect the result.
+Multiple Agents must contribute different reasoning or checking responsibilities rather than
+repeat the same solution.""",
+    "retrieval_qa": """## Problem-Type Guidance: Retrieval Question Answering
+
+This is an evidence-grounded retrieval question-answering task. The selected output must provide a
+concise answer supported by relevant evidence. Determine whether the answer needs one direct fact
+or multiple linked facts. When searches, entities, or evidence chains are meaningfully separable,
+assign distinct evidence responsibilities and connect them to an Agent that owns final synthesis.
+Do not repeat the same search or paraphrase the same candidate answer. Preserve unresolved
+ambiguity instead of treating unsupported text as evidence.""",
+    "response": """## Problem-Type Guidance: Context-Grounded Professional Response
+
+This is a context-grounded professional response task. The complete public conversation is the
+primary task context. The selected output must provide one coherent response that directly
+addresses the user's needs, preserves important uncertainty, and avoids unsupported claims. Do not
+assume external search or environment interaction is available, and do not create retrieval
+responsibilities when the necessary context is already provided. Use one final response owner;
+this output-ownership requirement is not a limit on graph size. A focused request may be atomic.
+Represent genuinely distinct concerns, specialized perspectives, or useful safety/review
+contributions separately when they could materially affect the response, and feed them to the final
+response owner.""",
+    "environment": """## Problem-Type Guidance: Stateful Environment Interaction
+
+This is a stateful environment-interaction task. Completion requires the runtime environment to
+reach the requested official outcome. Identifying an item, recommending an action, proposing an
+action sequence, or claiming success in text is insufficient. Use one Agent as the continuous
+state-mutating owner for the selected environment trajectory. This is an environment-ownership
+constraint, not a limit on graph size. Other Agents may contribute distinct planning, constraint
+tracking, evidence inspection, or failure diagnosis, and their findings must feed the environment
+owner. Represent such a contribution when it could materially change the action strategy or detect
+a failure. Do not create competing owners of the same mutable environment state. Workers
+independently choose visible Actions; never prescribe Action names or a fixed sequence.""",
+    "code": """## Problem-Type Guidance: Code and Repository Repair
+
+This is a code task. The selected output must own an executable implementation or runtime-visible
+code change with validation status. Analysis, localization, review, or a proposed textual change
+alone is not a completed implementation. Use one final commit owner for the selected workspace.
+This is a commit-ownership constraint, not a limit on graph size. Distinct Agents may investigate
+root cause, inspect separate code paths, analyze tests, or review an implementation, and their
+findings must feed the commit owner or a downstream output Agent. Represent such contributions when
+they could materially affect the implementation or validation result. Avoid competing final commit
+owners. Workers independently choose visible code or repository Actions; never prescribe Action
+names or a fixed sequence. If no safe implementation can be produced, preserve the
+evidence-grounded failure instead of claiming success.""",
+}
+
+DIRECTOR_PROMPT_VARIANTS = frozenset({"v2", "v2.1", "v2.2", "v3"})
+
+
+def _replace_prompt_section(source: str, current: str, legacy: str) -> str:
+    if source.count(current) != 1:
+        raise RuntimeError("Director prompt section drifted; refusing an inexact V2 reconstruction")
+    return source.replace(current, legacy, 1)
+
+
+# The V2 control arm is reconstructed from the system prompt persisted in the
+# 2026-08-31 seven-dataset rollout tokens. Only the three sections changed by
+# V2.1 are replaced; the action protocol and all Runtime boundaries stay shared.
+DIRECTOR_BASE_PROMPT_V2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT,
+    "You are the Graph Director. You build and revise a task-adaptive Agent",
+    "You are the Graph Director. You build and revise a compact Agent",
+)
+
+# V2.2 keeps the V2.1 graph policy while making the existing output marker an
+# execution responsibility that can be assigned before workflow construction
+# is complete. SET_OUTPUT remains a sampled graph action.
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT,
+    """After ADD_AGENT, configure the newly allocated Agent with SET_PROMPT, then SET_MODEL.
+A responsibility without a selected model is not executable. Select only a route ID listed in the
+current Canvas. SET_PROMPT edits preserve the selected model; SET_MODEL edits change it explicitly.""",
+    """After ADD_AGENT, configure the newly allocated Agent with SET_PROMPT. Then use SET_MODEL
+when Canvas requires a Worker model. A responsibility without a selected model is not executable.
+Select only a route ID listed in the current Canvas. SET_PROMPT edits preserve the selected model;
+SET_MODEL edits change it explicitly. SET_OUTPUT may be used after SET_PROMPT and before SET_MODEL
+when Canvas exposes that action for the pending Agent.""",
+)
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2_2,
+    "If no available edit can address the remaining uncertainty,\nselect the best valid output and finish.",
+    "If no available edit can address the remaining uncertainty, keep the current output if it "
+    "is still valid and choose FINISH explicitly when it is legal. If no output is selected or "
+    "the current output is unusable, choose a legal graph action that addresses that state.",
+)
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2_2,
+    """If the snapshot exposes
+only FINISH, finish immediately. Do not repeat SET_OUTPUT for the selected output or switch outputs
+without new process evidence.""",
+    """If the snapshot exposes only FINISH, finish immediately. SET_OUTPUT marks which ordinary
+Agent's result is submitted; it does not finish the workflow. For text tasks, the selected output
+Agent completes the original public task using its assigned work and visible graph evidence. For
+environment or code tasks, the selected Agent's trusted environment result or code artifact is the
+deliverable. Canvas may rerun the affected subgraph after a real input change. Continue useful,
+legal graph edits after selecting an output; FINISH is your explicit decision to submit. Do not
+repeat SET_OUTPUT for the current output or switch it without task evidence.""",
+)
+DIRECTOR_BASE_PROMPT_V2_2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2_2,
+    """6. When the graph is sufficient, select the Agent that owns the actual final result.
+7. When the output is valid and no useful graph edit remains, FINISH.""",
+    """6. Set or update the output Agent when the task and current evidence support that choice;
+this may happen before every useful graph edit is complete.
+7. Continue any useful, legal graph edits. FINISH when the task result is ready and no useful graph
+edit remains.""",
+)
+DIRECTOR_BASE_PROMPT_V2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2,
+    """Build a workflow whose Agents and relations reflect the task's actual information, reasoning,
+execution, and verification dependencies.
+
+The objective is neither to minimize nor to maximize the number of Agents. Single-Agent and
+multi-Agent graphs are both valid outcomes. Let the task, Worker evidence, and execution feedback
+determine the structure within the available budget. Use one Agent when the task is genuinely
+atomic and no separable responsibility is reasonably likely to change the result. Use multiple
+Agents when the task contains separable evidence branches, independent uncertainty, execution and
+diagnosis, implementation and validation, conflicting findings, or downstream synthesis.
+
+Do not treat either one-Agent or multi-Agent organization as the default. Every configured Agent
+must make a distinct, task-relevant contribution. Agent, token, and relation budgets are execution
+constraints, not graph-quality objectives. Do not omit a plausibly useful, non-overlapping
+contribution solely to reduce graph size or token cost. Do not add redundant Agents merely to
+consume budget. Never solve the task yourself.""",
+    """Build the smallest workflow that is sufficient for the actual task.
+
+A single Agent is valid when one coherent responsibility can reliably complete the task. Use
+multiple Agents when distinct evidence, independent reasoning, stateful execution,
+implementation, comparison, verification, or synthesis could materially improve the result.
+Do not default every task to the same one-Agent graph. Do not add Agents merely to increase graph
+size. Every configured Agent must make a distinct, task-relevant contribution. Never solve the
+task yourself.""",
+)
+DIRECTOR_BASE_PROMPT_V2 = _replace_prompt_section(
+    DIRECTOR_BASE_PROMPT_V2,
+    """Choose graph structure from the task's real information, reasoning, execution, and verification
+dependencies. Do not begin from a presumption that the graph should be either single-Agent or
+multi-Agent. Infer the organization from the task and revise it when factual Worker feedback
+reveals a missing or redundant contribution.
+
+Use a directed relation when the target requires the source artifact. Use a bidirectional relation
+only for genuine same-level peer refinement. Independent branches that must affect the result must
+feed an Agent that owns synthesis, implementation, decision, or final response. Every necessary
+Agent must be able to contribute to the selected output. Delete redundant or unreachable Agents.
+
+Before selecting an output, inspect the task and current Worker evidence for an unrepresented
+dependency: a separable evidence branch; an independent source of uncertainty; a planning,
+execution, or diagnosis dependency; an implementation, testing, or review dependency; conflicting
+findings requiring comparison; or multiple contributions requiring synthesis. If one is present
+and could materially affect the result, represent it with a distinct Agent and connect it to the
+eventual output while budget permits. If none is present, a single-Agent graph is valid. This is a
+dependency audit, not a fixed role set or topology template.""",
+    """Choose graph structure from the task's real information and execution dependencies. Use one Agent
+when one coherent contribution is sufficient and another responsibility is unlikely to change the
+result. Use multiple Agents for genuinely distinct evidence branches, reasoning or case analysis,
+execution and diagnosis, implementation and review, conflicting findings, or final synthesis.
+
+Use a directed relation when the target requires the source artifact. Use a bidirectional relation
+only for genuine same-level peer refinement. Independent branches that must affect the result must
+feed an Agent that owns synthesis, implementation, decision, or final response. Every necessary
+Agent must be able to contribute to the selected output. Delete redundant or unreachable Agents.
+
+Before selecting an output, ask internally whether a Worker with a non-overlapping responsibility
+could plausibly discover missing evidence, an unmet environment condition, an implementation
+defect, or a material error that would change the result. If yes, add or connect that distinct
+contribution while budget permits. If no, a single-Agent graph is acceptable. No fixed role set or
+topology is required.""",
+)
+
+PROBLEM_TYPE_HINTS_V2: dict[str, str] = {
+    **PROBLEM_TYPE_HINTS,
+    "math": """## Problem-Type Guidance: Mathematical Reasoning
+
+This is a mathematical reasoning task. The selected output must determine the exact requested
+result with reliable reasoning. A single Agent is appropriate for a short coherent solution. For a
+long, case-based, geometry-heavy, or error-prone problem, consider a distinct derivation,
+case-analysis, or verification contribution. Multiple Agents must contribute different reasoning
+or checking responsibilities rather than repeat the same solution.""",
+    "response": """## Problem-Type Guidance: Context-Grounded Professional Response
+
+This is a context-grounded professional response task. The complete public conversation is the
+primary task context. The selected output must provide one coherent response that directly
+addresses the user's needs, preserves important uncertainty, and avoids unsupported claims. Do not
+assume external search or environment interaction is available, and do not create retrieval
+responsibilities when the necessary context is already provided. A single response Agent is
+appropriate for a focused request. Use multiple Agents only for genuinely distinct concerns,
+specialized perspectives, or a useful safety/review responsibility, and feed them to one final
+response owner.""",
+    "environment": """## Problem-Type Guidance: Stateful Environment Interaction
+
+This is a stateful environment-interaction task. Completion requires the runtime environment to
+reach the requested official outcome. Identifying an item, recommending an action, proposing an
+action sequence, or claiming success in text is insufficient. Prefer one Agent to own continuous
+interaction with the mutable environment. Add another Agent only for distinct planning,
+constraint-checking, or failure-diagnosis that feeds the environment owner. Do not create competing
+owners of the same environment state. Workers independently choose visible Actions; never prescribe
+Action names or a fixed sequence.""",
+    "code": """## Problem-Type Guidance: Code and Repository Repair
+
+This is a code task. The selected output must own an executable implementation or runtime-visible
+code change with validation status. Analysis, localization, review, or a proposed textual change
+alone is not a completed implementation. Prefer one implementation owner. Additional Agents may
+own root-cause investigation, test analysis, or code review, but their findings must feed the
+implementation owner or a downstream output Agent. Avoid competing editing owners. Workers
+independently choose visible code or repository Actions; never prescribe Action names or a fixed
+sequence. If no safe implementation can be produced, preserve the evidence-grounded failure instead
+of claiming success.""",
+}
+
+
+def director_prompt_components(variant: str) -> tuple[str, dict[str, str]]:
+    normalized = str(variant).strip().casefold()
+    if normalized not in DIRECTOR_PROMPT_VARIANTS:
+        raise ValueError(
+            f"unsupported Director prompt variant {variant!r}; "
+            f"use one of {sorted(DIRECTOR_PROMPT_VARIANTS)}"
+        )
+    if normalized == "v3":
+        from .unified_contract import DIRECTOR_HINTS, DIRECTOR_PROMPT
+        hints = dict(DIRECTOR_HINTS)
+        hints["math"] = hints.get("math", "") + """
+For AIME, aime_candidates contains the actual candidate_answer, summary
+head and conclusion tail, model_evidence head/tail, and runtime-owned tool counts.
+Model evidence is a model claim; it does not establish actual tool execution.
+submit_ready means
+protocol eligibility only, not mathematical correctness. Confidence is the
+model's claim. Compare the answer with the final conclusion, any corrections
+in model evidence, and actual tool evidence;
+when they conflict, use existing graph edits to request a bounded check or
+revision and ensure its result reaches the task_result node. Never write the
+answer yourself. FINISH uses the current artifact and triggers no Worker call.
+Tool response_status=ok confirms that an observation was returned; status and
+execution_status report whether computation succeeded. A timeout or error is
+not verification. tool_evidence_warnings exposes reported match=False and
+literal answer printing; successful execution alone does not verify the answer.
+Read these warnings together with answer_consistency_warnings and resolve
+explicit conflicts through existing bounded revisions. Warnings never replace
+the candidate answer or disclose the reference answer.
+"""
+        return DIRECTOR_PROMPT + """
+When worker_usage.policy is reported_usage_threshold_v1, all Workers in this
+question share actual provider input/output usage. The threshold controls new
+Worker dispatches; the last admitted response may exceed it and remain eligible
+for FINISH. Director usage is separate. Unknown usage is recorded separately;
+two unsettled attempts stop new Worker requests. Submit an existing eligible
+task_result with FINISH when dispatch stops; FINISH needs no extra generation.
+""", hints
+    if normalized == "v2":
+        base, hints = DIRECTOR_BASE_PROMPT_V2, PROBLEM_TYPE_HINTS_V2
+    elif normalized == "v2.2":
+        base, hints = DIRECTOR_BASE_PROMPT_V2_2, PROBLEM_TYPE_HINTS
+    else:
+        base, hints = DIRECTOR_BASE_PROMPT, PROBLEM_TYPE_HINTS
+    return base + """
+For text tasks (AIME, NQ, HotpotQA, HealthBench), SET_OUTPUT assigns the output
+responsibility; it does not submit the answer. A current output artifact remains
+a candidate until your FINISH action is accepted. FINISH submits that artifact
+after graph, execution-integrity, input-binding, and budget checks. Answer format,
+range and correctness are evaluated by the dataset verifier after submission;
+an incorrect or out-of-range answer does not itself block FINISH. If no useful
+revision remains and FINISH is legal, submit within the
+remaining budget. Canvas will not submit automatically for you. A current valid
+artifact needs no extra Worker generation merely to submit it. ALFWorld,
+WebShop and SWE retain their own environment/action commit rules.
+""", hints
+
+
+_PROBLEM_TYPE_BY_DATASET = {
+    "aime": "math",
+    "aime": "math",
+    "nq": "retrieval_qa",
+    "nq_open": "retrieval_qa",
+    "natural_questions": "retrieval_qa",
+    "hotpotqa": "retrieval_qa",
+    "healthbench_professional": "response",
+    "webshop": "environment",
+    "alfworld": "environment",
+    "swe_bench": "code",
+    "swe-bench": "code",
+}
+
+_PROBLEM_TYPE_BY_ADAPTER = {
+    "aime": "math",
+    "aime": "math",
+    "retrieval_qa": "retrieval_qa",
+    "healthbench_professional": "response",
+    "webshop": "environment",
+    "alfworld": "environment",
+    "swe_bench": "code",
+}
+
+_PROBLEM_TYPE_BY_TASK_TYPE = {
+    "math": "math",
+    "mathematical_reasoning": "math",
+    "exact_reasoning": "math",
+    "retrieval_qa": "retrieval_qa",
+    "open_qa": "retrieval_qa",
+    "healthcare": "response",
+    "response": "response",
+    "professional_response": "response",
+    "environment": "environment",
+    "stateful_environment": "environment",
+    "webshop": "environment",
+    "alfworld": "environment",
+    "code": "code",
+    "repository_repair": "code",
+    "swe_bench": "code",
+}
+
+
+def infer_director_problem_type(
+    *,
+    dataset: str = "",
+    task_type: str = "",
+    action_adapter_id: str = "",
+) -> str:
+    """Infer a coarse reusable prompt type without exposing a dataset policy."""
+
+    adapter_key = str(action_adapter_id or "").strip().casefold()
+    dataset_key = str(dataset or "").strip().casefold()
+    task_key = str(task_type or "").strip().casefold()
+    return (
+        _PROBLEM_TYPE_BY_ADAPTER.get(adapter_key)
+        or _PROBLEM_TYPE_BY_DATASET.get(dataset_key)
+        or _PROBLEM_TYPE_BY_TASK_TYPE.get(task_key)
+        or "general"
+    )
+
+
+@dataclass
+class DirectorTurn:
+    round_index: int
+    model_action: str
+    feedback: str
+    accepted: bool
+    graph_version: int
+    prompt_messages: list[dict[str, str]] = field(default_factory=list)
+    trainable: bool = True
+    rejection_code: str | None = None
+    action_diagnostics: dict[str, Any] = field(default_factory=dict)
+    turn_kind: str = "graph_action"
+    relation_decision: dict[str, Any] = field(default_factory=dict)
+    call_id: str = ""
+    raw_reasoning_text: str = ""
+    raw_action_text: str = ""
+    prompt_token_ids: tuple[int, ...] = ()
+    completion_token_ids: tuple[int, ...] = ()
+    behavior_log_probs: tuple[float, ...] = ()
+    action_character_span: tuple[int, int] | None = None
+    model_id: str = ""
+    route_name: str = ""
+    thinking_requested: bool | None = None
+    thinking_effective: bool = False
+    token_provenance: str = "unavailable"
+    trajectory_schema: str = "director_trajectory_v2_raw_policy_calls"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "round_index": self.round_index,
+            "model_action": self.model_action,
+            "feedback": self.feedback,
+            "accepted": self.accepted,
+            "graph_version": self.graph_version,
+            "prompt_messages": list(self.prompt_messages),
+            "trainable": self.trainable,
+            "rejection_code": self.rejection_code,
+            "action_diagnostics": dict(self.action_diagnostics),
+            "turn_kind": self.turn_kind,
+            "relation_decision": dict(self.relation_decision),
+            "call_id": self.call_id,
+            "raw_reasoning_text": self.raw_reasoning_text,
+            "raw_action_text": self.raw_action_text,
+            "prompt_token_ids": list(self.prompt_token_ids),
+            "completion_token_ids": list(self.completion_token_ids),
+            "behavior_log_probs": list(self.behavior_log_probs),
+            "action_character_span": list(self.action_character_span)
+            if self.action_character_span
+            else None,
+            "model_id": self.model_id,
+            "route_name": self.route_name,
+            "thinking_requested": self.thinking_requested,
+            "thinking_effective": self.thinking_effective,
+            "token_provenance": self.token_provenance,
+            "trajectory_schema": self.trajectory_schema,
+        }
+
+
+@dataclass
+class DirectorRun:
+    task: str
+    finished: bool
+    output: str
+    graph: dict[str, Any]
+    turns: list[DirectorTurn] = field(default_factory=list)
+    candidate_output: str = ""
+    submission_receipt: SubmissionReceipt | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "task": self.task,
+            "finished": self.finished,
+            "output": self.output,
+            "candidate_output": self.candidate_output,
+            "submission_receipt": self.submission_receipt.to_dict() if self.submission_receipt else None,
+            "graph": self.graph,
+            "turns": [turn.to_dict() for turn in self.turns],
+        }
+
+
+class GraphDirector:
+    """Multi-turn Canvas driver adapted from FlowSteer's interactive workflow loop."""
+
+    def __init__(
+        self,
+        *,
+        backend: ChatBackend,
+        canvas: GraphCanvas,
+        role: str = "graph-director",
+        solver_skill_context: str = "",
+        prompt_variant: str = "v2.1",
+        enable_thinking: bool | None = None,
+        tokenizer: Any | None = None,
+        call_namespace: str = "",
+    ) -> None:
+        self.context_mode = director_context_mode()
+        self.context_schema = (
+            "append_only_action_feedback_history_v3_with_thinking"
+            if self.context_mode in TIMELINE_CONTEXT_MODES
+            else DIRECTOR_CONTEXT_SCHEMA
+        )
+        self.backend = backend
+        self.canvas = canvas
+        self.role = role
+        self.solver_skill_context = solver_skill_context
+        self.prompt_variant = "v3" if canvas.unified else str(prompt_variant).strip().casefold()
+        self.enable_thinking = enable_thinking
+        self.relation_token_ids = _binary_relation_token_ids(tokenizer)
+        self.relation_tokenizer_attestation = _tokenizer_attestation(tokenizer)
+        self.tokenizer = tokenizer
+        self.call_namespace = str(call_namespace).strip() or str(self.canvas.runtime.seed)
+        if not self.canvas.run_id:
+            self.canvas.run_id = self.call_namespace
+        if self.prompt_variant not in DIRECTOR_PROMPT_VARIANTS:
+            raise ValueError(
+                f"unsupported Director prompt variant {prompt_variant!r}; "
+                f"use one of {sorted(DIRECTOR_PROMPT_VARIANTS)}"
+            )
+
+    def run(self) -> DirectorRun:
+        self._completed_turns: list[DirectorTurn] = []
+        try:
+            return self._run()
+        except Exception as exc:
+            # Preserve completed policy tokens and factual state, never execute
+            # an incomplete/unknown response or convert an exception to success.
+            exc.partial_state = {
+                **(getattr(exc, "partial_state", None) or {}),
+                "director_turns": [turn.to_dict() for turn in self._completed_turns],
+                "canvas_state": self.canvas.state.value,
+                "round_index": self.canvas.round_index,
+                "graph": self.canvas.graph.to_dict(),
+                "history": [step.to_dict() for step in self.canvas.history],
+                "deadline": (
+                    self.canvas.rollout_deadline.diagnostics()
+                    if self.canvas.rollout_deadline is not None
+                    else None
+                ),
+            }
+            raise
+
+    def _run(self) -> DirectorRun:
+        feedback = "Graph is empty."
+        turns = self._completed_turns
+        problem_type = infer_director_problem_type(
+            dataset=self.canvas.dataset,
+            task_type=self.canvas.task_type,
+            action_adapter_id=(
+                self.canvas.action_adapter.adapter_id
+                if self.canvas.action_adapter is not None
+                else ""
+            ),
+        )
+        base_prompt, problem_type_hints = director_prompt_components(self.prompt_variant)
+        base_prompt = base_prompt.replace(
+            "at most 20 Director turns",
+            f"at most {self.canvas.config.max_rounds} Director turns",
+        )
+        system_prompt = (
+            base_prompt.rstrip() + "\n\n" + problem_type_hints[problem_type].strip() + "\n"
+        )
+        if self.canvas.unified and self.canvas.dataset == "webshop":
+            # Environment completion semantics, not a search/selection strategy.
+            # The public goal can be phrased as "find" or "looking for"; its
+            # deliverable is still an environment purchase, not a shopping list.
+            system_prompt += (
+                "\nWebShop completion contract: the complete task is an environment purchase. "
+                "A list of products or specifications is subtask evidence, not task_result. "
+                "A task_result responsibility owns a purchase satisfying the original public goal. "
+                "Nodes have separate shopping sessions; graph links share evidence, not page state. "
+                "All sessions spend the same task action budget when shared_total_v1 is active. "
+                "FINISH(target) commits that task_result node's current prepared purchase; "
+                "only the environment's subsequent score establishes success.\n"
+            )
+        if not self.canvas.unified and self.canvas.runtime.native_webshop and self.canvas.dataset == "webshop":
+            from .webshop_native_protocol import DIRECTOR_ENVIRONMENT_HINT
+
+            system_prompt = base_prompt.rstrip() + "\n\n" + DIRECTOR_ENVIRONMENT_HINT
+        if self.solver_skill_context:
+            # The per-turn conversation is deliberately fresh, so persistent
+            # Solver-only orchestration context belongs in the system message.
+            system_prompt += (
+                "\n## Optional Orchestration Knowledge\n" + self.solver_skill_context + "\n"
+            )
+        system_message = {"role": "system", "content": system_prompt}
+        # Keep the policy history without replaying obsolete control snapshots.
+        # Every prior sampled thinking/action and its factual environment feedback remain
+        # in the conversation; the immutable task and current authoritative
+        # snapshot are each supplied exactly once in snapshot mode. Append-only
+        # mode also retains original control messages.
+        history_turns: list[tuple[str, str]] = []
+        chronological_messages: list[dict[str, str]] = [dict(system_message)]
+        previous_policy_ids: tuple[int, ...] = ()
+        timeline_chain_valid = True
+
+        def prepare_timeline_turn(messages, prompt_ids, completion_ids):
+            nonlocal previous_policy_ids, timeline_chain_valid
+            if self.context_mode not in TIMELINE_CONTEXT_MODES:
+                return {}
+            audit = timeline_prefix_audit(previous_policy_ids, prompt_ids, completion_ids)
+            assistant = timeline_assistant_content(self.tokenizer, prompt_ids, completion_ids)
+            timeline_chain_valid = timeline_chain_valid and audit["timeline_merge_candidate"]
+            audit["timeline_merge_candidate"] = timeline_chain_valid
+            chronological_messages[:] = [dict(m) for m in messages]
+            chronological_messages.append({"role": "assistant", "content": assistant})
+            previous_policy_ids = tuple(prompt_ids) + tuple(completion_ids)
+            return audit
+
+        from .protocol_feedback import FeedbackProjection, prompt_profile
+        feedback_projection = FeedbackProjection()
+
+        def prompt_messages_for(current_user_content: str) -> list[dict[str, str]]:
+            if self.canvas.dataset in {"aime", "math_hard"} and "Canvas feedback:\n" in current_user_content:
+                head, tail = current_user_content.split("Canvas feedback:\n", 1)
+                current_user_content = head + "Canvas feedback:\n" + feedback_projection.project(tail)
+            if self.context_mode in TIMELINE_CONTEXT_MODES:
+                return [
+                    *[dict(m) for m in chronological_messages],
+                    {"role": "user", "content": current_user_content},
+                ]
+            messages = [dict(system_message)]
+            if history_turns:
+                messages.append({"role": "user", "content": f"Task:\n{self.canvas.director_task}"})
+                for index, (raw_action_text, prior_feedback) in enumerate(history_turns):
+                    messages.append({"role": "assistant", "content": raw_action_text})
+                    if index + 1 < len(history_turns):
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": f"Canvas feedback:\n{prior_feedback}",
+                            }
+                        )
+            return [*messages, {"role": "user", "content": current_user_content}]
+
+        def current_user_prefix() -> str:
+            return "" if history_turns else f"Task:\n{self.canvas.director_task}\n\n"
+
+        responsibility_failures = 0
+        responsibility_issue: dict[str, Any] = {}
+        protocol_error: dict[str, Any] = {}
+        responsibility_rejections = {
+            "responsibility_violation",
+            "duplicate_responsibility",
+        }
+        progress_signature = self.canvas.director_progress_signature()
+        observed_turns = 0
+        stalled_turns = 0
+        seen_progress_states = {progress_signature}
+        submission_recoveries = len(self.canvas._unified_submission_recoveries) if self.canvas.unified else 0
+        while True:
+            # Count completed policy calls, including accepted semantic no-ops.
+            # Feedback, inference activity and automatic recovery are not progress.
+            current_signature = self.canvas.director_progress_signature()
+            if len(turns) != observed_turns:
+                repeated = current_signature in seen_progress_states if self.canvas.unified else current_signature == progress_signature
+                if self.canvas.unified:
+                    current_recoveries = len(self.canvas._unified_submission_recoveries)
+                    if current_recoveries > submission_recoveries:
+                        repeated = False
+                    submission_recoveries = current_recoveries
+                stalled_turns = stalled_turns + 1 if repeated else 0
+                seen_progress_states.add(current_signature)
+                observed_turns = len(turns)
+            progress_signature = current_signature
+            ledger = self.canvas.runtime.worker_usage_ledger
+            if (ledger and ledger.protocol.status()["terminal"]
+                    and "finish" not in self.canvas.control_snapshot()["allowed_actions"]):
+                feedback = self.canvas.terminate_director_stall("protocol_no_progress").feedback
+                break
+            if not self.canvas.active:
+                self.canvas.terminate_round_limit_without_graph_repair()
+                break
+            # Worker execution is synchronous with Canvas.step: by this boundary
+            # there are no in-flight Workers to wait for. Pending configuration is
+            # represented by legal SET_PROMPT/SET_MODEL/relation actions.
+            if stalled_turns >= 4:
+                # Complete model-authored invalid objects have known protocol
+                # attribution. Missing/truncated responses retain the existing
+                # unknown path; no answer or infrastructure failure is invented.
+                protocol_exhausted = all(
+                    turn.rejection_code in POLICY_PARSE_ERROR_CODES
+                    and turn.action_diagnostics.get("json_objects_found", 0) > 0
+                    and turn.action_diagnostics.get("finish_reason") in {None, "stop", "end_turn"}
+                    for turn in turns[-4:]
+                )
+                feedback = self.canvas.terminate_director_stall(
+                    "director_action_protocol_exhausted" if protocol_exhausted
+                    else "director_no_progress_exhausted"
+                ).feedback
+                break
+            if not self.canvas.control_snapshot()["allowed_actions"]:
+                ledger = self.canvas.runtime.worker_usage_ledger
+                feedback = self.canvas.terminate_director_stall(
+                    ledger.stop_reason() if ledger and ledger.stop_reason()
+                    else "director_no_legal_continuation"
+                ).feedback
+                break
+            if stalled_turns == 3:
+                feedback += (
+                    "\nBounded recovery: this is the last call without effective progress. "
+                    "Choose one legal action from the snapshot. Keep reasoning concise; "
+                    "return a complete JSON action. Workers solve the task."
+                )
+            if self.canvas.rollout_deadline is not None:
+                self.canvas.rollout_deadline.check("director_turn_start")
+            if self.canvas.state is CanvasState.AWAITING_RELATION_CHOICE:
+                pending = self.canvas.pending_relation_decision
+                assert pending is not None
+                binary_messages = prompt_messages_for(
+                    current_user_prefix()
+                    + "Authoritative Canvas control snapshot:\n"
+                    + _snapshot_text(self.canvas.control_snapshot())
+                    + "\n\nCanvas feedback:\n"
+                    + feedback
+                    + "\n\nChoose off or on for this relation."
+                )
+                try:
+                    choose_binary = self.backend.choose_binary
+                    if self.relation_token_ids is None:
+                        raise BinaryChoiceUnavailable(
+                            "the active Director tokenizer does not encode off/on as one token each"
+                        )
+                    binary = choose_binary(
+                        binary_messages,
+                        role=self.role,
+                        token_ids=self.relation_token_ids,
+                    )
+                except DirectorContextExhausted:
+                    self.canvas.terminate_context_limit_without_graph_repair()
+                    break
+                except (AttributeError, BinaryChoiceUnavailable, TypeError, ValueError) as exc:
+                    abandoned = self.canvas.abandon_relation_choice(str(exc))
+                    feedback = abandoned.feedback
+                    continue
+                audit = binary.to_policy_audit()
+                audit.update(
+                    {
+                        "behavior_policy_version": "relation_binary_v1",
+                        "tokenizer_attestation": dict(self.relation_tokenizer_attestation),
+                        "rollout_seed": int(self.canvas.runtime.seed),
+                    }
+                )
+                timeline_audit = prepare_timeline_turn(
+                    binary_messages,
+                    binary.prompt_token_ids,
+                    (binary.token_ids[binary.choice],),
+                )
+                step = self.canvas.resolve_relation_choice(binary.choice, policy_audit=audit)
+                feedback = step.feedback
+                history_turns.append((binary.choice, step.feedback))
+                turns.append(
+                    DirectorTurn(
+                        round_index=step.round_index,
+                        model_action=binary.choice,
+                        feedback=step.feedback,
+                        accepted=step.accepted,
+                        graph_version=self.canvas.graph.version,
+                        prompt_messages=binary_messages,
+                        # The sampled off/on token is a genuine policy action even
+                        # when Canvas later rejects the requested graph mutation
+                        # (for example, a remaining-time admission gate).  As with
+                        # rejected JSON actions below, factual rejection is part of
+                        # the environment response; it must not erase the action or
+                        # make an otherwise exact trajectory ineligible.
+                        trainable=True,
+                        rejection_code=step.rejection_code,
+                        action_diagnostics={
+                            "no_progress_streak_before_call": stalled_turns,
+                            "bounded_recovery_call": stalled_turns == 3,
+                            "generated_action": True,
+                            "director_context_schema": self.context_schema,
+                            "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
+                            "timeline_prefix_audit": timeline_audit,
+                            "binary_policy_audit": audit,
+                            "cleaned_action_chars": len(binary.choice),
+                            "backend_request_events": binary.metadata.get(
+                                "backend_request_events", []
+                            ),
+                        },
+                        turn_kind="relation_choice",
+                        relation_decision=dict(step.relation_decision),
+                        call_id=f"{self.call_namespace}:{len(turns)}:relation",
+                        raw_action_text=binary.choice,
+                        prompt_token_ids=tuple(binary.prompt_token_ids),
+                        completion_token_ids=(int(binary.token_ids[binary.choice]),),
+                        behavior_log_probs=(float(binary.log_probabilities[binary.choice]),),
+                        action_character_span=(0, len(binary.choice)),
+                        model_id=binary.model,
+                        route_name=str(binary.metadata.get("route", "")),
+                        thinking_requested=False,
+                        thinking_effective=False,
+                        token_provenance=(
+                            "mock_text"
+                            if isinstance(self.backend, MockBackend)
+                            else "provider_prompt_and_binary_token_ids_and_logprobs"
+                        ),
+                    )
+                )
+                continue
+            if responsibility_failures == 1 and self.canvas.pending_agent_id:
+                issue_field = str(responsibility_issue.get("field") or "violating field")
+                issue_code = str(responsibility_issue.get("code") or "responsibility_violation")
+                if issue_code == "prompt_action_schema":
+                    retry_instruction = (
+                        "Repair the JSON syntax or required action fields, preserving the "
+                        "intended responsibility. Return one complete JSON object with all "
+                        "four short fields as properly quoted and escaped strings. "
+                        "A schema rejection does not by itself indicate an unsafe responsibility."
+                    )
+                elif issue_code == "duplicate_responsibility":
+                    conflicting_agent = str(
+                        responsibility_issue.get("details", {}).get(
+                            "conflicting_agent_id", "an existing Agent"
+                        )
+                    )
+                    retry_instruction = (
+                        f"The responsibility overlaps {conflicting_agent}. Keep the task "
+                        "subject, but make this Agent's contribution genuinely distinct: "
+                        "narrow it to a non-overlapping implementation scope or assign "
+                        "diagnosis, testing, review, or synthesis with a distinct deliverable. "
+                        "Do not merely rename the role or paraphrase the same ownership."
+                    )
+                else:
+                    retry_instruction = (
+                        "Preserve the original task subject and intended contribution; rewrite "
+                        "the identified violating fragments in every reported field; preserve other task content. "
+                        "Task entities and goals are allowed, but answers, procedural solution "
+                        "steps, and explicit Action control are not."
+                    )
+                user_content = (
+                    "Your previous SET_PROMPT was rejected. Retry only the currently required "
+                    f"SET_PROMPT for {self.canvas.pending_agent_id}. Use the four short fields "
+                    "role, objective, scope, and expected_output. The rejection was "
+                    f"{issue_code} in {issue_field}. {retry_instruction}\n\n"
+                    + current_user_prefix()
+                    + "Authoritative Canvas control snapshot:\n"
+                    + _snapshot_text(self.canvas.control_snapshot())
+                    + "\n\nCanvas feedback:\n"
+                    + feedback
+                )
+            else:
+                user_content = (
+                    current_user_prefix() + "Authoritative Canvas control snapshot:\n"
+                    f"{_snapshot_text(self.canvas.control_snapshot())}\n\n"
+                    f"Canvas feedback:\n{feedback}\n\n"
+                    "Return the next single JSON action."
+                )
+            if protocol_error:
+                import json
+
+                user_content += (
+                    "\n\nAction encoding failure (separate from responsibility or graph legality):\n"
+                    + json.dumps(protocol_error, ensure_ascii=False, sort_keys=True)
+                    + "\nThe previous response executed no graph action. Use the current "
+                    "allowed_actions and action_field_requirements. Correct the encoding or "
+                    "field structure and return exactly one object, with no prose or examples. "
+                    "This is a normal Director turn within the existing budget."
+                )
+            if self.canvas.unified:
+                self.canvas.observe_submission_candidates(f"{self.call_namespace}:{len(turns)}:action")
+            prompt_messages = prompt_messages_for(user_content)
+            awaiting_prompt = self.canvas.state is CanvasState.AWAITING_PROMPT
+            try:
+                with director_recovery_budget(stalled_turns == 3):
+                    response = self.backend.generate(
+                        prompt_messages,
+                        role=self.role,
+                        max_tokens=(
+                            DIRECTOR_PROMPT_MAX_TOKENS
+                            if awaiting_prompt
+                            else DIRECTOR_ACTION_MAX_TOKENS
+                        ),
+                        enable_thinking=self.enable_thinking,
+                    )
+            except DirectorContextExhausted:
+                self.canvas.terminate_context_limit_without_graph_repair()
+                break
+            if self.canvas.rollout_deadline is not None:
+                self.canvas.rollout_deadline.check("director_turn_response")
+            raw_reasoning = str(response.raw_reasoning_text or "")
+            raw_action = str(
+                response.raw_action_text or ("" if raw_reasoning else response.text) or ""
+            )
+            raw_policy_text = raw_reasoning + raw_action
+            # The complete reasoning+action completion remains the trainable
+            # policy trajectory. The typed-action parser consumes only the
+            # provider-authored action channel (or the exact suffix after an
+            # inline Qwen </think> tag), so JSON examples mentioned in thought
+            # cannot be mistaken for extra Canvas actions.
+            parsed = self.canvas.parser.parse_policy_output(raw_action)
+            # Canvas receives only the uniquely parsed typed action.  The marker is
+            # deliberately invalid and cannot mutate the graph; the authoritative
+            # raw policy response remains stored separately below.
+            action_text = parsed.action_text or DIRECTOR_INVALID_ACTION
+            completion_ids = tuple(int(value) for value in response.completion_token_ids)
+            mock_policy = bool(response.metadata.get("mock"))
+            if not completion_ids and mock_policy and self.tokenizer is not None:
+                chat_encoder = getattr(self.tokenizer, "encode_chat_trajectory", None)
+                if callable(chat_encoder):
+                    policy_ids, _policy_mask, policy_spans = chat_encoder(
+                        [
+                            *[dict(message) for message in prompt_messages],
+                            {"role": "assistant", "content": raw_policy_text},
+                        ]
+                    )
+                    if not policy_spans:
+                        raise ValueError(
+                            "rollout-time chat tokenizer did not expose the policy completion"
+                        )
+                    completion_ids = tuple(
+                        int(value) for value in policy_ids[slice(*policy_spans[-1])]
+                    )
+                else:
+                    completion_ids = tuple(
+                        int(value)
+                        for value in self.tokenizer.encode(
+                            raw_policy_text, add_special_tokens=False
+                        )
+                    )
+            behavior_log_probs = tuple(float(value) for value in response.behavior_log_probs)
+            exact_behavior = bool(
+                completion_ids
+                and behavior_log_probs
+                and len(completion_ids) == len(behavior_log_probs)
+            )
+            training_eligible = bool(response.training_eligible and (exact_behavior or mock_policy))
+            timeline_audit = prepare_timeline_turn(
+                prompt_messages,
+                response.prompt_token_ids,
+                completion_ids,
+            )
+            diagnostics = {
+                "no_progress_streak_before_call": stalled_turns,
+                "bounded_recovery_call": stalled_turns == 3,
+                "raw_output_chars": len(raw_policy_text),
+                "backend_request_events": response.metadata.get("backend_request_events", []),
+                "json_objects_found": parsed.candidate_count,
+                "director_action_protocol_version": ("director_action_json_v3" if self.canvas.unified else DIRECTOR_ACTION_PROTOCOL_VERSION),
+                "parse_error_code": parsed.action.parse_error_code,
+                "parse_error_details": dict(parsed.action.parse_error_details),
+                "initial_token_out": response.token_out,
+                "finish_reason": response.metadata.get("finish_reason"),
+                "director_dynamic_budget": response.metadata.get("director_dynamic_budget"),
+                "repair_attempted": False,
+                "generated_action": True,
+                "behavior_logprobs_exact": exact_behavior,
+                "trajectory_training_eligible": training_eligible,
+                "director_context_schema": self.context_schema,
+                "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
+                "timeline_prefix_audit": timeline_audit,
+            }
+            if self.canvas.dataset in {"aime", "math_hard"}:
+                diagnostics["prompt_content_profile"] = prompt_profile(self.tokenizer, prompt_messages)
+            parsed_model_action = parsed.action
+            diagnostics["model_expected_version"] = parsed_model_action.expected_version
+            diagnostics["bound_canvas_version"] = self.canvas.graph.version
+            # Pass the already parsed typed action (valid or invalid) so Canvas
+            # reports the exact parser failure instead of reparsing a synthetic
+            # placeholder. The raw policy response remains separately immutable.
+            call_id = f"{self.call_namespace}:{len(turns)}:action"
+            step = self.canvas.step(
+                parsed.action, authoritative_director=True,
+                director_context=_director_call_context(self.canvas.run_id, call_id),
+            )
+            feedback = step.feedback
+            protocol_error = (
+                {"code": step.rejection_code, **parsed.action.parse_error_details}
+                if step.rejection_code in POLICY_PARSE_ERROR_CODES else {}
+            )
+            history_turns.append((raw_policy_text, step.feedback))
+            turns.append(
+                DirectorTurn(
+                    round_index=step.round_index,
+                    model_action=action_text,
+                    feedback=step.feedback,
+                    accepted=step.accepted,
+                    graph_version=self.canvas.graph.version,
+                    prompt_messages=prompt_messages,
+                    trainable=training_eligible,
+                    rejection_code=step.rejection_code,
+                    action_diagnostics=diagnostics,
+                    relation_decision=dict(step.relation_decision),
+                    call_id=call_id,
+                    raw_reasoning_text=raw_reasoning,
+                    raw_action_text=raw_action,
+                    prompt_token_ids=tuple(response.prompt_token_ids),
+                    completion_token_ids=completion_ids,
+                    behavior_log_probs=behavior_log_probs,
+                    action_character_span=parsed.character_span,
+                    model_id=response.model,
+                    route_name=str(response.metadata.get("route", "")),
+                    thinking_requested=response.metadata.get("enable_thinking"),
+                    thinking_effective=bool(
+                        raw_reasoning or re.search(r"<think>.*?</think>", raw_action, re.DOTALL)
+                    ),
+                    token_provenance=response.token_provenance,
+                )
+            )
+            if step.rejection_code in responsibility_rejections:
+                responsibility_issue = dict(step.responsibility_issue)
+                if self.canvas.pending_agent_id:
+                    responsibility_failures += 1
+                else:
+                    # A rejected rewrite of an already configured Agent must not enter
+                    # the mandatory-prompt recovery path: there is no pending Agent to
+                    # recover, and referring to it as ``None`` terminates valid graphs.
+                    responsibility_failures = 0
+                    responsibility_issue = {}
+            elif step.accepted or step.rejection_code in POLICY_PARSE_ERROR_CODES:
+                responsibility_failures = 0
+                responsibility_issue = {}
+            if step.topology_edits_frozen:
+                continue
+            # Loop once more even when this model turn exhausted max_rounds so
+            # Canvas can record budget termination without repairing the graph.
+        output = ""
+        candidate_output = ""
+        if self.canvas.graph.output_agent:
+            selected = self.canvas.runtime.artifacts.get(self.canvas.graph.output_agent)
+            candidate_output = selected.answer if selected else ""
+        if self.canvas.graph.output_agent and self.canvas.selected_output_is_current():
+            artifact = self.canvas.runtime.artifacts.get(self.canvas.graph.output_agent)
+            if artifact is not None:
+                output = artifact.answer
+        if is_text_submission_dataset(self.canvas.dataset):
+            output = (self.canvas.submission_receipt.raw_answer_snapshot
+                      if self.canvas.submission_receipt else "")
+        return DirectorRun(
+            task=self.canvas.task,
+            finished=self.canvas.state.value == "finished",
+            output=output,
+            graph=self.canvas.graph.to_dict(),
+            turns=turns,
+            candidate_output=candidate_output,
+            submission_receipt=self.canvas.submission_receipt,
+        )
+
+
+def _snapshot_text(snapshot: dict[str, Any]) -> str:
+    import json
+
+    return json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _binary_relation_token_ids(tokenizer: Any | None) -> dict[str, int] | None:
+    """Attest at startup that each constrained choice is exactly one policy token."""
+
+    if tokenizer is None:
+        return None
+    resolved: dict[str, int] = {}
+    for choice in ("off", "on"):
+        token_ids = list(tokenizer.encode(choice, add_special_tokens=False))
+        if len(token_ids) != 1:
+            return None
+        resolved[choice] = int(token_ids[0])
+    if resolved["off"] == resolved["on"]:
+        return None
+    return resolved
+
+
+def _tokenizer_attestation(tokenizer: Any | None) -> dict[str, Any]:
+    if tokenizer is None:
+        return {}
+    underlying = getattr(tokenizer, "tokenizer", tokenizer)
+    name = str(getattr(underlying, "name_or_path", type(underlying).__qualname__))
+    chat_template = str(getattr(underlying, "chat_template", "") or "")
+    payload = (
+        f"{type(underlying).__module__}.{type(underlying).__qualname__}\n{name}\n{chat_template}"
+    )
+    return {
+        "name_or_path": name,
+        "implementation": f"{type(underlying).__module__}.{type(underlying).__qualname__}",
+        "chat_template_sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+    }

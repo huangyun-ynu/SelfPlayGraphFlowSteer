@@ -18,7 +18,7 @@ TIMELINE_CONTEXT_MODES = frozenset({APPEND_CONTEXT_MODE})
 HISTORY_THINKING_VISIBILITY = "online_and_training_v1"
 
 
-def persist_context_policy(output_dir: Path, *, resume: bool) -> None:
+def persist_context_policy(output_dir: Path, *, resume: bool, observation: dict | None = None) -> None:
     """Do not mix context policies or template versions in one collection."""
     mode = director_context_mode()
     template = Path(__file__).resolve().parents[2] / "configs/templates/director_append_only.jinja"
@@ -31,6 +31,8 @@ def persist_context_policy(output_dir: Path, *, resume: bool) -> None:
         "relation_audit_visibility": "offline_only_v1",
         "history_thinking_visibility": HISTORY_THINKING_VISIBILITY,
     }
+    if observation is not None:
+        policy["observation_policy"] = observation
     marker = output_dir / "director_context_policy.json"
     if marker.exists():
         if json.loads(marker.read_text(encoding="utf-8")) != policy:

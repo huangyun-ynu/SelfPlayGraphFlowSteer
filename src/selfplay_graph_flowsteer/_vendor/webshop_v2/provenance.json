@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/princeton-nlp/WebShop",
+  "branch": "v2",
+  "commit": "efc76f6474edd7f888b1b170f4f8ec5c7ab3e4da",
+  "files": {
+    "goal.py": {
+      "upstream_path": "web_agent_site/engine/goal.py",
+      "sha256": "32c9782c0c39e98e794e9964e4a8729511112ccb4391667df907e23da829ecc2"
+    },
+    "normalize.py": {
+      "upstream_path": "web_agent_site/engine/normalize.py",
+      "sha256": "1962113ac9e209a636d4f181b2c70544bbea59b03adca9847e48287158d794fb"
+    },
+    "LICENSE.md": {
+      "upstream_path": "LICENSE.md",
+      "sha256": "f2517fa443a58d2bfefc64f7970fa2b1279f0736f277bcbc228cae155da226eb"
+    },
+    "upstream_test_goal.py": {
+      "upstream_path": "tests/web-agent-site/engine/test_goal.py",
+      "sha256": "895c4f6fd9315f1de6be6c1da9cfa7dbc365dafba3f6343d7e1c9f8cb28cfa25"
+    },
+    "requirements.upstream.txt": {
+      "upstream_path": "requirements.txt",
+      "sha256": "f357e17c4a077772f854fa90190d185a3f16754656e8492398bd9d6cc2507e92"
+    }
+  }
+}

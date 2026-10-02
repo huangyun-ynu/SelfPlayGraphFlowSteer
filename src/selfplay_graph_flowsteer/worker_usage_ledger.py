@@ -10,7 +10,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
@@ -48,7 +48,8 @@ class WorkerUsageLedger:
     """Each physical dispatch is persisted before it reaches the provider."""
 
     def __init__(self, path: str | Path, *, question_attempt_id: str,
-                 threshold: int, max_unsettled_attempts: int = 2) -> None:
+                 threshold: int, max_unsettled_attempts: int = 2,
+                 dataset: str | None = None) -> None:
         if not question_attempt_id or threshold <= 0 or max_unsettled_attempts <= 0:
             raise ValueError("invalid Worker usage account configuration")
         self.path = Path(path)
@@ -56,7 +57,10 @@ class WorkerUsageLedger:
         self.threshold = int(threshold)
         self.max_unsettled_attempts = int(max_unsettled_attempts)
         self.question_attempt_id = question_attempt_id
+        self.dataset = dataset or ""
+        self._dataset_unspecified = dataset is None
         self._lock = threading.RLock()
+        self._dispatch_lock = threading.Lock()
         self._lock_fd: int | None = None
         self._db: sqlite3.Connection | None = None
         try:
@@ -75,6 +79,8 @@ class WorkerUsageLedger:
         self._db.execute("PRAGMA busy_timeout=30000")
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("CREATE TABLE IF NOT EXISTS account (id INTEGER PRIMARY KEY CHECK(id=1), identity TEXT NOT NULL, threshold INTEGER NOT NULL, max_unsettled INTEGER NOT NULL, policy TEXT NOT NULL)")
+        if "dataset" not in {row[1] for row in self._db.execute("PRAGMA table_info(account)")}:
+            self._db.execute("ALTER TABLE account ADD COLUMN dataset TEXT NOT NULL DEFAULT ''")
         self._db.execute("CREATE TABLE IF NOT EXISTS attempts (attempt_id TEXT PRIMARY KEY, route TEXT NOT NULL, model TEXT NOT NULL, api_surface TEXT NOT NULL, agent_id TEXT NOT NULL, execution_id TEXT NOT NULL, request_fingerprint TEXT NOT NULL, state TEXT NOT NULL, confirmed_before INTEGER NOT NULL, input_tokens INTEGER, output_tokens INTEGER, provider_response_id TEXT, started_at REAL NOT NULL, settled_at REAL)")
         attempt_columns = {row[1] for row in self._db.execute("PRAGMA table_info(attempts)")}
         for name in ("model", "api_surface"):
@@ -82,10 +88,12 @@ class WorkerUsageLedger:
                 self._db.execute(f"ALTER TABLE attempts ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
         self._db.execute("CREATE TABLE IF NOT EXISTS reconciliation (attempt_id TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, reconciled_at REAL NOT NULL)")
         with self._transaction():
-            row = self._db.execute("SELECT identity, threshold, max_unsettled, policy FROM account WHERE id=1").fetchone()
-            expected = (self.question_attempt_id, self.threshold, self.max_unsettled_attempts, POLICY)
+            row = self._db.execute("SELECT identity, threshold, max_unsettled, policy, dataset FROM account WHERE id=1").fetchone()
+            if row is not None and self._dataset_unspecified:
+                self.dataset = row[4]
+            expected = (self.question_attempt_id, self.threshold, self.max_unsettled_attempts, POLICY, self.dataset)
             if row is None:
-                self._db.execute("INSERT INTO account VALUES (1, ?, ?, ?, ?)", expected)
+                self._db.execute("INSERT INTO account VALUES (1, ?, ?, ?, ?, ?)", expected)
             elif tuple(row) != expected:
                 raise ValueError("Worker usage ledger belongs to another question or policy")
             # A crash after dispatch intent cannot be treated as a free request.
@@ -111,17 +119,48 @@ class WorkerUsageLedger:
         used = int(known_in) + int(known_out)
         return {
             "policy": POLICY, "threshold": self.threshold,
+            "dataset": self.dataset, "question_attempt_id": self.question_attempt_id,
+            "budget_policy": POLICY, "budget_accounting_scope": "question_attempt",
+            "budget_threshold": self.threshold, "max_inflight_requests": 1,
             "confirmed_input_tokens": int(known_in), "confirmed_output_tokens": int(known_out),
             "confirmed_used": used, "confirmed_overshoot": max(0, used - self.threshold),
             "threshold_reached": used >= self.threshold, "attempt_count": int(attempts),
             "unsettled_attempt_count": int(unknown or 0), "inflight_request_count": int(pending or 0),
             "usage_complete": not (unknown or pending),
+            "dispatch_policy_valid": self.dispatches_valid(),
+            "stop_reason": (
+                "worker_usage_threshold_reached" if used >= self.threshold else
+                "worker_usage_unsettled_limit" if int(unknown or 0) >= self.max_unsettled_attempts else
+                "worker_usage_request_inflight" if pending else ""
+            ),
             "can_dispatch": used < self.threshold and int(unknown or 0) < self.max_unsettled_attempts and not pending,
         }
 
     def status(self) -> dict[str, Any]:
         with self._lock:
             return self._status_unlocked()
+
+    @contextmanager
+    def dispatch_slot(self, deadline=None, timeout_s=None):
+        """Serialize physical sends within this question; other ledgers run independently."""
+        started = time.monotonic()
+        while True:
+            if deadline is not None:
+                deadline.check("worker_usage_queue")
+            remaining = None if timeout_s is None else timeout_s - (time.monotonic() - started)
+            if remaining is not None and remaining <= 0:
+                raise TimeoutError("Worker usage queue consumed the fixed request timeout")
+            if self._dispatch_lock.acquire(timeout=0.1 if remaining is None else min(0.1, remaining)):
+                break
+        try:
+            if deadline is not None:
+                deadline.check("worker_usage_queue")
+            remaining = None if timeout_s is None else timeout_s - (time.monotonic() - started)
+            if remaining is not None and remaining <= 0:
+                raise TimeoutError("Worker usage queue consumed the fixed request timeout")
+            yield remaining
+        finally:
+            self._dispatch_lock.release()
 
     def stop_reason(self) -> str | None:
         state = self.status()
@@ -239,3 +278,15 @@ class WorkerUsageLedger:
                         fcntl.flock(lock_fd, fcntl.LOCK_UN)
                     finally:
                         os.close(lock_fd)
+
+
+@contextmanager
+def worker_dispatch_slot(deadline=None, *, timeout_s=None):
+    scope = active_worker_usage()
+    if scope is None:
+        yield timeout_s
+    else:
+        pause = (deadline.pause_no_progress("worker_usage_queue")
+                 if deadline is not None and hasattr(deadline, "pause_no_progress") else nullcontext())
+        with pause, scope[0].dispatch_slot(deadline, timeout_s=timeout_s) as remaining:
+            yield remaining

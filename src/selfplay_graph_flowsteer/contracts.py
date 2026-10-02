@@ -111,6 +111,9 @@ class AgentArtifact:
     react_trace: list[dict[str, Any]] = field(default_factory=list)
     source_artifact_ids: list[str] = field(default_factory=list)
     raw_response: str = ""
+    # Runtime-owned normalization, separate from immutable provider text.
+    normalized_payload: dict[str, Any] | None = None
+    healthbench_repair: dict[str, Any] = field(default_factory=dict)
     revision: bool = False
     token_in: int = 0
     token_out: int = 0
@@ -155,6 +158,7 @@ class AgentArtifact:
         model: str = "",
         model_route: str = "",
         validated_payload: dict[str, Any] | None = None,
+        preserve_answer: bool = False,
     ) -> AgentArtifact:
         payload = validated_payload if validated_payload is not None else _extract_json_object(text)
         if payload is None:
@@ -179,7 +183,8 @@ class AgentArtifact:
         return cls(
             artifact_id=artifact_id,
             agent_id=agent_id,
-            answer=str(answer if answer is not None else "").strip(),
+            answer=(str(answer if answer is not None else "") if preserve_answer
+                    else str(answer if answer is not None else "").strip()),
             summary=str(payload.get("summary", "")).strip(),
             confidence=claimed_confidence,
             claimed_confidence=claimed_confidence,

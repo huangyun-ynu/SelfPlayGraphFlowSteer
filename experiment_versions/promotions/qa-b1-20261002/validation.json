@@ -1,0 +1,108 @@
+{
+  "version": "qa-b1-formal-20261002",
+  "status": "validated",
+  "independent_ood_packages_promoted": false,
+  "b1_root": "/mnt/ssd/test/codex-students/student02/SelfPlayGraphFlowSteer-qa-b1",
+  "source_manifest_sha256": "8318c7c01728c418d94dc33189c6f20edb55095493e34a328cba344fe610e404",
+  "public_task_version": "qa_public_task_v1",
+  "qa_result_contract_version": "qa_result_integrity_v2",
+  "hotpot_answer_contract_version": "hotpot_evidence_first_v2",
+  "director_observation_by_dataset": {
+    "hotpotqa": "compact_factual_v1"
+  },
+  "director_context_limit": 32768,
+  "training_max_sequence_length": 35000,
+  "worker_usage_threshold": 240000,
+  "training_worker_routes": [
+    "gpt",
+    "grok",
+    "gemini",
+    "deepseek",
+    "minimax"
+  ],
+  "formal_training_config": "configs/formal_training.toml",
+  "formal_training_entry": "scripts/formal/run_experiment.sh",
+  "formal_training_output": "state/formal-training-qa-b1-20261002/experiment",
+  "complete_regression_passed": 503,
+  "regression_suites": {
+    "qa-regression-final": {
+      "tests": 252,
+      "failures": 0,
+      "errors": 0
+    },
+    "shared-regression-v2": {
+      "tests": 235,
+      "failures": 0,
+      "errors": 0
+    },
+    "counterfactual-training": {
+      "tests": 16,
+      "failures": 0,
+      "errors": 0
+    },
+    "formal-training-chain": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0
+    },
+    "preexisting-baseline": {
+      "tests": 17,
+      "failures": 17,
+      "errors": 0
+    },
+    "preexisting-aime-runner": {
+      "tests": 2,
+      "failures": 1,
+      "errors": 0
+    },
+    "aime-runner-isolated": {
+      "tests": 2,
+      "failures": 1,
+      "errors": 0
+    }
+  },
+  "frozen_aime_engine_files_preserved": 142,
+  "python_files_parsed": 26,
+  "real_model_requests": 0,
+  "parameter_updates": 0,
+  "known_preexisting_failures_reproduced": 18,
+  "long_scan_interrupted": true,
+  "long_scan_note": "Broad selfplay scan stopped after 208s in distributed retry polling; not counted as completed. Isolated counterfactual/resume training tests completed separately.",
+  "source_sha256": {
+    "src/selfplay_graph_flowsteer/adaptive.py": "b8b7f41923c0afe2154b327d04e411143b87b644d73afb93319a79a5cccbaf8b",
+    "src/selfplay_graph_flowsteer/application.py": "932c69fffd328157e78fe9729ebb72079a184afc1f9c3940ddac91e9c044abcd",
+    "src/selfplay_graph_flowsteer/canvas.py": "3a425e9e221d9cc584455748b0f0ad481176dbf931aa9e5487e1d59a6875f6be",
+    "src/selfplay_graph_flowsteer/cli.py": "3cc07b8a22bc16dd04dc0cee72b8d9468bc87df0ba8a6c02ef2d62c3b1059db7",
+    "src/selfplay_graph_flowsteer/dataset_adapters.py": "94c0d65c9ee23904d6baa14af34f487d000d10dd01d591afad22fd0ce0c4e9c6",
+    "src/selfplay_graph_flowsteer/director.py": "a83c2f19ecaab075dddf27d02c2e33bddba1f7e083279e85d329a61b54d69745",
+    "src/selfplay_graph_flowsteer/director_observation.py": "09deaa5ab8b3277f5dd6fbd68ada2f7b88eaf8fa2a3d811cdd11f0585603cb62",
+    "src/selfplay_graph_flowsteer/director_timeline.py": "560bb1ea33fd8e7c4fec1fe142d5d9874952abf296be4f92aa0be973207cc836",
+    "src/selfplay_graph_flowsteer/hotpot_answer_contract.py": "4bece1bdf1a266e5c8bb7314e4d550b5b75d7d9de027f611a3683b655d06fe29",
+    "src/selfplay_graph_flowsteer/learning.py": "6b713e90ae5d1ae204e2fc89f62f0b2b9327d73d4d86423ceaaa15b99bfd86f6",
+    "src/selfplay_graph_flowsteer/observability.py": "bf85e3c33397ced749a69516b076a1e01b17078e3836dc359744a4af179afd32",
+    "src/selfplay_graph_flowsteer/qa_result_contract.py": "eaa58e269fdf49fac020640036e910d37f376c96163120bdc8492efddfdf9049",
+    "src/selfplay_graph_flowsteer/qa_schema_repair.py": "417e92c8b86a9126a07e24aff8011403abd0b416c42c6fb4409a6d5d734d448e",
+    "src/selfplay_graph_flowsteer/qa_worker_feedback.py": "fafb683425f4045dde305bb5da2da5a44240a279901f0063c66c94ac02ac660a",
+    "src/selfplay_graph_flowsteer/runtime.py": "89f37d73c9bf27870c46a794715a144079eecb7ad5bbe1ddb58caa693dcdd348",
+    "src/selfplay_graph_flowsteer/selfplay_runtime.py": "d9abf6adb5a347f7b22b1bb03a9682e27f367be93f74bc8e040189b880554c97",
+    "src/selfplay_graph_flowsteer/unified_submission.py": "21ff6519cde710c801090c969e6768b1223a89408f173a6f459ae0e6d39ad016",
+    "src/selfplay_graph_flowsteer/qa_public_task.py": "92053562b9832fba34f60405e0e704307b721613dd831b2dac270c03a596e34f",
+    "tests/test_director_compact_observation.py": "bb4e3e1c19243ed35f39788044899ff9ad5857563b0202ff64472de33bbd0468",
+    "tests/test_qa_remaining_failures.py": "67dd096d8bd4b80071aa2eb6adc1ea25e49be2e3fe44c29825cb3fd3fab63b56",
+    "tests/fixtures/qa_remaining_failures/historical_schema_repairs.json": "37371f04ced83f4b36b2f7554db505222e113045eab5982d585b8419d8b259b3",
+    "tests/test_qa_b1_public_task.py": "6c0a5d3d4594673067424ae1a672575c5a5614fa8244fbf90a89789ef0610c76",
+    "tests/test_hotpot_answer_contract.py": "871c7dbf7004c927f7c038103664e7514e14bdff900a54b7376b6bd61be82507",
+    "tests/test_hotpot_usage_budget.py": "8952547d87a918a470173e6d4f193bfa144d08266cef2708e310c8ccf96caa03",
+    "tests/test_formal_qa_baselines.py": "0046734c70143dada25fd5e98a7e6abd9b294d89e1e68ac4b7a6a0b3e6ac2348",
+    "src/selfplay_graph_flowsteer/execution_contract.py": "92b905cc3f61de07eb1b6ff9baa0017df711566aee27ffd20fc19fb5548dd5ab",
+    "configs/formal_training.toml": "0c2a25cdba4d678e9dd6dc77897843fed6fc145eeb44c851183743a2f70cb31a",
+    "scripts/formal/run_experiment.sh": "cff4845e6380e7e446d28b172b26708de93ca4938740688d564790784b462269",
+    "src/selfplay_graph_flowsteer/aime_formal.py": "9f9dfaee68a6643b7c11b10c2518c1dbf00c504d8071524e6a5faa32c341726f"
+  },
+  "staged_git_tree_regression": {
+    "tests_passed": 257,
+    "includes": "QA formal training factory and complete AIME engine",
+    "independent_ood_working_files_present": false,
+    "parameter_updates": 0
+  }
+}
